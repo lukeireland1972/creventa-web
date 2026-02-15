@@ -11,7 +11,7 @@
   <section class="calendar-card">
     <div class="calendar-toolbar">
       <div class="month-nav">
-        <h2>{{ monthLabel }}</h2>
+        <h2>{{ selectedView === 'timeline' ? timelineRangeLabel : monthLabel }}</h2>
         <div class="month-arrows">
           <button type="button" (click)="shiftMonth(-1)" aria-label="Previous month">&#10094;</button>
           <button type="button" (click)="shiftMonth(1)" aria-label="Next month">&#10095;</button>
@@ -20,6 +20,19 @@
       </div>
 
       <div class="toolbar-right">
+        <div class="view-toggle" role="tablist" aria-label="Diary view">
+          @for (view of diaryViews; track view.key) {
+            <button
+              type="button"
+              role="tab"
+              [attr.aria-selected]="selectedView === view.key"
+              [class.active]="selectedView === view.key"
+              (click)="switchView(view.key)">
+              {{ view.label }}
+            </button>
+          }
+        </div>
+
         <div class="legend-inline">
           <span><i class="legend-chip status-confirmed"></i> Confirmed</span>
           <span><i class="legend-chip status-provisional"></i> Provisional</span>
@@ -32,63 +45,136 @@
       </div>
     </div>
 
-    <div class="calendar-grid-wrap">
-      <div class="weekdays-row">
-        @for (weekday of weekdayLabels; track weekday) {
-          <div>{{ weekday }}</div>
-        }
+    @if (selectedView === 'month') {
+      <div class="calendar-grid-wrap">
+        <div class="weekdays-row">
+          @for (weekday of weekdayLabels; track weekday) {
+            <div>{{ weekday }}</div>
+          }
+        </div>
+
+        <div class="month-grid">
+          @for (cell of cells; track cell.key) {
+            <article
+              class="day-cell"
+              [class.outside-month]="!cell.inCurrentMonth"
+              (dragover)="$event.preventDefault()"
+              (drop)="onDropDay(cell.key)">
+              <header class="day-header">
+                <span class="day-number">{{ cell.dayNumber }}</span>
+                @if (cell.events.length > 0) {
+                  <span class="event-count">{{ cell.events.length }} {{ cell.events.length === 1 ? 'event' : 'events' }}</span>
+                }
+              </header>
+
+              <div class="event-list">
+                @for (event of eventsForDisplay(cell); track eventKey(event)) {
+                  <div class="event-chip-wrap">
+                    <button
+                      type="button"
+                      class="event-chip"
+                      [ngClass]="eventChipClass(event)"
+                      [attr.draggable]="canDrag(event)"
+                      (dragstart)="onDragStart(event, $event)"
+                      (mouseenter)="hoveredEventKey = eventKey(event)"
+                      (mouseleave)="hoveredEventKey = null"
+                      (click)="openDetails(event)">
+                      {{ eventDisplayLabel(event) }}
+                    </button>
+
+                    @if (hoveredEventKey === eventKey(event)) {
+                      <div class="event-popover">
+                        <strong>{{ event.label }}</strong>
+                        <span><b>Covers:</b> {{ event.covers || '-' }}</span>
+                        <span><b>Timing:</b> {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
+                        <span><b>Event style:</b> {{ event.eventStyle || '-' }}</span>
+                        <span><b>Status:</b> {{ event.statusKey || event.enquiryStatus || event.eventType }}</span>
+                        <span><b>Space:</b> {{ event.spaceName }}</span>
+                        <span><b>Event manager:</b> {{ event.eventManagerName || '-' }}</span>
+                      </div>
+                    }
+                  </div>
+                }
+
+                @if (hiddenEventsCount(cell) > 0) {
+                  <span class="more-events">+{{ hiddenEventsCount(cell) }} more</span>
+                }
+              </div>
+            </article>
+          }
+        </div>
       </div>
+    } @else {
+      <div class="timeline-wrap">
+        <p class="timeline-hint">
+          Timeline view: six months shown down the left, aligned by the first Monday of each month.
+        </p>
 
-      <div class="month-grid">
-        @for (cell of cells; track cell.key) {
-          <article
-            class="day-cell"
-            [class.outside-month]="!cell.inCurrentMonth"
-            (dragover)="$event.preventDefault()"
-            (drop)="onDropDay(cell.key)">
-            <header class="day-header">
-              <span class="day-number">{{ cell.dayNumber }}</span>
-              @if (cell.events.length > 0) {
-                <span class="event-count">{{ cell.events.length }} {{ cell.events.length === 1 ? 'event' : 'events' }}</span>
-              }
-            </header>
+        <div class="timeline-table">
+          <div class="timeline-header-row">
+            <div class="timeline-month-col">Month</div>
+            @for (label of timelineHeaderLabels; track $index) {
+              <div class="timeline-day-col">{{ label }}</div>
+            }
+          </div>
 
-            <div class="event-list">
-              @for (event of eventsForDisplay(cell); track eventKey(event)) {
-                <div class="event-chip-wrap">
-                  <button
-                    type="button"
-                    class="event-chip"
-                    [ngClass]="eventChipClass(event)"
-                    [attr.draggable]="canDrag(event)"
-                    (dragstart)="onDragStart(event, $event)"
-                    (mouseenter)="hoveredEventKey = eventKey(event)"
-                    (mouseleave)="hoveredEventKey = null"
-                    (click)="openDetails(event)">
-                    {{ eventDisplayLabel(event) }}
-                  </button>
+          @for (row of timelineRows; track row.monthKey) {
+            <div class="timeline-row">
+              <div class="timeline-month-cell">
+                <strong>{{ row.monthLabel }}</strong>
+                <small>1st Mon: {{ row.firstMondayDay }}</small>
+              </div>
 
-                  @if (hoveredEventKey === eventKey(event)) {
-                    <div class="event-popover">
-                      <strong>{{ event.label }}</strong>
-                      <span><b>Covers:</b> {{ event.covers || '-' }}</span>
-                      <span><b>Timing:</b> {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
-                      <span><b>Event style:</b> {{ event.eventStyle || '-' }}</span>
-                      <span><b>Status:</b> {{ event.statusKey || event.enquiryStatus || event.eventType }}</span>
-                      <span><b>Space:</b> {{ event.spaceName }}</span>
-                      <span><b>Event manager:</b> {{ event.eventManagerName || '-' }}</span>
-                    </div>
+              @for (cell of row.cells; track cell.key) {
+                <article
+                  class="timeline-cell"
+                  [class.empty]="!cell.isoDate"
+                  [class.first-monday]="cell.isFirstMonday"
+                  (dragover)="$event.preventDefault()"
+                  (drop)="onDropTimelineCell(cell)">
+                  @if (cell.dayNumber) {
+                    <span class="timeline-day-number">{{ cell.dayNumber }}</span>
                   }
-                </div>
-              }
 
-              @if (hiddenEventsCount(cell) > 0) {
-                <span class="more-events">+{{ hiddenEventsCount(cell) }} more</span>
+                  <div class="timeline-events">
+                    @for (event of eventsForDisplay(cell); track eventKey(event)) {
+                      <div class="event-chip-wrap">
+                        <button
+                          type="button"
+                          class="event-chip"
+                          [ngClass]="eventChipClass(event)"
+                          [attr.draggable]="canDrag(event)"
+                          (dragstart)="onDragStart(event, $event)"
+                          (mouseenter)="hoveredEventKey = eventKey(event)"
+                          (mouseleave)="hoveredEventKey = null"
+                          (click)="openDetails(event)">
+                          {{ eventDisplayLabel(event) }}
+                        </button>
+
+                        @if (hoveredEventKey === eventKey(event)) {
+                          <div class="event-popover">
+                            <strong>{{ event.label }}</strong>
+                            <span><b>Covers:</b> {{ event.covers || '-' }}</span>
+                            <span><b>Timing:</b> {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
+                            <span><b>Event style:</b> {{ event.eventStyle || '-' }}</span>
+                            <span><b>Status:</b> {{ event.statusKey || event.enquiryStatus || event.eventType }}</span>
+                            <span><b>Space:</b> {{ event.spaceName }}</span>
+                            <span><b>Event manager:</b> {{ event.eventManagerName || '-' }}</span>
+                          </div>
+                        }
+                      </div>
+                    }
+
+                    @if (hiddenEventsCount(cell) > 0) {
+                      <span class="more-events">+{{ hiddenEventsCount(cell) }} more</span>
+                    }
+                  </div>
+                </article>
               }
             </div>
-          </article>
-        }
+          }
+        </div>
       </div>
-    </div>
+    }
   </section>
 </section>

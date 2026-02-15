@@ -6,10 +6,9 @@
   <aside class="sidebar" [class.open]="isMobileNavOpen" (click)="$event.stopPropagation()">
     <div class="sidebar-top">
       <a class="brand" [routerLink]="operationsOnly ? '/operations' : '/'" (click)="closeMobileNav()">
-        <img class="logo-image" src="assets/creventa_RGB.jpeg" alt="Creventa" />
         <span class="brand-copy">
           <strong>{{ selectedVenueName }}</strong>
-          <small>{{ operationsOnly ? 'Operations View' : 'Venue Dashboard' }}</small>
+          <small>{{ operationsOnly ? 'Operations View' : 'Enquiry Management' }}</small>
         </span>
       </a>
 
