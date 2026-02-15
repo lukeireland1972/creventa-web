@@ -233,19 +233,47 @@
         <p class="hint">Debug invitation token: <code>{{ inviteDebugToken }}</code></p>
       }
 
-      @if (passwordTargetUser) {
+      @if (editingUser) {
         <div class="password-panel">
           <div class="password-panel-header">
-            <h3>Set Password</h3>
-            <p>{{ passwordTargetUser.firstName }} {{ passwordTargetUser.lastName }} ({{ passwordTargetUser.email }})</p>
+            <h3>Edit User</h3>
+            <p>{{ editingUser.firstName }} {{ editingUser.lastName }} ({{ editingUser.email }})</p>
           </div>
 
           <div class="password-grid">
             <label class="field">
+              <span>First Name</span>
+              <input
+                type="text"
+                [(ngModel)]="editUserForm.firstName"
+                [ngModelOptions]="{ standalone: true }"
+                name="editUserFirstName" />
+            </label>
+
+            <label class="field">
+              <span>Last Name</span>
+              <input
+                type="text"
+                [(ngModel)]="editUserForm.lastName"
+                [ngModelOptions]="{ standalone: true }"
+                name="editUserLastName" />
+            </label>
+
+            <label class="field span-2">
+              <span>Email</span>
+              <input
+                type="email"
+                [(ngModel)]="editUserForm.email"
+                [ngModelOptions]="{ standalone: true }"
+                name="editUserEmail"
+                autocomplete="email" />
+            </label>
+
+            <label class="field">
               <span>New Password</span>
               <input
                 type="password"
-                [(ngModel)]="passwordForm.password"
+                [(ngModel)]="editUserForm.password"
                 [ngModelOptions]="{ standalone: true }"
                 name="newPassword"
                 autocomplete="new-password" />
@@ -255,17 +283,19 @@
               <span>Confirm Password</span>
               <input
                 type="password"
-                [(ngModel)]="passwordForm.confirmPassword"
+                [(ngModel)]="editUserForm.confirmPassword"
                 [ngModelOptions]="{ standalone: true }"
                 name="confirmPassword"
                 autocomplete="new-password" />
             </label>
           </div>
 
+          <p class="hint">Leave password fields empty to keep the current password.</p>
+
           <div class="password-actions">
-            <button type="button" class="secondary" (click)="cancelSetPassword()" [disabled]="updatingPassword">Cancel</button>
-            <button type="button" class="primary" (click)="saveUserPassword()" [disabled]="updatingPassword">
-              {{ updatingPassword ? 'Updating...' : 'Update Password' }}
+            <button type="button" class="secondary" (click)="cancelEditUser()" [disabled]="savingUserEdit">Cancel</button>
+            <button type="button" class="primary" (click)="saveEditedUser()" [disabled]="savingUserEdit">
+              {{ savingUserEdit ? 'Saving...' : 'Save Changes' }}
             </button>
           </div>
         </div>
@@ -304,15 +334,15 @@
                     <button
                       type="button"
                       (click)="setUserActive(user, !user.isActive)"
-                      [disabled]="updatingUser">
+                      [disabled]="updatingUserStatus || savingUserEdit">
                       {{ user.isActive ? 'Deactivate' : 'Activate' }}
                     </button>
                     <button
                       type="button"
                       class="secondary"
-                      (click)="beginSetPassword(user)"
-                      [disabled]="updatingPassword">
-                      Set Password
+                      (click)="beginEditUser(user)"
+                      [disabled]="savingUserEdit">
+                      Edit User
                     </button>
                   </td>
                 </tr>

@@ -2,8 +2,10 @@ import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { of, switchMap } from 'rxjs';
 import {
   ApiService,
+  UpdateUserProfileRequest,
   UpdateVenueProfileRequest,
   UserSummaryDto,
   VenueProfileDto,
@@ -22,7 +24,10 @@ interface InviteFormModel {
   requiresTotp: boolean;
 }
 
-interface PasswordFormModel {
+interface EditUserFormModel {
+  firstName: string;
+  lastName: string;
+  email: string;
   password: string;
   confirmPassword: string;
 }
@@ -66,8 +71,8 @@ export class AdminComponent implements OnInit {
   loadingUsers = false;
   savingVenue = false;
   invitingUser = false;
-  updatingUser = false;
-  updatingPassword = false;
+  updatingUserStatus = false;
+  savingUserEdit = false;
 
   pageError = '';
   venueMessage = '';
@@ -75,8 +80,8 @@ export class AdminComponent implements OnInit {
 
   inviteForm: InviteFormModel = this.createDefaultInviteForm();
   inviteDebugToken = '';
-  passwordTargetUser: UserSummaryDto | null = null;
-  passwordForm: PasswordFormModel = this.createDefaultPasswordForm();
+  editingUser: UserSummaryDto | null = null;
+  editUserForm: EditUserFormModel = this.createDefaultEditUserForm();
 
   ngOnInit(): void {
     if (this.auth.isOperationsOnly()) {
@@ -97,8 +102,8 @@ export class AdminComponent implements OnInit {
     this.venueMessage = '';
     this.userMessage = '';
     this.inviteDebugToken = '';
-    this.passwordTargetUser = null;
-    this.passwordForm = this.createDefaultPasswordForm();
+    this.editingUser = null;
+    this.editUserForm = this.createDefaultEditUserForm();
 
     this.loadVenueProfile();
     this.loadUsers();
@@ -221,7 +226,7 @@ export class AdminComponent implements OnInit {
   }
 
   setUserActive(user: UserSummaryDto, isActive: boolean): void {
-    this.updatingUser = true;
+    this.updatingUserStatus = true;
     this.userMessage = '';
 
     this.api
@@ -230,66 +235,83 @@ export class AdminComponent implements OnInit {
       .subscribe({
         next: () => {
           this.userMessage = `${user.firstName} ${user.lastName} ${isActive ? 'activated' : 'deactivated'}.`;
-          this.updatingUser = false;
+          this.updatingUserStatus = false;
           this.loadUsers();
         },
         error: (error) => {
           this.userMessage = this.resolveError(error, 'Unable to update user status.');
-          this.updatingUser = false;
+          this.updatingUserStatus = false;
         }
       });
   }
 
-  beginSetPassword(user: UserSummaryDto): void {
-    this.passwordTargetUser = user;
-    this.passwordForm = this.createDefaultPasswordForm();
+  beginEditUser(user: UserSummaryDto): void {
+    this.editingUser = user;
+    this.editUserForm = this.createDefaultEditUserForm(user);
     this.userMessage = '';
   }
 
-  cancelSetPassword(): void {
-    this.passwordTargetUser = null;
-    this.passwordForm = this.createDefaultPasswordForm();
+  cancelEditUser(): void {
+    this.editingUser = null;
+    this.editUserForm = this.createDefaultEditUserForm();
   }
 
-  saveUserPassword(): void {
-    if (!this.passwordTargetUser) {
+  saveEditedUser(): void {
+    if (!this.editingUser) {
       return;
     }
 
-    const password = this.passwordForm.password.trim();
-    const confirmPassword = this.passwordForm.confirmPassword.trim();
-    if (!password || !confirmPassword) {
+    const firstName = this.editUserForm.firstName.trim();
+    const lastName = this.editUserForm.lastName.trim();
+    const email = this.editUserForm.email.trim().toLowerCase();
+
+    if (!firstName || !lastName || !email) {
+      this.userMessage = 'First name, last name, and email are required.';
+      return;
+    }
+
+    const password = this.editUserForm.password.trim();
+    const confirmPassword = this.editUserForm.confirmPassword.trim();
+    const isChangingPassword = password.length > 0 || confirmPassword.length > 0;
+
+    if (isChangingPassword && (!password || !confirmPassword)) {
       this.userMessage = 'Enter and confirm the new password.';
       return;
     }
 
-    if (password !== confirmPassword) {
+    if (isChangingPassword && password !== confirmPassword) {
       this.userMessage = 'Password and confirm password must match.';
       return;
     }
 
-    if (!this.isPasswordComplex(password)) {
+    if (isChangingPassword && !this.isPasswordComplex(password)) {
       this.userMessage = 'Password must be 8+ characters with uppercase, lowercase, number, and special character.';
       return;
     }
 
-    this.updatingPassword = true;
+    const user = this.editingUser;
+    const profilePayload: UpdateUserProfileRequest = { firstName, lastName, email };
+
+    this.savingUserEdit = true;
     this.userMessage = '';
 
-    const user = this.passwordTargetUser;
     this.api
-      .updateUserPassword(user.id, password)
+      .updateUserProfile(user.id, profilePayload)
+      .pipe(switchMap(() => (isChangingPassword ? this.api.updateUserPassword(user.id, password) : of(undefined))))
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
-          this.updatingPassword = false;
-          this.userMessage = `Password updated for ${user.firstName} ${user.lastName}.`;
-          this.passwordTargetUser = null;
-          this.passwordForm = this.createDefaultPasswordForm();
+          this.savingUserEdit = false;
+          this.userMessage = isChangingPassword
+            ? `Profile and password updated for ${firstName} ${lastName}.`
+            : `Profile updated for ${firstName} ${lastName}.`;
+          this.editingUser = null;
+          this.editUserForm = this.createDefaultEditUserForm();
+          this.loadUsers();
         },
         error: (error) => {
-          this.updatingPassword = false;
-          this.userMessage = this.resolveError(error, 'Unable to update user password.');
+          this.savingUserEdit = false;
+          this.userMessage = this.resolveError(error, 'Unable to update user details.');
         }
       });
   }
@@ -380,6 +402,12 @@ export class AdminComponent implements OnInit {
       .subscribe({
         next: (users) => {
           this.users = users;
+          if (this.editingUser) {
+            this.editingUser = users.find((user) => user.id === this.editingUser?.id) ?? null;
+            if (!this.editingUser) {
+              this.editUserForm = this.createDefaultEditUserForm();
+            }
+          }
           this.loadingUsers = false;
         },
         error: (error) => {
@@ -430,8 +458,11 @@ export class AdminComponent implements OnInit {
     };
   }
 
-  private createDefaultPasswordForm(): PasswordFormModel {
+  private createDefaultEditUserForm(user?: UserSummaryDto): EditUserFormModel {
     return {
+      firstName: user?.firstName ?? '',
+      lastName: user?.lastName ?? '',
+      email: user?.email ?? '',
       password: '',
       confirmPassword: ''
     };

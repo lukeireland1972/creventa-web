@@ -196,6 +196,12 @@ export interface InviteUserResponse {
   debugToken?: string | null;
 }
 
+export interface UpdateUserProfileRequest {
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
 export interface UserActivityItemDto {
   id: string;
   createdAtUtc: string;
@@ -1223,6 +1229,10 @@ export class ApiService {
 
   updateUserStatus(userId: string, isActive: boolean): Observable<void> {
     return this.http.patch<void>(`/api/users/${userId}/status`, { isActive });
+  }
+
+  updateUserProfile(userId: string, payload: UpdateUserProfileRequest): Observable<void> {
+    return this.http.patch<void>(`/api/users/${userId}/profile`, payload);
   }
 
   updateUserPassword(userId: string, password: string): Observable<void> {
