@@ -1225,6 +1225,10 @@ export class ApiService {
     return this.http.patch<void>(`/api/users/${userId}/status`, { isActive });
   }
 
+  updateUserPassword(userId: string, password: string): Observable<void> {
+    return this.http.patch<void>(`/api/users/${userId}/password`, { password });
+  }
+
   getUserActivity(take = 50): Observable<UserActivityItemDto[]> {
     const params = new HttpParams().set('take', take);
     return this.http.get<UserActivityItemDto[]>('/api/users/activity', { params });

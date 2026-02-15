@@ -53,137 +53,137 @@ function AdminComponent_Conditional_24_For_70_Template(rf, ctx) { if (rf & 1) {
 } }
 function AdminComponent_Conditional_24_Template(rf, ctx) { if (rf & 1) {
     const _r3 = i0.ɵɵgetCurrentView();
-    i0.ɵɵelementStart(0, "div", 22)(1, "label", 6)(2, "span");
+    i0.ɵɵelementStart(0, "div", 23)(1, "label", 6)(2, "span");
     i0.ɵɵtext(3, "Venue Name");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(4, "input", 23);
+    i0.ɵɵelementStart(4, "input", 24);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_4_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.name, $event) || (ctx_r0.venueDraft.name = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(5, "label", 6)(6, "span");
     i0.ɵɵtext(7, "Legal Entity Name");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(8, "input", 24);
+    i0.ɵɵelementStart(8, "input", 25);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_8_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.legalEntityName, $event) || (ctx_r0.venueDraft.legalEntityName = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(9, "label", 6)(10, "span");
     i0.ɵɵtext(11, "Enquiries Email");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(12, "input", 25);
+    i0.ɵɵelementStart(12, "input", 26);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_12_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.enquiriesEmail, $event) || (ctx_r0.venueDraft.enquiriesEmail = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(13, "label", 6)(14, "span");
     i0.ɵɵtext(15, "Phone (E.164)");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(16, "input", 26);
+    i0.ɵɵelementStart(16, "input", 27);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_16_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.phoneNumberE164, $event) || (ctx_r0.venueDraft.phoneNumberE164 = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(17, "label", 6)(18, "span");
     i0.ɵɵtext(19, "Website URL");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(20, "input", 27);
+    i0.ɵɵelementStart(20, "input", 28);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_20_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.websiteUrl, $event) || (ctx_r0.venueDraft.websiteUrl = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(21, "label", 6)(22, "span");
     i0.ɵɵtext(23, "VAT Number");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(24, "input", 28);
+    i0.ɵɵelementStart(24, "input", 29);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_24_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.vatNumber, $event) || (ctx_r0.venueDraft.vatNumber = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(25, "label", 6)(26, "span");
     i0.ɵɵtext(27, "Company Reg Number");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(28, "input", 29);
+    i0.ɵɵelementStart(28, "input", 30);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_28_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.companyRegistrationNumber, $event) || (ctx_r0.venueDraft.companyRegistrationNumber = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(29, "label", 6)(30, "span");
     i0.ɵɵtext(31, "Country Code");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(32, "input", 30);
+    i0.ɵɵelementStart(32, "input", 31);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_32_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.countryCode, $event) || (ctx_r0.venueDraft.countryCode = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(33, "label", 6)(34, "span");
     i0.ɵɵtext(35, "Currency");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(36, "input", 31);
+    i0.ɵɵelementStart(36, "input", 32);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_36_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.currencyCode, $event) || (ctx_r0.venueDraft.currencyCode = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(37, "label", 6)(38, "span");
     i0.ɵɵtext(39, "Time Zone");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(40, "input", 32);
+    i0.ɵɵelementStart(40, "input", 33);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_40_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.timeZone, $event) || (ctx_r0.venueDraft.timeZone = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(41, "label", 6)(42, "span");
     i0.ɵɵtext(43, "Locale");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(44, "input", 33);
+    i0.ɵɵelementStart(44, "input", 34);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_44_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.locale, $event) || (ctx_r0.venueDraft.locale = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(45, "label", 6)(46, "span");
     i0.ɵɵtext(47, "Default VAT %");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(48, "input", 34);
+    i0.ɵɵelementStart(48, "input", 35);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_48_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.defaultVatRate, $event) || (ctx_r0.venueDraft.defaultVatRate = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(49, "label", 6)(50, "span");
     i0.ɵɵtext(51, "Min Booking Notice (days)");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(52, "input", 35);
+    i0.ɵɵelementStart(52, "input", 36);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_52_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.minimumBookingNoticeDays, $event) || (ctx_r0.venueDraft.minimumBookingNoticeDays = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(53, "label", 6)(54, "span");
     i0.ɵɵtext(55, "Default Hold Period (days)");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(56, "input", 36);
+    i0.ɵɵelementStart(56, "input", 37);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_56_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.defaultHoldPeriodDays, $event) || (ctx_r0.venueDraft.defaultHoldPeriodDays = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(57, "label", 6)(58, "span");
     i0.ɵɵtext(59, "Hold Warning (days)");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(60, "input", 37);
+    i0.ɵɵelementStart(60, "input", 38);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_60_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.holdWarningDays, $event) || (ctx_r0.venueDraft.holdWarningDays = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(61, "label", 6)(62, "span");
     i0.ɵɵtext(63, "Max Holds per Date/Space");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(64, "input", 38);
+    i0.ɵɵelementStart(64, "input", 39);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_64_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.maxHoldsPerDateAndSpace, $event) || (ctx_r0.venueDraft.maxHoldsPerDateAndSpace = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(65, "label", 6)(66, "span");
     i0.ɵɵtext(67, "Hold Auto Release");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(68, "select", 39);
+    i0.ɵɵelementStart(68, "select", 40);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_select_ngModelChange_68_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.holdAutoReleaseMode, $event) || (ctx_r0.venueDraft.holdAutoReleaseMode = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵrepeaterCreate(69, AdminComponent_Conditional_24_For_70_Template, 2, 2, "option", 8, i0.ɵɵrepeaterTrackByIdentity);
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(71, "label", 13)(72, "span");
     i0.ɵɵtext(73, "Address Line 1");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(74, "input", 40);
+    i0.ɵɵelementStart(74, "input", 41);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_74_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.addressLine1, $event) || (ctx_r0.venueDraft.addressLine1 = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(75, "label", 13)(76, "span");
     i0.ɵɵtext(77, "Address Line 2");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(78, "input", 41);
+    i0.ɵɵelementStart(78, "input", 42);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_78_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.addressLine2, $event) || (ctx_r0.venueDraft.addressLine2 = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(79, "label", 6)(80, "span");
     i0.ɵɵtext(81, "City");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(82, "input", 42);
+    i0.ɵɵelementStart(82, "input", 43);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_82_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.city, $event) || (ctx_r0.venueDraft.city = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(83, "label", 6)(84, "span");
     i0.ɵɵtext(85, "Region");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(86, "input", 43);
+    i0.ɵɵelementStart(86, "input", 44);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_86_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.region, $event) || (ctx_r0.venueDraft.region = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()();
     i0.ɵɵelementStart(87, "label", 6)(88, "span");
     i0.ɵɵtext(89, "Postcode");
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(90, "input", 44);
+    i0.ɵɵelementStart(90, "input", 45);
     i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_24_Template_input_ngModelChange_90_listener($event) { i0.ɵɵrestoreView(_r3); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.venueDraft.postcode, $event) || (ctx_r0.venueDraft.postcode = $event); return i0.ɵɵresetView($event); });
     i0.ɵɵelementEnd()()();
     i0.ɵɵelementStart(91, "div", 19)(92, "button", 20);
@@ -273,13 +273,58 @@ function AdminComponent_Conditional_63_Template(rf, ctx) { if (rf & 1) {
     i0.ɵɵadvance(3);
     i0.ɵɵtextInterpolate(ctx_r0.inviteDebugToken);
 } }
-function AdminComponent_Conditional_80_Template(rf, ctx) { if (rf & 1) {
-    i0.ɵɵelementStart(0, "tr")(1, "td", 45);
+function AdminComponent_Conditional_64_Template(rf, ctx) { if (rf & 1) {
+    const _r6 = i0.ɵɵgetCurrentView();
+    i0.ɵɵelementStart(0, "div", 21)(1, "div", 46)(2, "h3");
+    i0.ɵɵtext(3, "Set Password");
+    i0.ɵɵelementEnd();
+    i0.ɵɵelementStart(4, "p");
+    i0.ɵɵtext(5);
+    i0.ɵɵelementEnd()();
+    i0.ɵɵelementStart(6, "div", 47)(7, "label", 6)(8, "span");
+    i0.ɵɵtext(9, "New Password");
+    i0.ɵɵelementEnd();
+    i0.ɵɵelementStart(10, "input", 48);
+    i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_64_Template_input_ngModelChange_10_listener($event) { i0.ɵɵrestoreView(_r6); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.passwordForm.password, $event) || (ctx_r0.passwordForm.password = $event); return i0.ɵɵresetView($event); });
+    i0.ɵɵelementEnd()();
+    i0.ɵɵelementStart(11, "label", 6)(12, "span");
+    i0.ɵɵtext(13, "Confirm Password");
+    i0.ɵɵelementEnd();
+    i0.ɵɵelementStart(14, "input", 49);
+    i0.ɵɵtwoWayListener("ngModelChange", function AdminComponent_Conditional_64_Template_input_ngModelChange_14_listener($event) { i0.ɵɵrestoreView(_r6); const ctx_r0 = i0.ɵɵnextContext(); i0.ɵɵtwoWayBindingSet(ctx_r0.passwordForm.confirmPassword, $event) || (ctx_r0.passwordForm.confirmPassword = $event); return i0.ɵɵresetView($event); });
+    i0.ɵɵelementEnd()()();
+    i0.ɵɵelementStart(15, "div", 50)(16, "button", 51);
+    i0.ɵɵlistener("click", function AdminComponent_Conditional_64_Template_button_click_16_listener() { i0.ɵɵrestoreView(_r6); const ctx_r0 = i0.ɵɵnextContext(); return i0.ɵɵresetView(ctx_r0.cancelSetPassword()); });
+    i0.ɵɵtext(17, "Cancel");
+    i0.ɵɵelementEnd();
+    i0.ɵɵelementStart(18, "button", 20);
+    i0.ɵɵlistener("click", function AdminComponent_Conditional_64_Template_button_click_18_listener() { i0.ɵɵrestoreView(_r6); const ctx_r0 = i0.ɵɵnextContext(); return i0.ɵɵresetView(ctx_r0.saveUserPassword()); });
+    i0.ɵɵtext(19);
+    i0.ɵɵelementEnd()()();
+} if (rf & 2) {
+    const ctx_r0 = i0.ɵɵnextContext();
+    i0.ɵɵadvance(5);
+    i0.ɵɵtextInterpolate3("", ctx_r0.passwordTargetUser.firstName, " ", ctx_r0.passwordTargetUser.lastName, " (", ctx_r0.passwordTargetUser.email, ")");
+    i0.ɵɵadvance(5);
+    i0.ɵɵtwoWayProperty("ngModel", ctx_r0.passwordForm.password);
+    i0.ɵɵproperty("ngModelOptions", i0.ɵɵpureFunction0(10, _c0));
+    i0.ɵɵadvance(4);
+    i0.ɵɵtwoWayProperty("ngModel", ctx_r0.passwordForm.confirmPassword);
+    i0.ɵɵproperty("ngModelOptions", i0.ɵɵpureFunction0(11, _c0));
+    i0.ɵɵadvance(2);
+    i0.ɵɵproperty("disabled", ctx_r0.updatingPassword);
+    i0.ɵɵadvance(2);
+    i0.ɵɵproperty("disabled", ctx_r0.updatingPassword);
+    i0.ɵɵadvance();
+    i0.ɵɵtextInterpolate1(" ", ctx_r0.updatingPassword ? "Updating..." : "Update Password", " ");
+} }
+function AdminComponent_Conditional_81_Template(rf, ctx) { if (rf & 1) {
+    i0.ɵɵelementStart(0, "tr")(1, "td", 52);
     i0.ɵɵtext(2, "Loading users...");
     i0.ɵɵelementEnd()();
 } }
-function AdminComponent_Conditional_81_For_1_Template(rf, ctx) { if (rf & 1) {
-    const _r6 = i0.ɵɵgetCurrentView();
+function AdminComponent_Conditional_82_For_1_Template(rf, ctx) { if (rf & 1) {
+    const _r7 = i0.ɵɵgetCurrentView();
     i0.ɵɵelementStart(0, "tr")(1, "td");
     i0.ɵɵtext(2);
     i0.ɵɵelementEnd();
@@ -292,41 +337,47 @@ function AdminComponent_Conditional_81_For_1_Template(rf, ctx) { if (rf & 1) {
     i0.ɵɵelementStart(7, "td");
     i0.ɵɵtext(8);
     i0.ɵɵelementEnd();
-    i0.ɵɵelementStart(9, "td")(10, "span", 46);
+    i0.ɵɵelementStart(9, "td")(10, "span", 53);
     i0.ɵɵtext(11);
     i0.ɵɵelementEnd()();
-    i0.ɵɵelementStart(12, "td", 47)(13, "button", 48);
-    i0.ɵɵlistener("click", function AdminComponent_Conditional_81_For_1_Template_button_click_13_listener() { const user_r7 = i0.ɵɵrestoreView(_r6).$implicit; const ctx_r0 = i0.ɵɵnextContext(2); return i0.ɵɵresetView(ctx_r0.setUserActive(user_r7, !user_r7.isActive)); });
+    i0.ɵɵelementStart(12, "td", 54)(13, "button", 55);
+    i0.ɵɵlistener("click", function AdminComponent_Conditional_82_For_1_Template_button_click_13_listener() { const user_r8 = i0.ɵɵrestoreView(_r7).$implicit; const ctx_r0 = i0.ɵɵnextContext(2); return i0.ɵɵresetView(ctx_r0.setUserActive(user_r8, !user_r8.isActive)); });
     i0.ɵɵtext(14);
+    i0.ɵɵelementEnd();
+    i0.ɵɵelementStart(15, "button", 51);
+    i0.ɵɵlistener("click", function AdminComponent_Conditional_82_For_1_Template_button_click_15_listener() { const user_r8 = i0.ɵɵrestoreView(_r7).$implicit; const ctx_r0 = i0.ɵɵnextContext(2); return i0.ɵɵresetView(ctx_r0.beginSetPassword(user_r8)); });
+    i0.ɵɵtext(16, " Set Password ");
     i0.ɵɵelementEnd()()();
 } if (rf & 2) {
-    const user_r7 = ctx.$implicit;
+    const user_r8 = ctx.$implicit;
     const ctx_r0 = i0.ɵɵnextContext(2);
     i0.ɵɵadvance(2);
-    i0.ɵɵtextInterpolate2("", user_r7.firstName, " ", user_r7.lastName);
+    i0.ɵɵtextInterpolate2("", user_r8.firstName, " ", user_r8.lastName);
     i0.ɵɵadvance(2);
-    i0.ɵɵtextInterpolate(user_r7.email);
+    i0.ɵɵtextInterpolate(user_r8.email);
     i0.ɵɵadvance(2);
-    i0.ɵɵtextInterpolate(ctx_r0.roleForSelectedVenue(user_r7));
+    i0.ɵɵtextInterpolate(ctx_r0.roleForSelectedVenue(user_r8));
     i0.ɵɵadvance(2);
-    i0.ɵɵtextInterpolate(user_r7.requiresTotp ? "Required" : "Optional");
+    i0.ɵɵtextInterpolate(user_r8.requiresTotp ? "Required" : "Optional");
     i0.ɵɵadvance(2);
-    i0.ɵɵclassProp("active", user_r7.isActive)("inactive", !user_r7.isActive);
+    i0.ɵɵclassProp("active", user_r8.isActive)("inactive", !user_r8.isActive);
     i0.ɵɵadvance();
-    i0.ɵɵtextInterpolate1(" ", user_r7.isActive ? "Active" : "Inactive", " ");
+    i0.ɵɵtextInterpolate1(" ", user_r8.isActive ? "Active" : "Inactive", " ");
     i0.ɵɵadvance(2);
     i0.ɵɵproperty("disabled", ctx_r0.updatingUser);
     i0.ɵɵadvance();
-    i0.ɵɵtextInterpolate1(" ", user_r7.isActive ? "Deactivate" : "Activate", " ");
+    i0.ɵɵtextInterpolate1(" ", user_r8.isActive ? "Deactivate" : "Activate", " ");
+    i0.ɵɵadvance();
+    i0.ɵɵproperty("disabled", ctx_r0.updatingPassword);
 } }
-function AdminComponent_Conditional_81_Conditional_2_Template(rf, ctx) { if (rf & 1) {
-    i0.ɵɵelementStart(0, "tr")(1, "td", 45);
+function AdminComponent_Conditional_82_Conditional_2_Template(rf, ctx) { if (rf & 1) {
+    i0.ɵɵelementStart(0, "tr")(1, "td", 52);
     i0.ɵɵtext(2, "No users assigned to this venue.");
     i0.ɵɵelementEnd()();
 } }
-function AdminComponent_Conditional_81_Template(rf, ctx) { if (rf & 1) {
-    i0.ɵɵrepeaterCreate(0, AdminComponent_Conditional_81_For_1_Template, 15, 12, "tr", null, _forTrack0);
-    i0.ɵɵconditionalCreate(2, AdminComponent_Conditional_81_Conditional_2_Template, 3, 0, "tr");
+function AdminComponent_Conditional_82_Template(rf, ctx) { if (rf & 1) {
+    i0.ɵɵrepeaterCreate(0, AdminComponent_Conditional_82_For_1_Template, 17, 13, "tr", null, _forTrack0);
+    i0.ɵɵconditionalCreate(2, AdminComponent_Conditional_82_Conditional_2_Template, 3, 0, "tr");
 } if (rf & 2) {
     const ctx_r0 = i0.ɵɵnextContext();
     i0.ɵɵrepeater(ctx_r0.users);
@@ -363,11 +414,14 @@ export class AdminComponent {
         this.savingVenue = false;
         this.invitingUser = false;
         this.updatingUser = false;
+        this.updatingPassword = false;
         this.pageError = '';
         this.venueMessage = '';
         this.userMessage = '';
         this.inviteForm = this.createDefaultInviteForm();
         this.inviteDebugToken = '';
+        this.passwordTargetUser = null;
+        this.passwordForm = this.createDefaultPasswordForm();
     }
     ngOnInit() {
         if (this.auth.isOperationsOnly()) {
@@ -385,6 +439,8 @@ export class AdminComponent {
         this.venueMessage = '';
         this.userMessage = '';
         this.inviteDebugToken = '';
+        this.passwordTargetUser = null;
+        this.passwordForm = this.createDefaultPasswordForm();
         this.loadVenueProfile();
         this.loadUsers();
     }
@@ -511,6 +567,52 @@ export class AdminComponent {
             }
         });
     }
+    beginSetPassword(user) {
+        this.passwordTargetUser = user;
+        this.passwordForm = this.createDefaultPasswordForm();
+        this.userMessage = '';
+    }
+    cancelSetPassword() {
+        this.passwordTargetUser = null;
+        this.passwordForm = this.createDefaultPasswordForm();
+    }
+    saveUserPassword() {
+        if (!this.passwordTargetUser) {
+            return;
+        }
+        const password = this.passwordForm.password.trim();
+        const confirmPassword = this.passwordForm.confirmPassword.trim();
+        if (!password || !confirmPassword) {
+            this.userMessage = 'Enter and confirm the new password.';
+            return;
+        }
+        if (password !== confirmPassword) {
+            this.userMessage = 'Password and confirm password must match.';
+            return;
+        }
+        if (!this.isPasswordComplex(password)) {
+            this.userMessage = 'Password must be 8+ characters with uppercase, lowercase, number, and special character.';
+            return;
+        }
+        this.updatingPassword = true;
+        this.userMessage = '';
+        const user = this.passwordTargetUser;
+        this.api
+            .updateUserPassword(user.id, password)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+            next: () => {
+                this.updatingPassword = false;
+                this.userMessage = `Password updated for ${user.firstName} ${user.lastName}.`;
+                this.passwordTargetUser = null;
+                this.passwordForm = this.createDefaultPasswordForm();
+            },
+            error: (error) => {
+                this.updatingPassword = false;
+                this.userMessage = this.resolveError(error, 'Unable to update user password.');
+            }
+        });
+    }
     roleForSelectedVenue(user) {
         const venueId = this.selectedVenueId;
         if (!venueId) {
@@ -632,6 +734,21 @@ export class AdminComponent {
             requiresTotp: false
         };
     }
+    createDefaultPasswordForm() {
+        return {
+            password: '',
+            confirmPassword: ''
+        };
+    }
+    isPasswordComplex(password) {
+        if (password.length < 8) {
+            return false;
+        }
+        return /[A-Z]/.test(password)
+            && /[a-z]/.test(password)
+            && /\d/.test(password)
+            && /[^A-Za-z0-9]/.test(password);
+    }
     normalizeOptionalText(value) {
         if (!value) {
             return null;
@@ -671,7 +788,7 @@ export class AdminComponent {
         return fallback;
     }
     static { this.ɵfac = function AdminComponent_Factory(__ngFactoryType__) { return new (__ngFactoryType__ || AdminComponent)(); }; }
-    static { this.ɵcmp = /*@__PURE__*/ i0.ɵɵdefineComponent({ type: AdminComponent, selectors: [["app-admin"]], decls: 82, vars: 19, consts: [[1, "admin-page"], [1, "page-header"], [1, "page-error"], [1, "admin-grid"], [1, "panel"], [1, "panel-header"], [1, "field"], [3, "ngModelChange", "ngModel", "ngModelOptions", "disabled"], [3, "value"], [1, "hint"], [1, "invite-grid"], ["type", "text", "name", "inviteFirstName", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "inviteLastName", 3, "ngModelChange", "ngModel"], [1, "field", "span-2"], ["type", "email", "name", "inviteEmail", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "invitePhone", "placeholder", "+447700900111", 3, "ngModelChange", "ngModel"], ["name", "inviteRole", 3, "ngModelChange", "ngModel"], [1, "check-field", "span-2"], ["type", "checkbox", "name", "inviteRequiresTotp", 3, "ngModelChange", "ngModel"], [1, "panel-actions"], ["type", "button", 1, "primary", 3, "click", "disabled"], [1, "table-wrap"], [1, "form-grid"], ["type", "text", "name", "venueName", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "legalEntityName", 3, "ngModelChange", "ngModel"], ["type", "email", "name", "enquiriesEmail", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "phoneNumberE164", "placeholder", "+447700900111", 3, "ngModelChange", "ngModel"], ["type", "url", "name", "websiteUrl", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "vatNumber", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "companyRegistrationNumber", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "countryCode", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "currencyCode", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "timeZone", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "locale", 3, "ngModelChange", "ngModel"], ["type", "number", "min", "0", "step", "0.01", "name", "defaultVatRate", 3, "ngModelChange", "ngModel"], ["type", "number", "min", "0", "step", "1", "name", "minimumBookingNoticeDays", 3, "ngModelChange", "ngModel"], ["type", "number", "min", "1", "step", "1", "name", "defaultHoldPeriodDays", 3, "ngModelChange", "ngModel"], ["type", "number", "min", "0", "step", "1", "name", "holdWarningDays", 3, "ngModelChange", "ngModel"], ["type", "number", "min", "1", "step", "1", "name", "maxHoldsPerDateAndSpace", 3, "ngModelChange", "ngModel"], ["name", "holdAutoReleaseMode", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "addressLine1", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "addressLine2", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "city", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "region", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "postcode", 3, "ngModelChange", "ngModel"], ["colspan", "6", 1, "empty-row"], [1, "status"], [1, "actions"], ["type", "button", 3, "click", "disabled"]], template: function AdminComponent_Template(rf, ctx) { if (rf & 1) {
+    static { this.ɵcmp = /*@__PURE__*/ i0.ɵɵdefineComponent({ type: AdminComponent, selectors: [["app-admin"]], decls: 83, vars: 20, consts: [[1, "admin-page"], [1, "page-header"], [1, "page-error"], [1, "admin-grid"], [1, "panel"], [1, "panel-header"], [1, "field"], [3, "ngModelChange", "ngModel", "ngModelOptions", "disabled"], [3, "value"], [1, "hint"], [1, "invite-grid"], ["type", "text", "name", "inviteFirstName", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "inviteLastName", 3, "ngModelChange", "ngModel"], [1, "field", "span-2"], ["type", "email", "name", "inviteEmail", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "invitePhone", "placeholder", "+447700900111", 3, "ngModelChange", "ngModel"], ["name", "inviteRole", 3, "ngModelChange", "ngModel"], [1, "check-field", "span-2"], ["type", "checkbox", "name", "inviteRequiresTotp", 3, "ngModelChange", "ngModel"], [1, "panel-actions"], ["type", "button", 1, "primary", 3, "click", "disabled"], [1, "password-panel"], [1, "table-wrap"], [1, "form-grid"], ["type", "text", "name", "venueName", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "legalEntityName", 3, "ngModelChange", "ngModel"], ["type", "email", "name", "enquiriesEmail", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "phoneNumberE164", "placeholder", "+447700900111", 3, "ngModelChange", "ngModel"], ["type", "url", "name", "websiteUrl", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "vatNumber", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "companyRegistrationNumber", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "countryCode", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "currencyCode", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "timeZone", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "locale", 3, "ngModelChange", "ngModel"], ["type", "number", "min", "0", "step", "0.01", "name", "defaultVatRate", 3, "ngModelChange", "ngModel"], ["type", "number", "min", "0", "step", "1", "name", "minimumBookingNoticeDays", 3, "ngModelChange", "ngModel"], ["type", "number", "min", "1", "step", "1", "name", "defaultHoldPeriodDays", 3, "ngModelChange", "ngModel"], ["type", "number", "min", "0", "step", "1", "name", "holdWarningDays", 3, "ngModelChange", "ngModel"], ["type", "number", "min", "1", "step", "1", "name", "maxHoldsPerDateAndSpace", 3, "ngModelChange", "ngModel"], ["name", "holdAutoReleaseMode", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "addressLine1", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "addressLine2", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "city", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "region", 3, "ngModelChange", "ngModel"], ["type", "text", "name", "postcode", 3, "ngModelChange", "ngModel"], [1, "password-panel-header"], [1, "password-grid"], ["type", "password", "name", "newPassword", "autocomplete", "new-password", 3, "ngModelChange", "ngModel", "ngModelOptions"], ["type", "password", "name", "confirmPassword", "autocomplete", "new-password", 3, "ngModelChange", "ngModel", "ngModelOptions"], [1, "password-actions"], ["type", "button", 1, "secondary", 3, "click", "disabled"], ["colspan", "6", 1, "empty-row"], [1, "status"], [1, "actions"], ["type", "button", 3, "click", "disabled"]], template: function AdminComponent_Template(rf, ctx) { if (rf & 1) {
             i0.ɵɵelementStart(0, "section", 0)(1, "header", 1)(2, "div")(3, "h1");
             i0.ɵɵtext(4, "Administration");
             i0.ɵɵelementEnd();
@@ -745,31 +862,32 @@ export class AdminComponent {
             i0.ɵɵtext(62);
             i0.ɵɵelementEnd()();
             i0.ɵɵconditionalCreate(63, AdminComponent_Conditional_63_Template, 4, 1, "p", 9);
-            i0.ɵɵelementStart(64, "div", 21)(65, "table")(66, "thead")(67, "tr")(68, "th");
-            i0.ɵɵtext(69, "Name");
+            i0.ɵɵconditionalCreate(64, AdminComponent_Conditional_64_Template, 20, 12, "div", 21);
+            i0.ɵɵelementStart(65, "div", 22)(66, "table")(67, "thead")(68, "tr")(69, "th");
+            i0.ɵɵtext(70, "Name");
             i0.ɵɵelementEnd();
-            i0.ɵɵelementStart(70, "th");
-            i0.ɵɵtext(71, "Email");
+            i0.ɵɵelementStart(71, "th");
+            i0.ɵɵtext(72, "Email");
             i0.ɵɵelementEnd();
-            i0.ɵɵelementStart(72, "th");
-            i0.ɵɵtext(73, "Role (Selected Venue)");
+            i0.ɵɵelementStart(73, "th");
+            i0.ɵɵtext(74, "Role (Selected Venue)");
             i0.ɵɵelementEnd();
-            i0.ɵɵelementStart(74, "th");
-            i0.ɵɵtext(75, "2FA");
+            i0.ɵɵelementStart(75, "th");
+            i0.ɵɵtext(76, "2FA");
             i0.ɵɵelementEnd();
-            i0.ɵɵelementStart(76, "th");
-            i0.ɵɵtext(77, "Status");
+            i0.ɵɵelementStart(77, "th");
+            i0.ɵɵtext(78, "Status");
             i0.ɵɵelementEnd();
-            i0.ɵɵelement(78, "th");
+            i0.ɵɵelement(79, "th");
             i0.ɵɵelementEnd()();
-            i0.ɵɵelementStart(79, "tbody");
-            i0.ɵɵconditionalCreate(80, AdminComponent_Conditional_80_Template, 3, 0, "tr")(81, AdminComponent_Conditional_81_Template, 3, 1);
+            i0.ɵɵelementStart(80, "tbody");
+            i0.ɵɵconditionalCreate(81, AdminComponent_Conditional_81_Template, 3, 0, "tr")(82, AdminComponent_Conditional_82_Template, 3, 1);
             i0.ɵɵelementEnd()()()()()();
         } if (rf & 2) {
             i0.ɵɵadvance(7);
             i0.ɵɵconditional(ctx.pageError ? 7 : -1);
             i0.ɵɵadvance(12);
-            i0.ɵɵproperty("ngModel", ctx.selectedVenueId)("ngModelOptions", i0.ɵɵpureFunction0(18, _c0))("disabled", ctx.loadingVenues || ctx.venues.length === 0);
+            i0.ɵɵproperty("ngModel", ctx.selectedVenueId)("ngModelOptions", i0.ɵɵpureFunction0(19, _c0))("disabled", ctx.loadingVenues || ctx.venues.length === 0);
             i0.ɵɵadvance();
             i0.ɵɵrepeater(ctx.venues);
             i0.ɵɵadvance(2);
@@ -800,13 +918,15 @@ export class AdminComponent {
             i0.ɵɵtextInterpolate1(" ", ctx.invitingUser ? "Sending..." : "Send Invite", " ");
             i0.ɵɵadvance();
             i0.ɵɵconditional(ctx.inviteDebugToken ? 63 : -1);
+            i0.ɵɵadvance();
+            i0.ɵɵconditional(ctx.passwordTargetUser ? 64 : -1);
             i0.ɵɵadvance(17);
-            i0.ɵɵconditional(ctx.loadingUsers ? 80 : 81);
-        } }, dependencies: [FormsModule, i1.NgSelectOption, i1.ɵNgSelectMultipleOption, i1.DefaultValueAccessor, i1.NumberValueAccessor, i1.CheckboxControlValueAccessor, i1.SelectControlValueAccessor, i1.NgControlStatus, i1.MinValidator, i1.NgModel], styles: [".admin-page[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 1rem;\n}\n\n.page-header[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: 1.5rem;\n  letter-spacing: 0.01em;\n}\n\n.page-header[_ngcontent-%COMP%]   p[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  color: var(--cf-text-muted);\n  font-size: 0.92rem;\n}\n\n.page-error[_ngcontent-%COMP%] {\n  margin: 0;\n  border-radius: 12px;\n  border: 1px solid rgba(220, 38, 38, 0.28);\n  background: rgba(254, 226, 226, 0.85);\n  color: #991b1b;\n  padding: 0.75rem 0.9rem;\n}\n\n.admin-grid[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 1rem;\n  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);\n}\n\n.panel[_ngcontent-%COMP%] {\n  background: var(--cf-surface);\n  border: 1px solid var(--cf-border);\n  border-radius: var(--cf-radius-xl);\n  box-shadow: var(--cf-shadow-sm);\n  padding: 1rem;\n  display: grid;\n  gap: 0.9rem;\n  align-content: start;\n}\n\n.panel-header[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: 1.08rem;\n  letter-spacing: 0.01em;\n}\n\n.panel-header[_ngcontent-%COMP%]   p[_ngcontent-%COMP%] {\n  margin: 0.3rem 0 0;\n  color: var(--cf-text-muted);\n  font-size: 0.85rem;\n}\n\n.hint[_ngcontent-%COMP%] {\n  margin: 0;\n  border-radius: 10px;\n  background: var(--cf-primary-soft);\n  color: #1e3a8a;\n  padding: 0.6rem 0.7rem;\n  font-size: 0.82rem;\n}\n\n.form-grid[_ngcontent-%COMP%], \n.invite-grid[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.75rem;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n}\n\n.field[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.34rem;\n}\n\n.field[_ngcontent-%COMP%]   span[_ngcontent-%COMP%], \n.check-field[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  color: var(--cf-text-muted);\n  font-size: 0.76rem;\n  font-weight: 500;\n  letter-spacing: 0.02em;\n  text-transform: uppercase;\n}\n\n.field[_ngcontent-%COMP%]   input[_ngcontent-%COMP%], \n.field[_ngcontent-%COMP%]   select[_ngcontent-%COMP%], \n.field[_ngcontent-%COMP%]   textarea[_ngcontent-%COMP%] {\n  width: 100%;\n  border-radius: 10px;\n  border: 1px solid var(--cf-border);\n  background: #fff;\n  color: var(--cf-text);\n  min-height: 2.35rem;\n  padding: 0.55rem 0.65rem;\n}\n\n.check-field[_ngcontent-%COMP%] {\n  display: flex;\n  align-items: center;\n  gap: 0.5rem;\n}\n\n.check-field[_ngcontent-%COMP%]   input[type='checkbox'][_ngcontent-%COMP%] {\n  width: 1rem;\n  height: 1rem;\n}\n\n.span-2[_ngcontent-%COMP%] {\n  grid-column: span 2;\n}\n\n.panel-actions[_ngcontent-%COMP%] {\n  display: flex;\n  justify-content: flex-end;\n}\n\n.panel-actions[_ngcontent-%COMP%]   .primary[_ngcontent-%COMP%], \n.actions[_ngcontent-%COMP%]   button[_ngcontent-%COMP%] {\n  border: none;\n  border-radius: 10px;\n  background: var(--cf-primary);\n  color: #fff;\n  padding: 0.58rem 0.9rem;\n  font-weight: 500;\n}\n\n.panel-actions[_ngcontent-%COMP%]   .primary[_ngcontent-%COMP%]:hover, \n.actions[_ngcontent-%COMP%]   button[_ngcontent-%COMP%]:hover {\n  background: var(--cf-primary-hover);\n}\n\n.panel-actions[_ngcontent-%COMP%]   .primary[_ngcontent-%COMP%]:disabled, \n.actions[_ngcontent-%COMP%]   button[_ngcontent-%COMP%]:disabled {\n  opacity: 0.55;\n  cursor: not-allowed;\n}\n\n.table-wrap[_ngcontent-%COMP%] {\n  overflow: auto;\n  border: 1px solid var(--cf-border);\n  border-radius: 12px;\n}\n\ntable[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  min-width: 620px;\n}\n\nthead[_ngcontent-%COMP%]   th[_ngcontent-%COMP%] {\n  text-align: left;\n  font-size: 0.72rem;\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n  color: var(--cf-text-muted);\n  padding: 0.65rem 0.7rem;\n  border-bottom: 1px solid var(--cf-border);\n}\n\ntbody[_ngcontent-%COMP%]   td[_ngcontent-%COMP%] {\n  padding: 0.7rem;\n  border-bottom: 1px solid var(--cf-border-soft);\n  font-size: 0.86rem;\n}\n\ntbody[_ngcontent-%COMP%]   tr[_ngcontent-%COMP%]:last-child   td[_ngcontent-%COMP%] {\n  border-bottom: none;\n}\n\n.status[_ngcontent-%COMP%] {\n  display: inline-flex;\n  align-items: center;\n  padding: 0.25rem 0.55rem;\n  border-radius: 999px;\n  font-size: 0.75rem;\n  font-weight: 500;\n}\n\n.status.active[_ngcontent-%COMP%] {\n  background: rgba(22, 163, 74, 0.12);\n  color: #166534;\n}\n\n.status.inactive[_ngcontent-%COMP%] {\n  background: rgba(148, 163, 184, 0.16);\n  color: #334155;\n}\n\n.actions[_ngcontent-%COMP%] {\n  text-align: right;\n}\n\n.empty-row[_ngcontent-%COMP%] {\n  color: var(--cf-text-muted);\n  text-align: center;\n  font-style: italic;\n  padding: 1rem 0.7rem;\n}\n\n@media (max-width: 1280px) {\n  .admin-grid[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n  }\n}\n\n@media (max-width: 760px) {\n  .form-grid[_ngcontent-%COMP%], \n   .invite-grid[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n  }\n\n  .span-2[_ngcontent-%COMP%] {\n    grid-column: auto;\n  }\n\n  .panel-actions[_ngcontent-%COMP%] {\n    justify-content: stretch;\n  }\n\n  .panel-actions[_ngcontent-%COMP%]   .primary[_ngcontent-%COMP%] {\n    width: 100%;\n  }\n}"] }); }
+            i0.ɵɵconditional(ctx.loadingUsers ? 81 : 82);
+        } }, dependencies: [FormsModule, i1.NgSelectOption, i1.ɵNgSelectMultipleOption, i1.DefaultValueAccessor, i1.NumberValueAccessor, i1.CheckboxControlValueAccessor, i1.SelectControlValueAccessor, i1.NgControlStatus, i1.MinValidator, i1.NgModel], styles: [".admin-page[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 1rem;\n}\n\n.page-header[_ngcontent-%COMP%]   h1[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: 1.5rem;\n  letter-spacing: 0.01em;\n}\n\n.page-header[_ngcontent-%COMP%]   p[_ngcontent-%COMP%] {\n  margin: 0.35rem 0 0;\n  color: var(--cf-text-muted);\n  font-size: 0.92rem;\n}\n\n.page-error[_ngcontent-%COMP%] {\n  margin: 0;\n  border-radius: 12px;\n  border: 1px solid rgba(220, 38, 38, 0.28);\n  background: rgba(254, 226, 226, 0.85);\n  color: #991b1b;\n  padding: 0.75rem 0.9rem;\n}\n\n.admin-grid[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 1rem;\n  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);\n}\n\n.panel[_ngcontent-%COMP%] {\n  background: var(--cf-surface);\n  border: 1px solid var(--cf-border);\n  border-radius: var(--cf-radius-xl);\n  box-shadow: var(--cf-shadow-sm);\n  padding: 1rem;\n  display: grid;\n  gap: 0.9rem;\n  align-content: start;\n}\n\n.panel-header[_ngcontent-%COMP%]   h2[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: 1.08rem;\n  letter-spacing: 0.01em;\n}\n\n.panel-header[_ngcontent-%COMP%]   p[_ngcontent-%COMP%] {\n  margin: 0.3rem 0 0;\n  color: var(--cf-text-muted);\n  font-size: 0.85rem;\n}\n\n.hint[_ngcontent-%COMP%] {\n  margin: 0;\n  border-radius: 10px;\n  background: var(--cf-primary-soft);\n  color: #1e3a8a;\n  padding: 0.6rem 0.7rem;\n  font-size: 0.82rem;\n}\n\n.form-grid[_ngcontent-%COMP%], \n.invite-grid[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.75rem;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n}\n\n.field[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.34rem;\n}\n\n.field[_ngcontent-%COMP%]   span[_ngcontent-%COMP%], \n.check-field[_ngcontent-%COMP%]   span[_ngcontent-%COMP%] {\n  color: var(--cf-text-muted);\n  font-size: 0.76rem;\n  font-weight: 500;\n  letter-spacing: 0.02em;\n  text-transform: uppercase;\n}\n\n.field[_ngcontent-%COMP%]   input[_ngcontent-%COMP%], \n.field[_ngcontent-%COMP%]   select[_ngcontent-%COMP%], \n.field[_ngcontent-%COMP%]   textarea[_ngcontent-%COMP%] {\n  width: 100%;\n  border-radius: 10px;\n  border: 1px solid var(--cf-border);\n  background: #fff;\n  color: var(--cf-text);\n  min-height: 2.35rem;\n  padding: 0.55rem 0.65rem;\n}\n\n.check-field[_ngcontent-%COMP%] {\n  display: flex;\n  align-items: center;\n  gap: 0.5rem;\n}\n\n.check-field[_ngcontent-%COMP%]   input[type='checkbox'][_ngcontent-%COMP%] {\n  width: 1rem;\n  height: 1rem;\n}\n\n.span-2[_ngcontent-%COMP%] {\n  grid-column: span 2;\n}\n\n.panel-actions[_ngcontent-%COMP%] {\n  display: flex;\n  justify-content: flex-end;\n}\n\n.panel-actions[_ngcontent-%COMP%]   .primary[_ngcontent-%COMP%], \n.actions[_ngcontent-%COMP%]   button[_ngcontent-%COMP%] {\n  border: none;\n  border-radius: 10px;\n  background: var(--cf-primary);\n  color: #fff;\n  padding: 0.58rem 0.9rem;\n  font-weight: 500;\n}\n\n.panel-actions[_ngcontent-%COMP%]   .primary[_ngcontent-%COMP%]:hover, \n.actions[_ngcontent-%COMP%]   button[_ngcontent-%COMP%]:hover {\n  background: var(--cf-primary-hover);\n}\n\n.panel-actions[_ngcontent-%COMP%]   .primary[_ngcontent-%COMP%]:disabled, \n.actions[_ngcontent-%COMP%]   button[_ngcontent-%COMP%]:disabled {\n  opacity: 0.55;\n  cursor: not-allowed;\n}\n\n.table-wrap[_ngcontent-%COMP%] {\n  overflow: auto;\n  border: 1px solid var(--cf-border);\n  border-radius: 12px;\n}\n\ntable[_ngcontent-%COMP%] {\n  width: 100%;\n  border-collapse: collapse;\n  min-width: 620px;\n}\n\nthead[_ngcontent-%COMP%]   th[_ngcontent-%COMP%] {\n  text-align: left;\n  font-size: 0.72rem;\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n  color: var(--cf-text-muted);\n  padding: 0.65rem 0.7rem;\n  border-bottom: 1px solid var(--cf-border);\n}\n\ntbody[_ngcontent-%COMP%]   td[_ngcontent-%COMP%] {\n  padding: 0.7rem;\n  border-bottom: 1px solid var(--cf-border-soft);\n  font-size: 0.86rem;\n}\n\ntbody[_ngcontent-%COMP%]   tr[_ngcontent-%COMP%]:last-child   td[_ngcontent-%COMP%] {\n  border-bottom: none;\n}\n\n.status[_ngcontent-%COMP%] {\n  display: inline-flex;\n  align-items: center;\n  padding: 0.25rem 0.55rem;\n  border-radius: 999px;\n  font-size: 0.75rem;\n  font-weight: 500;\n}\n\n.status.active[_ngcontent-%COMP%] {\n  background: rgba(22, 163, 74, 0.12);\n  color: #166534;\n}\n\n.status.inactive[_ngcontent-%COMP%] {\n  background: rgba(148, 163, 184, 0.16);\n  color: #334155;\n}\n\n.actions[_ngcontent-%COMP%] {\n  text-align: right;\n  white-space: nowrap;\n}\n\n.actions[_ngcontent-%COMP%]   button[_ngcontent-%COMP%] {\n  margin-left: 0.4rem;\n}\n\n.secondary[_ngcontent-%COMP%] {\n  border: 1px solid var(--cf-border);\n  border-radius: 10px;\n  background: #fff;\n  color: var(--cf-text);\n  padding: 0.58rem 0.9rem;\n  font-weight: 500;\n}\n\n.secondary[_ngcontent-%COMP%]:hover {\n  background: #f8fafc;\n}\n\n.actions[_ngcontent-%COMP%]   button.secondary[_ngcontent-%COMP%] {\n  background: #fff;\n  color: var(--cf-text);\n}\n\n.actions[_ngcontent-%COMP%]   button.secondary[_ngcontent-%COMP%]:hover {\n  background: #f8fafc;\n}\n\n.password-panel[_ngcontent-%COMP%] {\n  border: 1px solid var(--cf-border);\n  border-radius: 12px;\n  padding: 0.8rem;\n  background: #fff;\n  display: grid;\n  gap: 0.75rem;\n}\n\n.password-panel-header[_ngcontent-%COMP%]   h3[_ngcontent-%COMP%] {\n  margin: 0;\n  font-size: 0.95rem;\n}\n\n.password-panel-header[_ngcontent-%COMP%]   p[_ngcontent-%COMP%] {\n  margin: 0.2rem 0 0;\n  color: var(--cf-text-muted);\n  font-size: 0.82rem;\n}\n\n.password-grid[_ngcontent-%COMP%] {\n  display: grid;\n  gap: 0.75rem;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n}\n\n.password-actions[_ngcontent-%COMP%] {\n  display: flex;\n  justify-content: flex-end;\n  gap: 0.5rem;\n}\n\n.empty-row[_ngcontent-%COMP%] {\n  color: var(--cf-text-muted);\n  text-align: center;\n  font-style: italic;\n  padding: 1rem 0.7rem;\n}\n\n@media (max-width: 1280px) {\n  .admin-grid[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n  }\n}\n\n@media (max-width: 760px) {\n  .form-grid[_ngcontent-%COMP%], \n   .invite-grid[_ngcontent-%COMP%], \n   .password-grid[_ngcontent-%COMP%] {\n    grid-template-columns: 1fr;\n  }\n\n  .span-2[_ngcontent-%COMP%] {\n    grid-column: auto;\n  }\n\n  .panel-actions[_ngcontent-%COMP%] {\n    justify-content: stretch;\n  }\n\n  .panel-actions[_ngcontent-%COMP%]   .primary[_ngcontent-%COMP%] {\n    width: 100%;\n  }\n}"] }); }
 }
 (() => { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(AdminComponent, [{
         type: Component,
-        args: [{ selector: 'app-admin', standalone: true, imports: [FormsModule], template: "<section class=\"admin-page\">\n  <header class=\"page-header\">\n    <div>\n      <h1>Administration</h1>\n      <p>Manage venues and user access for the selected tenant.</p>\n    </div>\n  </header>\n\n  @if (pageError) {\n    <p class=\"page-error\">{{ pageError }}</p>\n  }\n\n  <section class=\"admin-grid\">\n    <article class=\"panel\">\n      <div class=\"panel-header\">\n        <div>\n          <h2>Venue Management</h2>\n          <p>Update core venue profile, compliance, and hold defaults.</p>\n        </div>\n      </div>\n\n      <label class=\"field\">\n        <span>Venue</span>\n        <select\n          [ngModel]=\"selectedVenueId\"\n          [ngModelOptions]=\"{ standalone: true }\"\n          (ngModelChange)=\"onVenueSelectionChanged($event)\"\n          [disabled]=\"loadingVenues || venues.length === 0\">\n          @for (venue of venues; track venue.id) {\n            <option [value]=\"venue.id\">{{ venue.name }}</option>\n          }\n        </select>\n      </label>\n\n      @if (loadingVenueProfile) {\n        <p class=\"hint\">Loading venue profile...</p>\n      }\n\n      @if (venueMessage) {\n        <p class=\"hint\">{{ venueMessage }}</p>\n      }\n\n      @if (venueDraft) {\n        <div class=\"form-grid\">\n          <label class=\"field\">\n            <span>Venue Name</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.name\" name=\"venueName\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Legal Entity Name</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.legalEntityName\" name=\"legalEntityName\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Enquiries Email</span>\n            <input type=\"email\" [(ngModel)]=\"venueDraft.enquiriesEmail\" name=\"enquiriesEmail\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Phone (E.164)</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.phoneNumberE164\" name=\"phoneNumberE164\" placeholder=\"+447700900111\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Website URL</span>\n            <input type=\"url\" [(ngModel)]=\"venueDraft.websiteUrl\" name=\"websiteUrl\" />\n          </label>\n\n          <label class=\"field\">\n            <span>VAT Number</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.vatNumber\" name=\"vatNumber\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Company Reg Number</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.companyRegistrationNumber\" name=\"companyRegistrationNumber\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Country Code</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.countryCode\" name=\"countryCode\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Currency</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.currencyCode\" name=\"currencyCode\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Time Zone</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.timeZone\" name=\"timeZone\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Locale</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.locale\" name=\"locale\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Default VAT %</span>\n            <input type=\"number\" min=\"0\" step=\"0.01\" [(ngModel)]=\"venueDraft.defaultVatRate\" name=\"defaultVatRate\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Min Booking Notice (days)</span>\n            <input\n              type=\"number\"\n              min=\"0\"\n              step=\"1\"\n              [(ngModel)]=\"venueDraft.minimumBookingNoticeDays\"\n              name=\"minimumBookingNoticeDays\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Default Hold Period (days)</span>\n            <input\n              type=\"number\"\n              min=\"1\"\n              step=\"1\"\n              [(ngModel)]=\"venueDraft.defaultHoldPeriodDays\"\n              name=\"defaultHoldPeriodDays\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Hold Warning (days)</span>\n            <input type=\"number\" min=\"0\" step=\"1\" [(ngModel)]=\"venueDraft.holdWarningDays\" name=\"holdWarningDays\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Max Holds per Date/Space</span>\n            <input\n              type=\"number\"\n              min=\"1\"\n              step=\"1\"\n              [(ngModel)]=\"venueDraft.maxHoldsPerDateAndSpace\"\n              name=\"maxHoldsPerDateAndSpace\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Hold Auto Release</span>\n            <select [(ngModel)]=\"venueDraft.holdAutoReleaseMode\" name=\"holdAutoReleaseMode\">\n              @for (mode of holdAutoReleaseModes; track mode) {\n                <option [value]=\"mode\">{{ mode }}</option>\n              }\n            </select>\n          </label>\n\n          <label class=\"field span-2\">\n            <span>Address Line 1</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.addressLine1\" name=\"addressLine1\" />\n          </label>\n\n          <label class=\"field span-2\">\n            <span>Address Line 2</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.addressLine2\" name=\"addressLine2\" />\n          </label>\n\n          <label class=\"field\">\n            <span>City</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.city\" name=\"city\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Region</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.region\" name=\"region\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Postcode</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.postcode\" name=\"postcode\" />\n          </label>\n        </div>\n\n        <div class=\"panel-actions\">\n          <button type=\"button\" class=\"primary\" (click)=\"saveVenue()\" [disabled]=\"savingVenue || loadingVenueProfile\">\n            {{ savingVenue ? 'Saving...' : 'Save Venue' }}\n          </button>\n        </div>\n      }\n    </article>\n\n    <article class=\"panel\">\n      <div class=\"panel-header\">\n        <div>\n          <h2>User Management</h2>\n          <p>Invite users to this venue and manage active status.</p>\n        </div>\n      </div>\n\n      @if (userMessage) {\n        <p class=\"hint\">{{ userMessage }}</p>\n      }\n\n      <div class=\"invite-grid\">\n        <label class=\"field\">\n          <span>First Name</span>\n          <input type=\"text\" [(ngModel)]=\"inviteForm.firstName\" name=\"inviteFirstName\" />\n        </label>\n        <label class=\"field\">\n          <span>Last Name</span>\n          <input type=\"text\" [(ngModel)]=\"inviteForm.lastName\" name=\"inviteLastName\" />\n        </label>\n        <label class=\"field span-2\">\n          <span>Email</span>\n          <input type=\"email\" [(ngModel)]=\"inviteForm.email\" name=\"inviteEmail\" />\n        </label>\n        <label class=\"field\">\n          <span>Phone (optional)</span>\n          <input type=\"text\" [(ngModel)]=\"inviteForm.phoneNumberE164\" name=\"invitePhone\" placeholder=\"+447700900111\" />\n        </label>\n        <label class=\"field\">\n          <span>Role</span>\n          <select [(ngModel)]=\"inviteForm.role\" name=\"inviteRole\">\n            @for (role of roleOptions; track role) {\n              <option [value]=\"role\">{{ role }}</option>\n            }\n          </select>\n        </label>\n        <label class=\"check-field span-2\">\n          <input type=\"checkbox\" [(ngModel)]=\"inviteForm.requiresTotp\" name=\"inviteRequiresTotp\" />\n          <span>Require TOTP 2FA on first sign-in</span>\n        </label>\n      </div>\n\n      <div class=\"panel-actions\">\n        <button type=\"button\" class=\"primary\" (click)=\"sendInvite()\" [disabled]=\"invitingUser || !selectedVenueId\">\n          {{ invitingUser ? 'Sending...' : 'Send Invite' }}\n        </button>\n      </div>\n\n      @if (inviteDebugToken) {\n        <p class=\"hint\">Debug invitation token: <code>{{ inviteDebugToken }}</code></p>\n      }\n\n      <div class=\"table-wrap\">\n        <table>\n          <thead>\n            <tr>\n              <th>Name</th>\n              <th>Email</th>\n              <th>Role (Selected Venue)</th>\n              <th>2FA</th>\n              <th>Status</th>\n              <th></th>\n            </tr>\n          </thead>\n          <tbody>\n            @if (loadingUsers) {\n              <tr>\n                <td colspan=\"6\" class=\"empty-row\">Loading users...</td>\n              </tr>\n            } @else {\n              @for (user of users; track user.id) {\n                <tr>\n                  <td>{{ user.firstName }} {{ user.lastName }}</td>\n                  <td>{{ user.email }}</td>\n                  <td>{{ roleForSelectedVenue(user) }}</td>\n                  <td>{{ user.requiresTotp ? 'Required' : 'Optional' }}</td>\n                  <td>\n                    <span class=\"status\" [class.active]=\"user.isActive\" [class.inactive]=\"!user.isActive\">\n                      {{ user.isActive ? 'Active' : 'Inactive' }}\n                    </span>\n                  </td>\n                  <td class=\"actions\">\n                    <button\n                      type=\"button\"\n                      (click)=\"setUserActive(user, !user.isActive)\"\n                      [disabled]=\"updatingUser\">\n                      {{ user.isActive ? 'Deactivate' : 'Activate' }}\n                    </button>\n                  </td>\n                </tr>\n              }\n\n              @if (users.length === 0) {\n                <tr>\n                  <td colspan=\"6\" class=\"empty-row\">No users assigned to this venue.</td>\n                </tr>\n              }\n            }\n          </tbody>\n        </table>\n      </div>\n    </article>\n  </section>\n</section>\n", styles: [".admin-page {\n  display: grid;\n  gap: 1rem;\n}\n\n.page-header h1 {\n  margin: 0;\n  font-size: 1.5rem;\n  letter-spacing: 0.01em;\n}\n\n.page-header p {\n  margin: 0.35rem 0 0;\n  color: var(--cf-text-muted);\n  font-size: 0.92rem;\n}\n\n.page-error {\n  margin: 0;\n  border-radius: 12px;\n  border: 1px solid rgba(220, 38, 38, 0.28);\n  background: rgba(254, 226, 226, 0.85);\n  color: #991b1b;\n  padding: 0.75rem 0.9rem;\n}\n\n.admin-grid {\n  display: grid;\n  gap: 1rem;\n  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);\n}\n\n.panel {\n  background: var(--cf-surface);\n  border: 1px solid var(--cf-border);\n  border-radius: var(--cf-radius-xl);\n  box-shadow: var(--cf-shadow-sm);\n  padding: 1rem;\n  display: grid;\n  gap: 0.9rem;\n  align-content: start;\n}\n\n.panel-header h2 {\n  margin: 0;\n  font-size: 1.08rem;\n  letter-spacing: 0.01em;\n}\n\n.panel-header p {\n  margin: 0.3rem 0 0;\n  color: var(--cf-text-muted);\n  font-size: 0.85rem;\n}\n\n.hint {\n  margin: 0;\n  border-radius: 10px;\n  background: var(--cf-primary-soft);\n  color: #1e3a8a;\n  padding: 0.6rem 0.7rem;\n  font-size: 0.82rem;\n}\n\n.form-grid,\n.invite-grid {\n  display: grid;\n  gap: 0.75rem;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n}\n\n.field {\n  display: grid;\n  gap: 0.34rem;\n}\n\n.field span,\n.check-field span {\n  color: var(--cf-text-muted);\n  font-size: 0.76rem;\n  font-weight: 500;\n  letter-spacing: 0.02em;\n  text-transform: uppercase;\n}\n\n.field input,\n.field select,\n.field textarea {\n  width: 100%;\n  border-radius: 10px;\n  border: 1px solid var(--cf-border);\n  background: #fff;\n  color: var(--cf-text);\n  min-height: 2.35rem;\n  padding: 0.55rem 0.65rem;\n}\n\n.check-field {\n  display: flex;\n  align-items: center;\n  gap: 0.5rem;\n}\n\n.check-field input[type='checkbox'] {\n  width: 1rem;\n  height: 1rem;\n}\n\n.span-2 {\n  grid-column: span 2;\n}\n\n.panel-actions {\n  display: flex;\n  justify-content: flex-end;\n}\n\n.panel-actions .primary,\n.actions button {\n  border: none;\n  border-radius: 10px;\n  background: var(--cf-primary);\n  color: #fff;\n  padding: 0.58rem 0.9rem;\n  font-weight: 500;\n}\n\n.panel-actions .primary:hover,\n.actions button:hover {\n  background: var(--cf-primary-hover);\n}\n\n.panel-actions .primary:disabled,\n.actions button:disabled {\n  opacity: 0.55;\n  cursor: not-allowed;\n}\n\n.table-wrap {\n  overflow: auto;\n  border: 1px solid var(--cf-border);\n  border-radius: 12px;\n}\n\ntable {\n  width: 100%;\n  border-collapse: collapse;\n  min-width: 620px;\n}\n\nthead th {\n  text-align: left;\n  font-size: 0.72rem;\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n  color: var(--cf-text-muted);\n  padding: 0.65rem 0.7rem;\n  border-bottom: 1px solid var(--cf-border);\n}\n\ntbody td {\n  padding: 0.7rem;\n  border-bottom: 1px solid var(--cf-border-soft);\n  font-size: 0.86rem;\n}\n\ntbody tr:last-child td {\n  border-bottom: none;\n}\n\n.status {\n  display: inline-flex;\n  align-items: center;\n  padding: 0.25rem 0.55rem;\n  border-radius: 999px;\n  font-size: 0.75rem;\n  font-weight: 500;\n}\n\n.status.active {\n  background: rgba(22, 163, 74, 0.12);\n  color: #166534;\n}\n\n.status.inactive {\n  background: rgba(148, 163, 184, 0.16);\n  color: #334155;\n}\n\n.actions {\n  text-align: right;\n}\n\n.empty-row {\n  color: var(--cf-text-muted);\n  text-align: center;\n  font-style: italic;\n  padding: 1rem 0.7rem;\n}\n\n@media (max-width: 1280px) {\n  .admin-grid {\n    grid-template-columns: 1fr;\n  }\n}\n\n@media (max-width: 760px) {\n  .form-grid,\n  .invite-grid {\n    grid-template-columns: 1fr;\n  }\n\n  .span-2 {\n    grid-column: auto;\n  }\n\n  .panel-actions {\n    justify-content: stretch;\n  }\n\n  .panel-actions .primary {\n    width: 100%;\n  }\n}\n"] }]
+        args: [{ selector: 'app-admin', standalone: true, imports: [FormsModule], template: "<section class=\"admin-page\">\n  <header class=\"page-header\">\n    <div>\n      <h1>Administration</h1>\n      <p>Manage venues and user access for the selected tenant.</p>\n    </div>\n  </header>\n\n  @if (pageError) {\n    <p class=\"page-error\">{{ pageError }}</p>\n  }\n\n  <section class=\"admin-grid\">\n    <article class=\"panel\">\n      <div class=\"panel-header\">\n        <div>\n          <h2>Venue Management</h2>\n          <p>Update core venue profile, compliance, and hold defaults.</p>\n        </div>\n      </div>\n\n      <label class=\"field\">\n        <span>Venue</span>\n        <select\n          [ngModel]=\"selectedVenueId\"\n          [ngModelOptions]=\"{ standalone: true }\"\n          (ngModelChange)=\"onVenueSelectionChanged($event)\"\n          [disabled]=\"loadingVenues || venues.length === 0\">\n          @for (venue of venues; track venue.id) {\n            <option [value]=\"venue.id\">{{ venue.name }}</option>\n          }\n        </select>\n      </label>\n\n      @if (loadingVenueProfile) {\n        <p class=\"hint\">Loading venue profile...</p>\n      }\n\n      @if (venueMessage) {\n        <p class=\"hint\">{{ venueMessage }}</p>\n      }\n\n      @if (venueDraft) {\n        <div class=\"form-grid\">\n          <label class=\"field\">\n            <span>Venue Name</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.name\" name=\"venueName\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Legal Entity Name</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.legalEntityName\" name=\"legalEntityName\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Enquiries Email</span>\n            <input type=\"email\" [(ngModel)]=\"venueDraft.enquiriesEmail\" name=\"enquiriesEmail\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Phone (E.164)</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.phoneNumberE164\" name=\"phoneNumberE164\" placeholder=\"+447700900111\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Website URL</span>\n            <input type=\"url\" [(ngModel)]=\"venueDraft.websiteUrl\" name=\"websiteUrl\" />\n          </label>\n\n          <label class=\"field\">\n            <span>VAT Number</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.vatNumber\" name=\"vatNumber\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Company Reg Number</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.companyRegistrationNumber\" name=\"companyRegistrationNumber\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Country Code</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.countryCode\" name=\"countryCode\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Currency</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.currencyCode\" name=\"currencyCode\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Time Zone</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.timeZone\" name=\"timeZone\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Locale</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.locale\" name=\"locale\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Default VAT %</span>\n            <input type=\"number\" min=\"0\" step=\"0.01\" [(ngModel)]=\"venueDraft.defaultVatRate\" name=\"defaultVatRate\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Min Booking Notice (days)</span>\n            <input\n              type=\"number\"\n              min=\"0\"\n              step=\"1\"\n              [(ngModel)]=\"venueDraft.minimumBookingNoticeDays\"\n              name=\"minimumBookingNoticeDays\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Default Hold Period (days)</span>\n            <input\n              type=\"number\"\n              min=\"1\"\n              step=\"1\"\n              [(ngModel)]=\"venueDraft.defaultHoldPeriodDays\"\n              name=\"defaultHoldPeriodDays\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Hold Warning (days)</span>\n            <input type=\"number\" min=\"0\" step=\"1\" [(ngModel)]=\"venueDraft.holdWarningDays\" name=\"holdWarningDays\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Max Holds per Date/Space</span>\n            <input\n              type=\"number\"\n              min=\"1\"\n              step=\"1\"\n              [(ngModel)]=\"venueDraft.maxHoldsPerDateAndSpace\"\n              name=\"maxHoldsPerDateAndSpace\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Hold Auto Release</span>\n            <select [(ngModel)]=\"venueDraft.holdAutoReleaseMode\" name=\"holdAutoReleaseMode\">\n              @for (mode of holdAutoReleaseModes; track mode) {\n                <option [value]=\"mode\">{{ mode }}</option>\n              }\n            </select>\n          </label>\n\n          <label class=\"field span-2\">\n            <span>Address Line 1</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.addressLine1\" name=\"addressLine1\" />\n          </label>\n\n          <label class=\"field span-2\">\n            <span>Address Line 2</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.addressLine2\" name=\"addressLine2\" />\n          </label>\n\n          <label class=\"field\">\n            <span>City</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.city\" name=\"city\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Region</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.region\" name=\"region\" />\n          </label>\n\n          <label class=\"field\">\n            <span>Postcode</span>\n            <input type=\"text\" [(ngModel)]=\"venueDraft.postcode\" name=\"postcode\" />\n          </label>\n        </div>\n\n        <div class=\"panel-actions\">\n          <button type=\"button\" class=\"primary\" (click)=\"saveVenue()\" [disabled]=\"savingVenue || loadingVenueProfile\">\n            {{ savingVenue ? 'Saving...' : 'Save Venue' }}\n          </button>\n        </div>\n      }\n    </article>\n\n    <article class=\"panel\">\n      <div class=\"panel-header\">\n        <div>\n          <h2>User Management</h2>\n          <p>Invite users to this venue and manage active status.</p>\n        </div>\n      </div>\n\n      @if (userMessage) {\n        <p class=\"hint\">{{ userMessage }}</p>\n      }\n\n      <div class=\"invite-grid\">\n        <label class=\"field\">\n          <span>First Name</span>\n          <input type=\"text\" [(ngModel)]=\"inviteForm.firstName\" name=\"inviteFirstName\" />\n        </label>\n        <label class=\"field\">\n          <span>Last Name</span>\n          <input type=\"text\" [(ngModel)]=\"inviteForm.lastName\" name=\"inviteLastName\" />\n        </label>\n        <label class=\"field span-2\">\n          <span>Email</span>\n          <input type=\"email\" [(ngModel)]=\"inviteForm.email\" name=\"inviteEmail\" />\n        </label>\n        <label class=\"field\">\n          <span>Phone (optional)</span>\n          <input type=\"text\" [(ngModel)]=\"inviteForm.phoneNumberE164\" name=\"invitePhone\" placeholder=\"+447700900111\" />\n        </label>\n        <label class=\"field\">\n          <span>Role</span>\n          <select [(ngModel)]=\"inviteForm.role\" name=\"inviteRole\">\n            @for (role of roleOptions; track role) {\n              <option [value]=\"role\">{{ role }}</option>\n            }\n          </select>\n        </label>\n        <label class=\"check-field span-2\">\n          <input type=\"checkbox\" [(ngModel)]=\"inviteForm.requiresTotp\" name=\"inviteRequiresTotp\" />\n          <span>Require TOTP 2FA on first sign-in</span>\n        </label>\n      </div>\n\n      <div class=\"panel-actions\">\n        <button type=\"button\" class=\"primary\" (click)=\"sendInvite()\" [disabled]=\"invitingUser || !selectedVenueId\">\n          {{ invitingUser ? 'Sending...' : 'Send Invite' }}\n        </button>\n      </div>\n\n      @if (inviteDebugToken) {\n        <p class=\"hint\">Debug invitation token: <code>{{ inviteDebugToken }}</code></p>\n      }\n\n      @if (passwordTargetUser) {\n        <div class=\"password-panel\">\n          <div class=\"password-panel-header\">\n            <h3>Set Password</h3>\n            <p>{{ passwordTargetUser.firstName }} {{ passwordTargetUser.lastName }} ({{ passwordTargetUser.email }})</p>\n          </div>\n\n          <div class=\"password-grid\">\n            <label class=\"field\">\n              <span>New Password</span>\n              <input\n                type=\"password\"\n                [(ngModel)]=\"passwordForm.password\"\n                [ngModelOptions]=\"{ standalone: true }\"\n                name=\"newPassword\"\n                autocomplete=\"new-password\" />\n            </label>\n\n            <label class=\"field\">\n              <span>Confirm Password</span>\n              <input\n                type=\"password\"\n                [(ngModel)]=\"passwordForm.confirmPassword\"\n                [ngModelOptions]=\"{ standalone: true }\"\n                name=\"confirmPassword\"\n                autocomplete=\"new-password\" />\n            </label>\n          </div>\n\n          <div class=\"password-actions\">\n            <button type=\"button\" class=\"secondary\" (click)=\"cancelSetPassword()\" [disabled]=\"updatingPassword\">Cancel</button>\n            <button type=\"button\" class=\"primary\" (click)=\"saveUserPassword()\" [disabled]=\"updatingPassword\">\n              {{ updatingPassword ? 'Updating...' : 'Update Password' }}\n            </button>\n          </div>\n        </div>\n      }\n\n      <div class=\"table-wrap\">\n        <table>\n          <thead>\n            <tr>\n              <th>Name</th>\n              <th>Email</th>\n              <th>Role (Selected Venue)</th>\n              <th>2FA</th>\n              <th>Status</th>\n              <th></th>\n            </tr>\n          </thead>\n          <tbody>\n            @if (loadingUsers) {\n              <tr>\n                <td colspan=\"6\" class=\"empty-row\">Loading users...</td>\n              </tr>\n            } @else {\n              @for (user of users; track user.id) {\n                <tr>\n                  <td>{{ user.firstName }} {{ user.lastName }}</td>\n                  <td>{{ user.email }}</td>\n                  <td>{{ roleForSelectedVenue(user) }}</td>\n                  <td>{{ user.requiresTotp ? 'Required' : 'Optional' }}</td>\n                  <td>\n                    <span class=\"status\" [class.active]=\"user.isActive\" [class.inactive]=\"!user.isActive\">\n                      {{ user.isActive ? 'Active' : 'Inactive' }}\n                    </span>\n                  </td>\n                  <td class=\"actions\">\n                    <button\n                      type=\"button\"\n                      (click)=\"setUserActive(user, !user.isActive)\"\n                      [disabled]=\"updatingUser\">\n                      {{ user.isActive ? 'Deactivate' : 'Activate' }}\n                    </button>\n                    <button\n                      type=\"button\"\n                      class=\"secondary\"\n                      (click)=\"beginSetPassword(user)\"\n                      [disabled]=\"updatingPassword\">\n                      Set Password\n                    </button>\n                  </td>\n                </tr>\n              }\n\n              @if (users.length === 0) {\n                <tr>\n                  <td colspan=\"6\" class=\"empty-row\">No users assigned to this venue.</td>\n                </tr>\n              }\n            }\n          </tbody>\n        </table>\n      </div>\n    </article>\n  </section>\n</section>\n", styles: [".admin-page {\n  display: grid;\n  gap: 1rem;\n}\n\n.page-header h1 {\n  margin: 0;\n  font-size: 1.5rem;\n  letter-spacing: 0.01em;\n}\n\n.page-header p {\n  margin: 0.35rem 0 0;\n  color: var(--cf-text-muted);\n  font-size: 0.92rem;\n}\n\n.page-error {\n  margin: 0;\n  border-radius: 12px;\n  border: 1px solid rgba(220, 38, 38, 0.28);\n  background: rgba(254, 226, 226, 0.85);\n  color: #991b1b;\n  padding: 0.75rem 0.9rem;\n}\n\n.admin-grid {\n  display: grid;\n  gap: 1rem;\n  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);\n}\n\n.panel {\n  background: var(--cf-surface);\n  border: 1px solid var(--cf-border);\n  border-radius: var(--cf-radius-xl);\n  box-shadow: var(--cf-shadow-sm);\n  padding: 1rem;\n  display: grid;\n  gap: 0.9rem;\n  align-content: start;\n}\n\n.panel-header h2 {\n  margin: 0;\n  font-size: 1.08rem;\n  letter-spacing: 0.01em;\n}\n\n.panel-header p {\n  margin: 0.3rem 0 0;\n  color: var(--cf-text-muted);\n  font-size: 0.85rem;\n}\n\n.hint {\n  margin: 0;\n  border-radius: 10px;\n  background: var(--cf-primary-soft);\n  color: #1e3a8a;\n  padding: 0.6rem 0.7rem;\n  font-size: 0.82rem;\n}\n\n.form-grid,\n.invite-grid {\n  display: grid;\n  gap: 0.75rem;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n}\n\n.field {\n  display: grid;\n  gap: 0.34rem;\n}\n\n.field span,\n.check-field span {\n  color: var(--cf-text-muted);\n  font-size: 0.76rem;\n  font-weight: 500;\n  letter-spacing: 0.02em;\n  text-transform: uppercase;\n}\n\n.field input,\n.field select,\n.field textarea {\n  width: 100%;\n  border-radius: 10px;\n  border: 1px solid var(--cf-border);\n  background: #fff;\n  color: var(--cf-text);\n  min-height: 2.35rem;\n  padding: 0.55rem 0.65rem;\n}\n\n.check-field {\n  display: flex;\n  align-items: center;\n  gap: 0.5rem;\n}\n\n.check-field input[type='checkbox'] {\n  width: 1rem;\n  height: 1rem;\n}\n\n.span-2 {\n  grid-column: span 2;\n}\n\n.panel-actions {\n  display: flex;\n  justify-content: flex-end;\n}\n\n.panel-actions .primary,\n.actions button {\n  border: none;\n  border-radius: 10px;\n  background: var(--cf-primary);\n  color: #fff;\n  padding: 0.58rem 0.9rem;\n  font-weight: 500;\n}\n\n.panel-actions .primary:hover,\n.actions button:hover {\n  background: var(--cf-primary-hover);\n}\n\n.panel-actions .primary:disabled,\n.actions button:disabled {\n  opacity: 0.55;\n  cursor: not-allowed;\n}\n\n.table-wrap {\n  overflow: auto;\n  border: 1px solid var(--cf-border);\n  border-radius: 12px;\n}\n\ntable {\n  width: 100%;\n  border-collapse: collapse;\n  min-width: 620px;\n}\n\nthead th {\n  text-align: left;\n  font-size: 0.72rem;\n  text-transform: uppercase;\n  letter-spacing: 0.03em;\n  color: var(--cf-text-muted);\n  padding: 0.65rem 0.7rem;\n  border-bottom: 1px solid var(--cf-border);\n}\n\ntbody td {\n  padding: 0.7rem;\n  border-bottom: 1px solid var(--cf-border-soft);\n  font-size: 0.86rem;\n}\n\ntbody tr:last-child td {\n  border-bottom: none;\n}\n\n.status {\n  display: inline-flex;\n  align-items: center;\n  padding: 0.25rem 0.55rem;\n  border-radius: 999px;\n  font-size: 0.75rem;\n  font-weight: 500;\n}\n\n.status.active {\n  background: rgba(22, 163, 74, 0.12);\n  color: #166534;\n}\n\n.status.inactive {\n  background: rgba(148, 163, 184, 0.16);\n  color: #334155;\n}\n\n.actions {\n  text-align: right;\n  white-space: nowrap;\n}\n\n.actions button {\n  margin-left: 0.4rem;\n}\n\n.secondary {\n  border: 1px solid var(--cf-border);\n  border-radius: 10px;\n  background: #fff;\n  color: var(--cf-text);\n  padding: 0.58rem 0.9rem;\n  font-weight: 500;\n}\n\n.secondary:hover {\n  background: #f8fafc;\n}\n\n.actions button.secondary {\n  background: #fff;\n  color: var(--cf-text);\n}\n\n.actions button.secondary:hover {\n  background: #f8fafc;\n}\n\n.password-panel {\n  border: 1px solid var(--cf-border);\n  border-radius: 12px;\n  padding: 0.8rem;\n  background: #fff;\n  display: grid;\n  gap: 0.75rem;\n}\n\n.password-panel-header h3 {\n  margin: 0;\n  font-size: 0.95rem;\n}\n\n.password-panel-header p {\n  margin: 0.2rem 0 0;\n  color: var(--cf-text-muted);\n  font-size: 0.82rem;\n}\n\n.password-grid {\n  display: grid;\n  gap: 0.75rem;\n  grid-template-columns: repeat(2, minmax(0, 1fr));\n}\n\n.password-actions {\n  display: flex;\n  justify-content: flex-end;\n  gap: 0.5rem;\n}\n\n.empty-row {\n  color: var(--cf-text-muted);\n  text-align: center;\n  font-style: italic;\n  padding: 1rem 0.7rem;\n}\n\n@media (max-width: 1280px) {\n  .admin-grid {\n    grid-template-columns: 1fr;\n  }\n}\n\n@media (max-width: 760px) {\n  .form-grid,\n  .invite-grid,\n  .password-grid {\n    grid-template-columns: 1fr;\n  }\n\n  .span-2 {\n    grid-column: auto;\n  }\n\n  .panel-actions {\n    justify-content: stretch;\n  }\n\n  .panel-actions .primary {\n    width: 100%;\n  }\n}\n"] }]
     }], null, null); })();
-(() => { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassDebugInfo(AdminComponent, { className: "AdminComponent", filePath: "src/app/pages/admin/admin.component.ts", lineNumber: 32 }); })();
+(() => { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassDebugInfo(AdminComponent, { className: "AdminComponent", filePath: "src/app/pages/admin/admin.component.ts", lineNumber: 37 }); })();
 //# sourceMappingURL=admin.component.js.map

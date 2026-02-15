@@ -61,6 +61,9 @@ export class ApiService {
     updateUserStatus(userId, isActive) {
         return this.http.patch(`/api/users/${userId}/status`, { isActive });
     }
+    updateUserPassword(userId, password) {
+        return this.http.patch(`/api/users/${userId}/password`, { password });
+    }
     getUserActivity(take = 50) {
         const params = new HttpParams().set('take', take);
         return this.http.get('/api/users/activity', { params });

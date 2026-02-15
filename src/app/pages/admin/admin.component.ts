@@ -22,6 +22,11 @@ interface InviteFormModel {
   requiresTotp: boolean;
 }
 
+interface PasswordFormModel {
+  password: string;
+  confirmPassword: string;
+}
+
 @Component({
   selector: 'app-admin',
   standalone: true,
@@ -62,6 +67,7 @@ export class AdminComponent implements OnInit {
   savingVenue = false;
   invitingUser = false;
   updatingUser = false;
+  updatingPassword = false;
 
   pageError = '';
   venueMessage = '';
@@ -69,6 +75,8 @@ export class AdminComponent implements OnInit {
 
   inviteForm: InviteFormModel = this.createDefaultInviteForm();
   inviteDebugToken = '';
+  passwordTargetUser: UserSummaryDto | null = null;
+  passwordForm: PasswordFormModel = this.createDefaultPasswordForm();
 
   ngOnInit(): void {
     if (this.auth.isOperationsOnly()) {
@@ -89,6 +97,8 @@ export class AdminComponent implements OnInit {
     this.venueMessage = '';
     this.userMessage = '';
     this.inviteDebugToken = '';
+    this.passwordTargetUser = null;
+    this.passwordForm = this.createDefaultPasswordForm();
 
     this.loadVenueProfile();
     this.loadUsers();
@@ -230,6 +240,60 @@ export class AdminComponent implements OnInit {
       });
   }
 
+  beginSetPassword(user: UserSummaryDto): void {
+    this.passwordTargetUser = user;
+    this.passwordForm = this.createDefaultPasswordForm();
+    this.userMessage = '';
+  }
+
+  cancelSetPassword(): void {
+    this.passwordTargetUser = null;
+    this.passwordForm = this.createDefaultPasswordForm();
+  }
+
+  saveUserPassword(): void {
+    if (!this.passwordTargetUser) {
+      return;
+    }
+
+    const password = this.passwordForm.password.trim();
+    const confirmPassword = this.passwordForm.confirmPassword.trim();
+    if (!password || !confirmPassword) {
+      this.userMessage = 'Enter and confirm the new password.';
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      this.userMessage = 'Password and confirm password must match.';
+      return;
+    }
+
+    if (!this.isPasswordComplex(password)) {
+      this.userMessage = 'Password must be 8+ characters with uppercase, lowercase, number, and special character.';
+      return;
+    }
+
+    this.updatingPassword = true;
+    this.userMessage = '';
+
+    const user = this.passwordTargetUser;
+    this.api
+      .updateUserPassword(user.id, password)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.updatingPassword = false;
+          this.userMessage = `Password updated for ${user.firstName} ${user.lastName}.`;
+          this.passwordTargetUser = null;
+          this.passwordForm = this.createDefaultPasswordForm();
+        },
+        error: (error) => {
+          this.updatingPassword = false;
+          this.userMessage = this.resolveError(error, 'Unable to update user password.');
+        }
+      });
+  }
+
   roleForSelectedVenue(user: UserSummaryDto): string {
     const venueId = this.selectedVenueId;
     if (!venueId) {
@@ -364,6 +428,24 @@ export class AdminComponent implements OnInit {
       role: 'EventsCoordinator',
       requiresTotp: false
     };
+  }
+
+  private createDefaultPasswordForm(): PasswordFormModel {
+    return {
+      password: '',
+      confirmPassword: ''
+    };
+  }
+
+  private isPasswordComplex(password: string): boolean {
+    if (password.length < 8) {
+      return false;
+    }
+
+    return /[A-Z]/.test(password)
+      && /[a-z]/.test(password)
+      && /\d/.test(password)
+      && /[^A-Za-z0-9]/.test(password);
   }
 
   private normalizeOptionalText(value: string | null | undefined): string | null {

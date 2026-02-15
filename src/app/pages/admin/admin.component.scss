@@ -189,6 +189,65 @@ tbody tr:last-child td {
 
 .actions {
   text-align: right;
+  white-space: nowrap;
+}
+
+.actions button {
+  margin-left: 0.4rem;
+}
+
+.secondary {
+  border: 1px solid var(--cf-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--cf-text);
+  padding: 0.58rem 0.9rem;
+  font-weight: 500;
+}
+
+.secondary:hover {
+  background: #f8fafc;
+}
+
+.actions button.secondary {
+  background: #fff;
+  color: var(--cf-text);
+}
+
+.actions button.secondary:hover {
+  background: #f8fafc;
+}
+
+.password-panel {
+  border: 1px solid var(--cf-border);
+  border-radius: 12px;
+  padding: 0.8rem;
+  background: #fff;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.password-panel-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.password-panel-header p {
+  margin: 0.2rem 0 0;
+  color: var(--cf-text-muted);
+  font-size: 0.82rem;
+}
+
+.password-grid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.password-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
 .empty-row {
@@ -206,7 +265,8 @@ tbody tr:last-child td {
 
 @media (max-width: 760px) {
   .form-grid,
-  .invite-grid {
+  .invite-grid,
+  .password-grid {
     grid-template-columns: 1fr;
   }
 

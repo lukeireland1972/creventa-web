@@ -233,6 +233,44 @@
         <p class="hint">Debug invitation token: <code>{{ inviteDebugToken }}</code></p>
       }
 
+      @if (passwordTargetUser) {
+        <div class="password-panel">
+          <div class="password-panel-header">
+            <h3>Set Password</h3>
+            <p>{{ passwordTargetUser.firstName }} {{ passwordTargetUser.lastName }} ({{ passwordTargetUser.email }})</p>
+          </div>
+
+          <div class="password-grid">
+            <label class="field">
+              <span>New Password</span>
+              <input
+                type="password"
+                [(ngModel)]="passwordForm.password"
+                [ngModelOptions]="{ standalone: true }"
+                name="newPassword"
+                autocomplete="new-password" />
+            </label>
+
+            <label class="field">
+              <span>Confirm Password</span>
+              <input
+                type="password"
+                [(ngModel)]="passwordForm.confirmPassword"
+                [ngModelOptions]="{ standalone: true }"
+                name="confirmPassword"
+                autocomplete="new-password" />
+            </label>
+          </div>
+
+          <div class="password-actions">
+            <button type="button" class="secondary" (click)="cancelSetPassword()" [disabled]="updatingPassword">Cancel</button>
+            <button type="button" class="primary" (click)="saveUserPassword()" [disabled]="updatingPassword">
+              {{ updatingPassword ? 'Updating...' : 'Update Password' }}
+            </button>
+          </div>
+        </div>
+      }
+
       <div class="table-wrap">
         <table>
           <thead>
@@ -268,6 +306,13 @@
                       (click)="setUserActive(user, !user.isActive)"
                       [disabled]="updatingUser">
                       {{ user.isActive ? 'Deactivate' : 'Activate' }}
+                    </button>
+                    <button
+                      type="button"
+                      class="secondary"
+                      (click)="beginSetPassword(user)"
+                      [disabled]="updatingPassword">
+                      Set Password
                     </button>
                   </td>
                 </tr>
