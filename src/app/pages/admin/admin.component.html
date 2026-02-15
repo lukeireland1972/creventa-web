@@ -1,0 +1,287 @@
+<section class="admin-page">
+  <header class="page-header">
+    <div>
+      <h1>Administration</h1>
+      <p>Manage venues and user access for the selected tenant.</p>
+    </div>
+  </header>
+
+  @if (pageError) {
+    <p class="page-error">{{ pageError }}</p>
+  }
+
+  <section class="admin-grid">
+    <article class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Venue Management</h2>
+          <p>Update core venue profile, compliance, and hold defaults.</p>
+        </div>
+      </div>
+
+      <label class="field">
+        <span>Venue</span>
+        <select
+          [ngModel]="selectedVenueId"
+          [ngModelOptions]="{ standalone: true }"
+          (ngModelChange)="onVenueSelectionChanged($event)"
+          [disabled]="loadingVenues || venues.length === 0">
+          @for (venue of venues; track venue.id) {
+            <option [value]="venue.id">{{ venue.name }}</option>
+          }
+        </select>
+      </label>
+
+      @if (loadingVenueProfile) {
+        <p class="hint">Loading venue profile...</p>
+      }
+
+      @if (venueMessage) {
+        <p class="hint">{{ venueMessage }}</p>
+      }
+
+      @if (venueDraft) {
+        <div class="form-grid">
+          <label class="field">
+            <span>Venue Name</span>
+            <input type="text" [(ngModel)]="venueDraft.name" name="venueName" />
+          </label>
+
+          <label class="field">
+            <span>Legal Entity Name</span>
+            <input type="text" [(ngModel)]="venueDraft.legalEntityName" name="legalEntityName" />
+          </label>
+
+          <label class="field">
+            <span>Enquiries Email</span>
+            <input type="email" [(ngModel)]="venueDraft.enquiriesEmail" name="enquiriesEmail" />
+          </label>
+
+          <label class="field">
+            <span>Phone (E.164)</span>
+            <input type="text" [(ngModel)]="venueDraft.phoneNumberE164" name="phoneNumberE164" placeholder="+447700900111" />
+          </label>
+
+          <label class="field">
+            <span>Website URL</span>
+            <input type="url" [(ngModel)]="venueDraft.websiteUrl" name="websiteUrl" />
+          </label>
+
+          <label class="field">
+            <span>VAT Number</span>
+            <input type="text" [(ngModel)]="venueDraft.vatNumber" name="vatNumber" />
+          </label>
+
+          <label class="field">
+            <span>Company Reg Number</span>
+            <input type="text" [(ngModel)]="venueDraft.companyRegistrationNumber" name="companyRegistrationNumber" />
+          </label>
+
+          <label class="field">
+            <span>Country Code</span>
+            <input type="text" [(ngModel)]="venueDraft.countryCode" name="countryCode" />
+          </label>
+
+          <label class="field">
+            <span>Currency</span>
+            <input type="text" [(ngModel)]="venueDraft.currencyCode" name="currencyCode" />
+          </label>
+
+          <label class="field">
+            <span>Time Zone</span>
+            <input type="text" [(ngModel)]="venueDraft.timeZone" name="timeZone" />
+          </label>
+
+          <label class="field">
+            <span>Locale</span>
+            <input type="text" [(ngModel)]="venueDraft.locale" name="locale" />
+          </label>
+
+          <label class="field">
+            <span>Default VAT %</span>
+            <input type="number" min="0" step="0.01" [(ngModel)]="venueDraft.defaultVatRate" name="defaultVatRate" />
+          </label>
+
+          <label class="field">
+            <span>Min Booking Notice (days)</span>
+            <input
+              type="number"
+              min="0"
+              step="1"
+              [(ngModel)]="venueDraft.minimumBookingNoticeDays"
+              name="minimumBookingNoticeDays" />
+          </label>
+
+          <label class="field">
+            <span>Default Hold Period (days)</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              [(ngModel)]="venueDraft.defaultHoldPeriodDays"
+              name="defaultHoldPeriodDays" />
+          </label>
+
+          <label class="field">
+            <span>Hold Warning (days)</span>
+            <input type="number" min="0" step="1" [(ngModel)]="venueDraft.holdWarningDays" name="holdWarningDays" />
+          </label>
+
+          <label class="field">
+            <span>Max Holds per Date/Space</span>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              [(ngModel)]="venueDraft.maxHoldsPerDateAndSpace"
+              name="maxHoldsPerDateAndSpace" />
+          </label>
+
+          <label class="field">
+            <span>Hold Auto Release</span>
+            <select [(ngModel)]="venueDraft.holdAutoReleaseMode" name="holdAutoReleaseMode">
+              @for (mode of holdAutoReleaseModes; track mode) {
+                <option [value]="mode">{{ mode }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field span-2">
+            <span>Address Line 1</span>
+            <input type="text" [(ngModel)]="venueDraft.addressLine1" name="addressLine1" />
+          </label>
+
+          <label class="field span-2">
+            <span>Address Line 2</span>
+            <input type="text" [(ngModel)]="venueDraft.addressLine2" name="addressLine2" />
+          </label>
+
+          <label class="field">
+            <span>City</span>
+            <input type="text" [(ngModel)]="venueDraft.city" name="city" />
+          </label>
+
+          <label class="field">
+            <span>Region</span>
+            <input type="text" [(ngModel)]="venueDraft.region" name="region" />
+          </label>
+
+          <label class="field">
+            <span>Postcode</span>
+            <input type="text" [(ngModel)]="venueDraft.postcode" name="postcode" />
+          </label>
+        </div>
+
+        <div class="panel-actions">
+          <button type="button" class="primary" (click)="saveVenue()" [disabled]="savingVenue || loadingVenueProfile">
+            {{ savingVenue ? 'Saving...' : 'Save Venue' }}
+          </button>
+        </div>
+      }
+    </article>
+
+    <article class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>User Management</h2>
+          <p>Invite users to this venue and manage active status.</p>
+        </div>
+      </div>
+
+      @if (userMessage) {
+        <p class="hint">{{ userMessage }}</p>
+      }
+
+      <div class="invite-grid">
+        <label class="field">
+          <span>First Name</span>
+          <input type="text" [(ngModel)]="inviteForm.firstName" name="inviteFirstName" />
+        </label>
+        <label class="field">
+          <span>Last Name</span>
+          <input type="text" [(ngModel)]="inviteForm.lastName" name="inviteLastName" />
+        </label>
+        <label class="field span-2">
+          <span>Email</span>
+          <input type="email" [(ngModel)]="inviteForm.email" name="inviteEmail" />
+        </label>
+        <label class="field">
+          <span>Phone (optional)</span>
+          <input type="text" [(ngModel)]="inviteForm.phoneNumberE164" name="invitePhone" placeholder="+447700900111" />
+        </label>
+        <label class="field">
+          <span>Role</span>
+          <select [(ngModel)]="inviteForm.role" name="inviteRole">
+            @for (role of roleOptions; track role) {
+              <option [value]="role">{{ role }}</option>
+            }
+          </select>
+        </label>
+        <label class="check-field span-2">
+          <input type="checkbox" [(ngModel)]="inviteForm.requiresTotp" name="inviteRequiresTotp" />
+          <span>Require TOTP 2FA on first sign-in</span>
+        </label>
+      </div>
+
+      <div class="panel-actions">
+        <button type="button" class="primary" (click)="sendInvite()" [disabled]="invitingUser || !selectedVenueId">
+          {{ invitingUser ? 'Sending...' : 'Send Invite' }}
+        </button>
+      </div>
+
+      @if (inviteDebugToken) {
+        <p class="hint">Debug invitation token: <code>{{ inviteDebugToken }}</code></p>
+      }
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Role (Selected Venue)</th>
+              <th>2FA</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (loadingUsers) {
+              <tr>
+                <td colspan="6" class="empty-row">Loading users...</td>
+              </tr>
+            } @else {
+              @for (user of users; track user.id) {
+                <tr>
+                  <td>{{ user.firstName }} {{ user.lastName }}</td>
+                  <td>{{ user.email }}</td>
+                  <td>{{ roleForSelectedVenue(user) }}</td>
+                  <td>{{ user.requiresTotp ? 'Required' : 'Optional' }}</td>
+                  <td>
+                    <span class="status" [class.active]="user.isActive" [class.inactive]="!user.isActive">
+                      {{ user.isActive ? 'Active' : 'Inactive' }}
+                    </span>
+                  </td>
+                  <td class="actions">
+                    <button
+                      type="button"
+                      (click)="setUserActive(user, !user.isActive)"
+                      [disabled]="updatingUser">
+                      {{ user.isActive ? 'Deactivate' : 'Activate' }}
+                    </button>
+                  </td>
+                </tr>
+              }
+
+              @if (users.length === 0) {
+                <tr>
+                  <td colspan="6" class="empty-row">No users assigned to this venue.</td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    </article>
+  </section>
+</section>

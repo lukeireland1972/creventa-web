@@ -1,0 +1,132 @@
+<section class="reports-page">
+  <header class="page-header">
+    <div>
+      <h1>Reports</h1>
+      <p>Interactive reporting with exports and scheduled delivery.</p>
+    </div>
+
+    <div class="date-filters">
+      <label>
+        From
+        <input type="date" [(ngModel)]="fromDate" />
+      </label>
+      <label>
+        To
+        <input type="date" [(ngModel)]="toDate" />
+      </label>
+      <button type="button" (click)="loadReport()">Apply</button>
+    </div>
+  </header>
+
+  <section class="layout-grid">
+    <aside class="panel report-list">
+      <h2>Standard Reports</h2>
+      <ul>
+        @for (item of catalog; track item.key) {
+          <li>
+            <button type="button" [class.active]="selectedReportKey === item.key" (click)="selectReport(item.key)">
+              <strong>{{ item.name }}</strong>
+              <small>{{ item.description }}</small>
+            </button>
+          </li>
+        }
+      </ul>
+
+      <div class="snapshot-card">
+        <h3>Pace Snapshot</h3>
+        <p>Capture today's on-books baseline for year-over-year pace comparisons.</p>
+        <button type="button" (click)="runSnapshot()">Run Snapshot</button>
+        @if (snapshotMessage) {
+          <small>{{ snapshotMessage }}</small>
+        }
+      </div>
+    </aside>
+
+    <article class="panel report-view">
+      <header>
+        <h2>{{ report?.name || 'Report' }}</h2>
+        <div class="export-actions">
+          <button type="button" (click)="exportReport('csv')">CSV</button>
+          <button type="button" (click)="exportReport('xlsx')">Excel</button>
+          <button type="button" (click)="exportReport('pdf')">PDF</button>
+        </div>
+      </header>
+
+      @if (isLoading) {
+        <p class="empty">Loading report...</p>
+      }
+
+      @if (!isLoading && report; as currentReport) {
+        @if (currentReport.note) {
+          <p class="note">{{ currentReport.note }}</p>
+        }
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                @for (column of columns; track column) {
+                  <th>{{ column }}</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of currentReport.rows; track $index) {
+                <tr>
+                  @for (column of columns; track column) {
+                    <td>{{ row[column] }}</td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (currentReport.rows.length === 0) {
+          <p class="empty">No rows returned for this filter range.</p>
+        }
+      }
+    </article>
+
+    <aside class="panel schedule-panel">
+      <h2>Scheduled Delivery</h2>
+
+      <label>
+        Name
+        <input type="text" [(ngModel)]="scheduleName" placeholder="Weekly Pace Report" />
+      </label>
+
+      <label>
+        Frequency
+        <select [(ngModel)]="scheduleFrequency">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </label>
+
+      <label>
+        Recipients (comma-separated)
+        <textarea rows="3" [(ngModel)]="scheduleRecipients" placeholder="alice@grandhotel.co.uk, ryan@grandhotel.co.uk"></textarea>
+      </label>
+
+      <button type="button" (click)="createSchedule()">Save Schedule</button>
+
+      <ul class="schedule-list">
+        @for (schedule of schedules; track schedule.id) {
+          <li>
+            <div>
+              <strong>{{ schedule.name }}</strong>
+              <small>{{ schedule.reportKey }} · {{ schedule.frequency }}</small>
+              <small>{{ schedule.recipients.join(', ') }}</small>
+            </div>
+            <button type="button" class="danger" (click)="deleteSchedule(schedule.id)">Delete</button>
+          </li>
+        }
+        @if (schedules.length === 0) {
+          <li class="empty">No schedules configured.</li>
+        }
+      </ul>
+    </aside>
+  </section>
+</section>

@@ -1,0 +1,284 @@
+<section class="page-header">
+  <div>
+    <h1>Enquiry Management</h1>
+    <p>Pipeline, status transitions, and same-date availability in one view.</p>
+  </div>
+  <span class="period-pill">This Month</span>
+</section>
+
+@if (listResponse; as list) {
+  <section class="stats">
+    <article>
+      <div class="stat-top">
+        <span>New Enquiries</span>
+        <em class="trend positive">{{ list.stats.newEnquiriesDeltaPercent }}%</em>
+      </div>
+      <strong>{{ list.stats.newEnquiries }}</strong>
+      <p>vs previous period</p>
+    </article>
+    <article>
+      <div class="stat-top">
+        <span>Proposals Sent</span>
+        <em class="trend positive">{{ list.stats.proposalsSentDeltaPercent }}%</em>
+      </div>
+      <strong>{{ list.stats.proposalsSent }}</strong>
+      <p>active this period</p>
+    </article>
+    <article>
+      <div class="stat-top">
+        <span>Confirmed</span>
+        <em class="trend positive">{{ list.stats.confirmedDeltaPercent }}%</em>
+      </div>
+      <strong>{{ list.stats.confirmed }}</strong>
+      <p>bookings converted</p>
+    </article>
+    <article>
+      <div class="stat-top">
+        <span>Lost</span>
+        <em class="trend warning">{{ list.stats.lostRatePercent }}% rate</em>
+      </div>
+      <strong>{{ list.stats.lost }}</strong>
+      <p>conversion drop-off</p>
+    </article>
+  </section>
+}
+
+@if (listResponse; as list) {
+  <section class="tabs">
+    @for (tab of statusTabs; track tab) {
+      <button
+        class="tab"
+        [class.active]="tab.key === activeTab"
+        (click)="setTab(tab.key)"
+        >
+        <span>{{ tab.label }}</span>
+        <em>{{ list.statusTabCounts[tab.key] }}</em>
+      </button>
+    }
+  </section>
+}
+
+<form class="filters" [formGroup]="filtersForm">
+  <label class="search-field">
+    <span>&#128269;</span>
+    <input type="text" formControlName="search" placeholder="Search by ref, contact, email, event, notes" />
+  </label>
+  <select formControlName="quickFilter">
+    @for (quickFilter of quickFilters; track quickFilter) {
+      <option [value]="quickFilter.value">{{ quickFilter.label }}</option>
+    }
+  </select>
+  <select formControlName="pageSize">
+    <option [value]="10">10 per page</option>
+    <option [value]="25">25 per page</option>
+    <option [value]="50">50 per page</option>
+    <option [value]="100">100 per page</option>
+  </select>
+</form>
+
+@if (!loading) {
+  <section class="layout">
+    <article class="list-panel">
+      <table>
+        <thead>
+          <tr>
+            <th>Ref</th>
+            <th>Contact</th>
+            <th>Event</th>
+            <th>Date</th>
+            <th>Guests</th>
+            <th>Status</th>
+            <th>Value</th>
+            <th>Owner</th>
+            <th>Last Activity</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (enquiry of enquiries; track enquiry) {
+            <tr
+              [class.selected]="enquiry.id === selectedEnquiryId"
+              (click)="selectEnquiry(enquiry.id)"
+              >
+              <td class="ref-cell">{{ enquiry.reference }}</td>
+              <td>
+                <div class="cell-main">{{ enquiry.contactName }}</div>
+                <div class="cell-sub">{{ enquiry.sourceType }}</div>
+              </td>
+              <td>
+                <div class="cell-main">{{ enquiry.eventType }}</div>
+                <div class="cell-sub">{{ enquiry.eventStyle || 'Style not set' }}</div>
+              </td>
+              <td>
+                <div class="cell-main">{{ enquiry.eventStartUtc | date: 'dd/MM/yyyy' }}</div>
+                <div class="cell-sub">{{ enquiry.eventStartUtc | date: 'HH:mm' }}</div>
+              </td>
+              <td>{{ enquiry.guestsExpected }}</td>
+              <td>
+                <span class="status" [attr.data-status]="statusToken(enquiry.status)">
+                  {{ enquiry.status }}
+                </span>
+              </td>
+              <td>
+                {{ enquiry.proposalValue ? (enquiry.proposalValue | number: '1.0-0') : 'TBD' }}
+                {{ enquiry.currencyCode }}
+              </td>
+              <td>{{ enquiry.eventManagerName || 'Unassigned' }}</td>
+              <td>
+                <div class="cell-main">{{ enquiry.lastActivityAtUtc | date: 'dd/MM HH:mm' }}</div>
+                <div class="cell-sub">{{ enquiry.daysSinceContact }} days</div>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+      @if (enquiries.length === 0) {
+        <p class="empty">No enquiries matched the current filters.</p>
+      }
+    </article>
+
+    @if (selectedEnquiry; as detail) {
+      <aside class="detail-panel">
+        <header>
+          <div>
+            <h2>{{ detail.reference }}</h2>
+            <p>{{ detail.contactFirstName }} {{ detail.contactLastName }}</p>
+          </div>
+          <span class="status" [attr.data-status]="statusToken(detail.status)">{{ detail.status }}</span>
+        </header>
+
+        <div class="actions">
+          <button (click)="changeStatus('Tentative')">Tentative</button>
+          <button (click)="changeStatus('OpenProposal')">Open Proposal</button>
+          <button (click)="changeStatus('Provisional')">Provisional</button>
+          <button (click)="changeStatus('Confirmed')">Confirmed</button>
+        </div>
+
+        <nav class="detail-tabs">
+          <button [class.active]="detailTab === 'overview'" (click)="changeDetailTab('overview')">Overview</button>
+          <button [class.active]="detailTab === 'events'" (click)="changeDetailTab('events')">Events</button>
+          <button [class.active]="detailTab === 'appointments'" (click)="changeDetailTab('appointments')">Appointments</button>
+          <button [class.active]="detailTab === 'proposals'" (click)="changeDetailTab('proposals')">Proposals</button>
+          <button [class.active]="detailTab === 'documents'" (click)="changeDetailTab('documents')">Documents</button>
+          <button [class.active]="detailTab === 'activity'" (click)="changeDetailTab('activity')">Activity</button>
+        </nav>
+
+        @if (detailTab === 'overview') {
+          <section class="tab-panel">
+            <div class="overview-grid">
+              <p><strong>Event:</strong> {{ detail.eventName || detail.eventType }}</p>
+              <p><strong>Date:</strong> {{ detail.eventStartUtc | date: 'dd/MM/yyyy HH:mm' }}</p>
+              <p><strong>Guests:</strong> {{ detail.guestsExpected }}</p>
+              <p><strong>Style:</strong> {{ detail.eventStyle || 'Not set' }}</p>
+              <p><strong>Manager:</strong> {{ detail.eventManagerName || 'Unassigned' }}</p>
+              <p><strong>Lead Quality:</strong> {{ detail.leadQuality }}/5</p>
+              <p><strong>Source:</strong> {{ detail.sourceType }} {{ detail.sourceDetail ? '· ' + detail.sourceDetail : '' }}</p>
+              <p><strong>Phone:</strong> {{ detail.contactPhoneNumberE164 }}</p>
+              <p><strong>Email:</strong> {{ detail.contactEmail }}</p>
+            </div>
+
+            @if (detail.sameDateAvailability) {
+              <div class="same-date">
+                <h3>Same-date availability</h3>
+                @for (group of detail.sameDateAvailability.spaces; track group) {
+                  <article>
+                    <header>
+                      <strong>{{ group.spaceName }}</strong>
+                      <span [class.busy]="!group.isAvailable">{{ group.isAvailable ? 'Available' : 'Busy' }}</span>
+                    </header>
+                    @for (event of group.events; track event) {
+                      <p>
+                        {{ event.label }} · {{ event.recordType }} · {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}
+                      </p>
+                    }
+                  </article>
+                }
+              </div>
+            }
+          </section>
+        }
+
+        @if (detailTab === 'events') {
+          <section class="tab-panel">
+            @for (subEvent of detail.subEvents; track subEvent) {
+              <article class="row">
+                <strong>{{ subEvent.name }}</strong>
+                <span>{{ subEvent.startUtc | date: 'dd/MM HH:mm' }} - {{ subEvent.endUtc | date: 'HH:mm' }}</span>
+                <span>{{ subEvent.guestCount }} guests · {{ subEvent.setupStyle || 'Custom' }}</span>
+              </article>
+            }
+            @if (detail.subEvents.length === 0) {
+              <p class="empty">No sub-events configured.</p>
+            }
+          </section>
+        }
+
+        @if (detailTab === 'appointments') {
+          <section class="tab-panel">
+            @for (appointment of detail.appointments; track appointment) {
+              <article class="row">
+                <strong>{{ appointment.title }}</strong>
+                <span>{{ appointment.startUtc | date: 'dd/MM/yyyy HH:mm' }} · {{ appointment.durationMinutes }} mins</span>
+                <span>{{ appointment.spaceName || 'No space' }} · {{ appointment.status }}</span>
+              </article>
+            }
+            @if (detail.appointments.length === 0) {
+              <p class="empty">No appointments linked.</p>
+            }
+          </section>
+        }
+
+        @if (detailTab === 'proposals') {
+          <section class="tab-panel">
+            <div class="proposal-actions">
+              <button type="button" (click)="createProposalForSelectedEnquiry()">Create New Proposal</button>
+            </div>
+
+            @if (enquiryProposalsLoading) {
+              <p class="empty">Loading proposals...</p>
+            } @else {
+              @if (enquiryProposals.length > 0) {
+                @for (proposal of enquiryProposals; track proposal) {
+                  <article class="row proposal-row">
+                    <div>
+                      <strong>{{ proposal.version }} · {{ proposal.status }}</strong>
+                      <span>{{ proposal.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+                    <div>
+                      <span>{{ proposal.totalAmount | number: '1.2-2' }} {{ proposal.currencyCode }}</span>
+                      <button type="button" (click)="openProposalInMaker(proposal.id)">Open</button>
+                    </div>
+                  </article>
+                }
+              } @else {
+                <p class="empty">No proposals created for this enquiry yet.</p>
+              }
+            }
+          </section>
+        }
+
+        @if (detailTab === 'documents') {
+          <section class="tab-panel">
+            <p>Documents upload/download flow is wired for Phase 2.</p>
+          </section>
+        }
+
+        @if (detailTab === 'activity') {
+          <section class="tab-panel">
+            @for (entry of detail.activityLog; track entry) {
+              <article class="row">
+                <strong>{{ entry.actionType }}</strong>
+                <span>{{ entry.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</span>
+                <span>{{ entry.userName || 'System' }}</span>
+              </article>
+            }
+            @if (detail.activityLog.length === 0) {
+              <p class="empty">No activity captured yet.</p>
+            }
+          </section>
+        }
+      </aside>
+    }
+  </section>
+} @else {
+  <section class="loading">Loading enquiries...</section>
+}

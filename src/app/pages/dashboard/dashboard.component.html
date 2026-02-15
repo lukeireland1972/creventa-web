@@ -1,0 +1,211 @@
+<section class="dashboard">
+  @if (isLoading) {
+    <article class="state-card">
+      <h2>Loading Dashboard</h2>
+      <p>Fetching live pipeline, revenue, and payment widgets.</p>
+    </article>
+  } @else if (errorMessage) {
+    <article class="state-card error">
+      <h2>Dashboard Unavailable</h2>
+      <p>{{ errorMessage }}</p>
+      <button type="button" class="state-action" (click)="retryLoad()">Retry</button>
+    </article>
+  } @else if (data; as model) {
+    <header class="page-header">
+      <div>
+        <h1>Dashboard</h1>
+        <p>Live sales, conversion, payments, and action signals.</p>
+      </div>
+      <div class="period-controls" role="group" aria-label="Period selector">
+        <button type="button" [class.active]="period === '7d'" (click)="setPeriod('7d')">7d</button>
+        <button type="button" [class.active]="period === '30d'" (click)="setPeriod('30d')">30d</button>
+        <button type="button" [class.active]="period === '90d'" (click)="setPeriod('90d')">90d</button>
+      </div>
+    </header>
+
+    @if (model.degradedMode) {
+      <article class="state-card">
+        <h2>Limited Dashboard Mode</h2>
+        @for (warning of model.warnings; track warning) {
+          <p>{{ warning }}</p>
+        }
+      </article>
+    }
+
+    <section class="kpi-grid">
+      @for (card of model.kpis; track card.key) {
+        <button class="kpi-card" type="button" (click)="openKpi(card)">
+          <div class="kpi-head">
+            <span>{{ card.label }}</span>
+            <em [class.negative]="card.deltaPercent < 0">{{ card.deltaPercent | number: '1.0-1' }}%</em>
+          </div>
+          <strong>{{ card.displayValue }}</strong>
+          <p>{{ card.secondaryText }}</p>
+          @if (card.key === 'sales-delivered' || card.key === 'salesDelivered') {
+            <small class="kpi-help">Revenue earned from events completed this month.</small>
+          }
+          @if (card.key === 'sales-created' || card.key === 'salesCreated') {
+            <small class="kpi-help">Future revenue secured by bookings confirmed this month.</small>
+          }
+        </button>
+      }
+    </section>
+
+    <section class="widget-grid">
+      <article class="widget widget-wide">
+        <header>
+          <h2>Enquiry Pipeline Value</h2>
+          <small>Avg conversion {{ model.pipeline.averageConversionRatePercent | number: '1.0-1' }}%</small>
+        </header>
+
+        <div class="pipeline-cards">
+          <button type="button" class="pipeline-card tentative" (click)="openEnquiriesTab('new-unanswered')">
+            <label>Tentative</label>
+            <strong>{{ model.pipeline.tentative.count }}</strong>
+            <span>{{ model.pipeline.tentative.currencyCode }} {{ model.pipeline.tentative.value | number: '1.0-0' }}</span>
+          </button>
+          <button type="button" class="pipeline-card proposals" (click)="openEnquiriesTab('proposals')">
+            <label>Open Proposals</label>
+            <strong>{{ model.pipeline.openProposals.count }}</strong>
+            <span>{{ model.pipeline.openProposals.currencyCode }} {{ model.pipeline.openProposals.value | number: '1.0-0' }}</span>
+          </button>
+          <button type="button" class="pipeline-card provisional" (click)="openEnquiriesTab('provisional')">
+            <label>Provisional</label>
+            <strong>{{ model.pipeline.provisional.count }}</strong>
+            <span>{{ model.pipeline.provisional.currencyCode }} {{ model.pipeline.provisional.value | number: '1.0-0' }}</span>
+          </button>
+          <button type="button" class="pipeline-card confirmed" (click)="openEnquiriesTab('confirmed')">
+            <label>Confirmed (90d)</label>
+            <strong>{{ model.pipeline.confirmed.count }}</strong>
+            <span>{{ model.pipeline.confirmed.currencyCode }} {{ model.pipeline.confirmed.value | number: '1.0-0' }}</span>
+          </button>
+        </div>
+      </article>
+
+      <article class="widget">
+        <header>
+          <h2>Upcoming Payments</h2>
+        </header>
+
+        <div class="payment-rows">
+          <button type="button" class="payment-row overdue" (click)="openLink('/reports?report=payment')">
+            <span>Overdue</span>
+            <strong>{{ model.upcomingPayments.currencyCode }} {{ model.upcomingPayments.overdueAmount | number: '1.0-0' }}</strong>
+            <small>{{ model.upcomingPayments.overdueCount }} milestones</small>
+          </button>
+          <button type="button" class="payment-row" (click)="openLink('/reports?report=payment')">
+            <span>7 days</span>
+            <strong>{{ model.upcomingPayments.currencyCode }} {{ model.upcomingPayments.sevenDaysAmount | number: '1.0-0' }}</strong>
+          </button>
+          <button type="button" class="payment-row" (click)="openLink('/reports?report=payment')">
+            <span>14 days</span>
+            <strong>{{ model.upcomingPayments.currencyCode }} {{ model.upcomingPayments.fourteenDaysAmount | number: '1.0-0' }}</strong>
+          </button>
+          <button type="button" class="payment-row" (click)="openLink('/reports?report=payment')">
+            <span>30 days</span>
+            <strong>{{ model.upcomingPayments.currencyCode }} {{ model.upcomingPayments.thirtyDaysAmount | number: '1.0-0' }}</strong>
+          </button>
+        </div>
+      </article>
+
+      <article class="widget">
+        <header>
+          <h2>Enquiries Requiring Action</h2>
+        </header>
+
+        <ul class="action-list">
+          <li>
+            <button type="button" class="row-action-btn" (click)="openActionRequired('inactive')">
+            <span>Inactive (3+ days)</span>
+            <strong>{{ model.actionRequired.inactiveEnquiries }}</strong>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="row-action-btn" (click)="openActionRequired('unassigned')">
+            <span>Unassigned</span>
+            <strong>{{ model.actionRequired.unassignedEnquiries }}</strong>
+            </button>
+          </li>
+          <li>
+            <button type="button" class="row-action-btn" (click)="openActionRequired('expiring')">
+            <span>Expiring Holds</span>
+            <strong>{{ model.actionRequired.expiringHolds }}</strong>
+            </button>
+          </li>
+          <li class="total">
+            <button type="button" class="row-action-btn" (click)="openActionRequired('total')">
+            <span>Total</span>
+            <strong>{{ model.actionRequired.total }}</strong>
+            </button>
+          </li>
+        </ul>
+      </article>
+
+      <article class="widget">
+        <header>
+          <h2>Tasks Due Today</h2>
+        </header>
+
+        <ul class="simple-list">
+          @for (task of model.tasksDueToday; track task.taskId) {
+            <li>
+              <button type="button" class="row-action-btn" (click)="openTask(task)">
+              <span>{{ task.title }}</span>
+              <small>{{ task.enquiryReference }} · {{ task.priority }}</small>
+              </button>
+            </li>
+          }
+          @if (model.tasksDueToday.length === 0) {
+            <li class="empty">No tasks due.</li>
+          }
+        </ul>
+      </article>
+
+      <article class="widget">
+        <header>
+          <h2>Upcoming Events (7d)</h2>
+        </header>
+
+        <ul class="simple-list">
+          @for (event of model.upcomingEvents; track event.enquiryId) {
+            <li>
+              <button type="button" class="row-action-btn" (click)="openUpcomingEvent(event)">
+              <span>{{ event.eventName }}</span>
+              <small>{{ event.clientName }} · {{ event.eventStartUtc | date: 'dd/MM HH:mm' }} · {{ event.guests }} covers</small>
+              </button>
+            </li>
+          }
+          @if (model.upcomingEvents.length === 0) {
+            <li class="empty">No events in the next 7 days.</li>
+          }
+        </ul>
+      </article>
+
+      <article class="widget widget-wide">
+        <header>
+          <h2>Recently Viewed</h2>
+        </header>
+
+        <ul class="activity-list">
+          @for (activity of model.recentActivity; track activity.id) {
+            <li>
+              <button type="button" class="row-action-btn" (click)="openActivity(activity)">
+              <span>{{ activity.actionType }}</span>
+              <small>{{ activity.userName || 'System' }} · {{ activity.createdAtUtc | date: 'dd/MM HH:mm' }}</small>
+              </button>
+            </li>
+          }
+          @if (model.recentActivity.length === 0) {
+            <li class="empty">No recently viewed records.</li>
+          }
+        </ul>
+      </article>
+    </section>
+  } @else {
+    <article class="state-card">
+      <h2>No Dashboard Data</h2>
+      <p>Choose a venue and retry loading your dashboard.</p>
+      <button type="button" class="state-action" (click)="retryLoad()">Refresh</button>
+    </article>
+  }
+</section>

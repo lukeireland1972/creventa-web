@@ -1,0 +1,142 @@
+<section class="connect-page">
+  <header class="page-header">
+    <div>
+      <h1>Connect</h1>
+      <p>Unified communications timeline, unmatched inbox, and team chat.</p>
+    </div>
+    <div class="status-pills">
+      <span>Unmatched: {{ unmatchedEmailCount }}</span>
+      <span>@ Mentions: {{ unreadMentionCount }}</span>
+    </div>
+  </header>
+
+  <section class="layout-grid">
+    <article class="panel timeline-panel">
+      <header>
+        <h2>Timeline</h2>
+        <div class="tabs">
+          <button type="button" [class.active]="timelineType === 'all'" (click)="setTimelineType('all')">All</button>
+          <button type="button" [class.active]="timelineType === 'emails'" (click)="setTimelineType('emails')">Emails</button>
+          <button type="button" [class.active]="timelineType === 'notes'" (click)="setTimelineType('notes')">Notes</button>
+          <button type="button" [class.active]="timelineType === 'system'" (click)="setTimelineType('system')">System</button>
+        </div>
+      </header>
+
+      <div class="search-row">
+        <input type="text" [(ngModel)]="timelineSearch" (ngModelChange)="loadTimeline()" placeholder="Search within communications" />
+      </div>
+
+      <ul class="timeline-list">
+        @if (isLoadingTimeline) {
+          <li class="empty">Loading timeline...</li>
+        }
+
+        @for (item of timeline; track item.id) {
+          <li [class.selected]="selectedEnquiryId === item.enquiryId" (click)="selectTimelineItem(item)">
+            <div class="line-top">
+              <strong>{{ item.enquiryReference }}</strong>
+              <span>{{ item.occurredAtUtc | date: 'dd/MM HH:mm' }}</span>
+            </div>
+            <p>{{ item.subject || item.preview }}</p>
+            <small>{{ item.contactName }} · {{ item.type }} · {{ item.direction }}</small>
+          </li>
+        }
+
+        @if (!isLoadingTimeline && timeline.length === 0) {
+          <li class="empty">No communications found.</li>
+        }
+      </ul>
+    </article>
+
+    <article class="panel compose-panel">
+      <header>
+        <h2>Compose</h2>
+        <span>{{ selectedEnquiryId || 'Select an enquiry' }}</span>
+      </header>
+
+      <section>
+        <h3>Internal Note</h3>
+        <textarea [(ngModel)]="noteDraft" rows="4" placeholder="Add internal note and use @mentions."></textarea>
+        <button type="button" (click)="addNote()" [disabled]="!canCompose || !noteDraft.trim()">Add Note</button>
+      </section>
+
+      <section>
+        <h3>Email</h3>
+        <input type="email" [(ngModel)]="emailTo" placeholder="To" />
+        <input type="text" [(ngModel)]="emailCc" placeholder="CC (optional)" />
+        <input type="text" [(ngModel)]="emailSubject" placeholder="Subject" />
+        <textarea [(ngModel)]="emailBody" rows="5" placeholder="Message"></textarea>
+        <button type="button" (click)="sendEmail()" [disabled]="!canCompose || !emailTo || !emailSubject || !emailBody">Send Email</button>
+      </section>
+
+      <section>
+        <h3>Unmatched Inbox</h3>
+        <ul class="unmatched-list">
+          @for (email of unmatchedInbox; track email.id) {
+            <li>
+              <div>
+                <strong>{{ email.subject }}</strong>
+                <p>{{ email.fromAddress }} · {{ email.receivedAtUtc | date: 'dd/MM HH:mm' }}</p>
+                <small>{{ email.preview }}</small>
+              </div>
+              <button type="button" (click)="linkUnmatched(email)" [disabled]="!canCompose">Link</button>
+            </li>
+          }
+          @if (unmatchedInbox.length === 0) {
+            <li class="empty">No unmatched emails.</li>
+          }
+        </ul>
+      </section>
+    </article>
+
+    <article class="panel chat-panel">
+      <header>
+        <h2>Team Chat</h2>
+      </header>
+
+      <div class="chat-layout">
+        <aside>
+          <ul>
+            @for (channel of channels; track channel.id) {
+              <li [class.active]="selectedChannelId === channel.id" (click)="openChannel(channel)">
+                <strong>#{{ channel.slug }}</strong>
+                @if (channel.unreadCount > 0) {
+                  <span>{{ channel.unreadCount }}</span>
+                }
+                <small>{{ channel.lastMessagePreview || 'No messages yet' }}</small>
+              </li>
+            }
+            @if (channels.length === 0) {
+              <li class="empty">No channels.</li>
+            }
+          </ul>
+        </aside>
+
+        <section>
+          <div class="messages">
+            @if (isLoadingChat) {
+              <p class="empty">Loading chat...</p>
+            }
+            @for (message of chatMessages; track message.id) {
+              <article>
+                <div>
+                  <strong>{{ message.senderName }}</strong>
+                  <span>{{ message.createdAtUtc | date: 'dd/MM HH:mm' }}</span>
+                </div>
+                <p>{{ message.body }}</p>
+              </article>
+            }
+            @if (!isLoadingChat && chatMessages.length === 0) {
+              <p class="empty">No messages in this channel.</p>
+            }
+          </div>
+
+          <div class="chat-compose">
+            <textarea [(ngModel)]="chatDraft" rows="3" placeholder="Message channel"></textarea>
+            <button type="button" (click)="sendChatMessage()" [disabled]="!selectedChannelId || !chatDraft.trim()">Send</button>
+          </div>
+        </section>
+      </div>
+    </article>
+  </section>
+</section>

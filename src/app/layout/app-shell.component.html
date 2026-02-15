@@ -1,0 +1,483 @@
+<div class="workspace" (click)="closeMenus()">
+  @if (isMobileNavOpen && !operationsOnly) {
+    <button type="button" class="mobile-nav-backdrop" (click)="closeMobileNav()" aria-label="Close navigation"></button>
+  }
+
+  <aside class="sidebar" [class.open]="isMobileNavOpen" (click)="$event.stopPropagation()">
+    <div class="sidebar-top">
+      <a class="brand" [routerLink]="operationsOnly ? '/operations' : '/'" (click)="closeMobileNav()">
+        <img class="logo-image" src="assets/creventa_RGB.jpeg" alt="Creventa" />
+        <span class="brand-copy">
+          <strong>{{ selectedVenueName }}</strong>
+          <small>{{ operationsOnly ? 'Operations View' : 'Venue Dashboard' }}</small>
+        </span>
+      </a>
+
+      <label class="venue-field">
+        <span>Venue</span>
+        <select [ngModel]="selectedVenueId" (ngModelChange)="selectVenue($event)">
+          @for (venue of venues; track venue.id) {
+            <option [value]="venue.id">{{ venue.name }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    <div class="sidebar-scroll">
+      <section class="sidebar-group">
+        <p class="sidebar-heading">Workspace</p>
+        <nav class="sidebar-nav">
+          @for (item of primaryNavItems; track item.label) {
+            @if (item.disabled) {
+              <a
+                aria-disabled="true"
+                tabindex="-1"
+                [attr.title]="item.disabledReason || 'Unavailable'"
+                style="opacity:.45;cursor:not-allowed;pointer-events:none">
+                <span>{{ item.label }}</span>
+                @if (item.badge) {
+                  <em class="badge">{{ item.badge }}</em>
+                }
+              </a>
+            } @else if (item.route) {
+              <a
+                [routerLink]="item.route"
+                routerLinkActive="active"
+                [routerLinkActiveOptions]="{ exact: item.exact }"
+                (click)="closeMobileNav()">
+                <span>{{ item.label }}</span>
+                @if (item.badge) {
+                  <em class="badge">{{ item.badge }}</em>
+                }
+              </a>
+            } @else if (item.externalUrl) {
+              <a [href]="item.externalUrl" target="_blank" rel="noreferrer" (click)="closeMobileNav()">
+                <span>{{ item.label }}</span>
+                @if (item.badge) {
+                  <em class="badge">{{ item.badge }}</em>
+                }
+              </a>
+            }
+          }
+        </nav>
+      </section>
+
+      @if (!operationsOnly && reportNavItems.length > 0) {
+        <section class="sidebar-group">
+          <p class="sidebar-heading">Reports</p>
+          <nav class="sidebar-nav">
+            @for (item of reportNavItems; track item.label) {
+              @if (item.disabled) {
+                <a
+                  aria-disabled="true"
+                  tabindex="-1"
+                  [attr.title]="item.disabledReason || 'Unavailable'"
+                  style="opacity:.45;cursor:not-allowed;pointer-events:none">
+                  <span>{{ item.label }}</span>
+                </a>
+              } @else if (item.route) {
+                <a
+                  [routerLink]="item.route"
+                  routerLinkActive="active"
+                  [routerLinkActiveOptions]="{ exact: item.exact }"
+                  (click)="closeMobileNav()">
+                  <span>{{ item.label }}</span>
+                </a>
+              } @else if (item.externalUrl) {
+                <a [href]="item.externalUrl" target="_blank" rel="noreferrer" (click)="closeMobileNav()">
+                  <span>{{ item.label }}</span>
+                </a>
+              }
+            }
+          </nav>
+        </section>
+      }
+
+      @if (!operationsOnly && adminNavItems.length > 0) {
+        <section class="sidebar-group">
+          <p class="sidebar-heading">Administration</p>
+          <nav class="sidebar-nav">
+            @for (item of adminNavItems; track item.label) {
+              <a
+                [routerLink]="item.route"
+                routerLinkActive="active"
+                [routerLinkActiveOptions]="{ exact: item.exact }"
+                (click)="closeMobileNav()">
+                <span>{{ item.label }}</span>
+              </a>
+            }
+          </nav>
+        </section>
+      }
+    </div>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user-card">
+        <span class="avatar">{{ initials }}</span>
+        <span class="identity">
+          <strong>{{ displayName }}</strong>
+          <small>Signed in</small>
+        </span>
+      </div>
+      <button type="button" class="signout-btn" (click)="logout()">Sign out</button>
+    </div>
+  </aside>
+
+  <section class="main-panel">
+    <header class="topbar" (click)="$event.stopPropagation()">
+      <div class="topbar-inner">
+        <div class="topbar-left">
+          @if (!operationsOnly) {
+            <button
+              type="button"
+              class="icon-btn mobile-nav-toggle"
+              aria-label="Open navigation"
+              [attr.aria-expanded]="isMobileNavOpen"
+              (click)="toggleMobileNav($event)">
+              &#9776;
+            </button>
+          }
+
+          <div class="breadcrumbs">
+            <span class="crumb-primary">Events</span>
+            <span class="crumb-sep">&rsaquo;</span>
+            <span class="crumb-muted">{{ selectedVenueName }}</span>
+            <span class="crumb-sep">&rsaquo;</span>
+            <span class="crumb-current">{{ currentSectionLabel }}</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          @if (!operationsOnly) {
+            <div class="search-wrap" (click)="$event.stopPropagation()">
+              <form class="search" (submit)="submitSearch($event)">
+                <span class="search-icon">&#128269;</span>
+                <input
+                  type="text"
+                  [ngModel]="searchQuery"
+                  (ngModelChange)="onSearchInput($event)"
+                  (focus)="onSearchFocus($event)"
+                  name="globalSearch"
+                  placeholder="Search enquiries, contacts, events, payments..."
+                />
+              </form>
+
+              @if (isSearchOpen) {
+                <div class="search-menu">
+                  @if (searchQuery.trim().length < 3 && recentSearches.length > 0) {
+                    <div class="search-section-title">Recent searches</div>
+                    @for (query of recentSearches; track query) {
+                      <button type="button" (click)="useRecentSearch(query)">
+                        <strong>{{ query }}</strong>
+                      </button>
+                    }
+                  }
+
+                  @for (group of searchGroups; track group.type) {
+                    <div class="search-section-title">{{ group.type }}</div>
+                    @for (result of group.results; track result.entityId) {
+                      <button type="button" (click)="openSearchResult(result)">
+                        <strong>{{ result.primaryText }}</strong>
+                        @if (result.secondaryText) {
+                          <span>{{ result.secondaryText }}</span>
+                        }
+                      </button>
+                    }
+                  }
+
+                  @if (searchQuery.trim().length >= 3 && searchGroups.length === 0) {
+                    <p class="empty">No results found.</p>
+                  }
+                </div>
+              }
+            </div>
+
+            <div class="recent-wrap" (click)="$event.stopPropagation()">
+              <button class="icon-btn" (click)="toggleRecent()" aria-label="Recently viewed">&#128337;</button>
+              @if (isRecentOpen) {
+                <div class="recent-menu">
+                  <div class="recent-title">Recently viewed</div>
+                  @for (item of recentItems; track item.entityId) {
+                    <button (click)="openRecentItem(item)">
+                      <strong>{{ item.label }}</strong>
+                      <span>{{ item.secondaryLine }}</span>
+                      @if (item.status) {
+                        <em>{{ item.status }}</em>
+                      }
+                    </button>
+                  }
+                  @if (recentItems.length === 0) {
+                    <p class="empty">No recent enquiries.</p>
+                  }
+                </div>
+              }
+            </div>
+
+            <div class="notifications-wrap" (click)="$event.stopPropagation()">
+              <button class="icon-btn" (click)="toggleNotifications($event)" aria-label="Notifications">&#128276;</button>
+              @if (unreadNotifications > 0) {
+                <span class="notification-badge">{{ unreadNotifications }}</span>
+              }
+              @if (isNotificationsOpen) {
+                <div class="notifications-menu">
+                  <div class="notifications-title">
+                    <span>Notifications</span>
+                    <button type="button" (click)="markAllNotificationsRead()">Mark all read</button>
+                  </div>
+                  @for (item of notifications; track item.id) {
+                    <button type="button" [class.unread]="!item.isRead" (click)="markNotificationRead(item)">
+                      <strong>{{ item.title }}</strong>
+                      <span>{{ item.body }}</span>
+                      <em>{{ item.createdAtUtc | date: 'dd/MM HH:mm' }}</em>
+                    </button>
+                  }
+                  @if (notifications.length === 0) {
+                    <p class="empty">No notifications.</p>
+                  }
+                </div>
+              }
+            </div>
+
+            <div class="settings-wrap" (click)="$event.stopPropagation()">
+              <button class="icon-btn" (click)="toggleSettings($event)" aria-label="Settings">&#9881;</button>
+              @if (isSettingsOpen) {
+                <div class="settings-menu">
+                  <button type="button" (click)="openAdmin()">Administration</button>
+                  <button type="button" (click)="openSettingsSection('venue-profile')">Venue Profile</button>
+                  <button type="button" (click)="openSettingsSection('spaces')">Spaces & Combinations</button>
+                  <button type="button" (click)="openSettingsSection('budgets')">Budgets & Targets</button>
+                  <button type="button" (click)="openSettingsSection('payment-schedules')">Payment Schedules</button>
+                  <button type="button" (click)="openSettingsSection('terms')">Terms & Conditions</button>
+                  <button type="button" (click)="openSettingsSection('proposal-templates')">Proposal Templates</button>
+                  <button type="button" (click)="openSettingsSection('planning-milestones')">Planning Milestones</button>
+                  <button type="button" (click)="openSettingsSection('report-configuration')">Report Configuration</button>
+                  <button type="button" (click)="openSettingsSection('automation')">Automation</button>
+                  <button type="button" (click)="openSettingsSection('email-templates')">Email Templates</button>
+                  <button type="button" (click)="openSettingsSection('website-forms')">Website Forms</button>
+                  <button type="button" (click)="openSettingsSection('calendar-accounts')">Calendar Accounts</button>
+                  <button type="button" (click)="openSettingsSection('task-templates')">Task Templates</button>
+                  <button type="button" (click)="openSettingsSection('report-schedules')">Report Schedules</button>
+                  <button type="button" (click)="openSettingsSection('email-accounts')">Email Accounts</button>
+                  <button type="button" (click)="openSettingsSection('users')">Users & Roles</button>
+                </div>
+              }
+            </div>
+
+            <button class="primary-btn" (click)="openDrawer()">+ New Enquiry</button>
+          }
+
+          <button class="avatar" (click)="logout()" [title]="displayName + ' (Sign out)'">{{ initials }}</button>
+        </div>
+      </div>
+    </header>
+
+    <main class="content">
+      <div class="content-inner">
+        <router-outlet></router-outlet>
+      </div>
+    </main>
+  </section>
+
+  @if (isDrawerOpen) {
+    <div class="drawer-backdrop" (click)="closeDrawer()"></div>
+  }
+
+  <aside class="drawer" [class.open]="isDrawerOpen">
+    <div class="drawer-header">
+      <div>
+        <h2>New Event Enquiry</h2>
+        <p>Status starts as New. Phone number is required.</p>
+      </div>
+      <button class="icon-btn" (click)="closeDrawer()">&#10005;</button>
+    </div>
+
+    <form class="drawer-form" [formGroup]="enquiryForm" (ngSubmit)="submitEnquiry()">
+      @if (submissionError) {
+        <p class="form-error">{{ submissionError }}</p>
+      }
+
+      <label>
+        First Name
+        <input type="text" formControlName="contactFirstName" />
+      </label>
+
+      <label>
+        Last Name
+        <input type="text" formControlName="contactLastName" />
+      </label>
+
+      <label>
+        Email
+        <input type="email" formControlName="contactEmail" />
+      </label>
+
+      <label>
+        Phone (E.164)
+        <input type="text" formControlName="contactPhoneNumberE164" placeholder="+447700900111" />
+      </label>
+
+      <label>
+        Company
+        <input type="text" formControlName="companyName" />
+      </label>
+
+      <label>
+        Event Type
+        <select formControlName="eventType">
+          <option>Wedding</option>
+          <option>Corporate Conference</option>
+          <option>Private Dining</option>
+          <option>Christmas Party</option>
+          <option>Birthday</option>
+          <option>Funeral/Wake</option>
+          <option>Charity</option>
+          <option>Product Launch</option>
+          <option>Team Building</option>
+          <option>Other</option>
+        </select>
+      </label>
+
+      <label>
+        Event Name
+        <input type="text" formControlName="eventName" />
+      </label>
+
+      <label>
+        Event Date
+        <input type="date" formControlName="eventDate" />
+      </label>
+
+      <label>
+        Start Time
+        <input type="time" formControlName="eventTime" />
+      </label>
+
+      <label>
+        Event Style
+        <select formControlName="eventStyle">
+          <option>Meeting</option>
+          <option>3-Course Dinner</option>
+          <option>Buffet</option>
+          <option>Reception/Standing</option>
+          <option>BBQ</option>
+          <option>Afternoon Tea</option>
+          <option>Drinks Reception</option>
+          <option>Custom</option>
+        </select>
+      </label>
+
+      <label>
+        Setup Style
+        <select formControlName="setupStyle">
+          <option>Theatre</option>
+          <option>Banquet</option>
+          <option>Boardroom</option>
+          <option>Cabaret</option>
+          <option>Reception</option>
+          <option>Classroom</option>
+          <option>U-Shape</option>
+          <option>Custom</option>
+        </select>
+      </label>
+
+      <label>
+        Guests
+        <input type="number" min="1" formControlName="guestsExpected" />
+      </label>
+
+      <label>
+        Budget Min
+        <input type="number" min="0" formControlName="budgetMinAmount" />
+      </label>
+
+      <label>
+        Budget Max
+        <input type="number" min="0" formControlName="budgetMaxAmount" />
+      </label>
+
+      <label>
+        Source
+        <select formControlName="sourceType">
+          <option>Phone</option>
+          <option>Walk-in</option>
+          <option>Referral</option>
+          <option>Social Media</option>
+          <option>Venue Event</option>
+          <option>Third-Party</option>
+          <option>Returning Client</option>
+          <option>Website Form</option>
+          <option>Email</option>
+        </select>
+      </label>
+
+      <label>
+        Source Detail
+        <input type="text" formControlName="sourceDetail" />
+      </label>
+
+      <label>
+        Lead Quality (1-5)
+        <input type="number" min="1" max="5" formControlName="leadQuality" />
+      </label>
+
+      <label class="checkbox">
+        <input type="checkbox" formControlName="marketingConsent" />
+        <span>Marketing consent</span>
+      </label>
+
+      <label class="checkbox">
+        <input type="checkbox" formControlName="hasFlexibleDates" />
+        <span>Flexible dates</span>
+      </label>
+
+      <label class="full">
+        Flexible Date Notes
+        <textarea rows="2" formControlName="flexibleDateNotes"></textarea>
+      </label>
+
+      <label class="full">
+        Special Requirements
+        <textarea rows="2" formControlName="specialRequirements"></textarea>
+      </label>
+
+      <label class="full">
+        Internal Notes
+        <textarea rows="3" formControlName="internalNotes"></textarea>
+      </label>
+
+      @if (availability) {
+        <section class="availability">
+          <h3>Same-date availability</h3>
+          @for (group of availability.spaces; track group.spaceId) {
+            <article>
+              <header>
+                <strong>{{ group.spaceName }}</strong>
+                @if (group.isAvailable) {
+                  <span class="available">Available</span>
+                } @else {
+                  <span class="busy">Busy</span>
+                }
+              </header>
+              @for (event of group.events; track event.recordId) {
+                <div class="availability-event">
+                  <strong>{{ event.label }}</strong>
+                  <span>{{ event.recordType }} · {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
+                  @if (event.enquiryStatus) {
+                    <span>{{ event.enquiryStatus }} · {{ event.covers }} covers</span>
+                  }
+                </div>
+              }
+            </article>
+          }
+        </section>
+      }
+
+      <div class="drawer-actions">
+        <button type="button" class="ghost-btn" (click)="closeDrawer()">Cancel</button>
+        <button type="submit" class="primary-btn" [disabled]="isSubmitting">
+          {{ isSubmitting ? 'Creating...' : 'Create Enquiry' }}
+        </button>
+      </div>
+    </form>
+  </aside>
+</div>

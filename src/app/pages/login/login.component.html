@@ -1,0 +1,40 @@
+<section class="login-page">
+  <article class="login-card">
+    <h1>CreventaFlow</h1>
+    <p>Phase 1 tenant login</p>
+
+    <form [formGroup]="form" (ngSubmit)="submit()">
+      <label>
+        Tenant subdomain
+        <input type="text" formControlName="tenantSubdomain" placeholder="grandhotel" />
+      </label>
+
+      <label>
+        Email
+        <input type="email" formControlName="email" placeholder="alice@grandhotel.co.uk" />
+      </label>
+
+      <label>
+        Password
+        <input type="password" formControlName="password" />
+      </label>
+
+      @if (requiresTotp) {
+        <label>
+          TOTP code
+          <input type="text" formControlName="totpCode" maxlength="6" placeholder="123456" />
+        </label>
+      }
+
+      @if (errorMessage) {
+        <p class="error">{{ errorMessage }}</p>
+      }
+
+      <button type="submit" [disabled]="isSubmitting">
+        {{ isSubmitting ? 'Signing in...' : requiresTotp ? 'Verify TOTP' : 'Sign in' }}
+      </button>
+    </form>
+
+    <small>Seed user: alice&#64;grandhotel.co.uk / Passw0rd!</small>
+  </article>
+</section>

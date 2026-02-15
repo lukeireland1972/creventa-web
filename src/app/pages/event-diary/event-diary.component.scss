@@ -1,0 +1,383 @@
+.diary-page {
+  display: grid;
+  gap: 1rem;
+}
+
+.title-block h1 {
+  margin: 0;
+  font-size: 2rem;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.title-block p {
+  margin: 0.28rem 0 0;
+  color: #64748b;
+  font-size: 1.06rem;
+  font-weight: 600;
+}
+
+.error-banner {
+  margin: 0;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fff1f2;
+  color: #b91c1c;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.calendar-card {
+  border: 1px solid #dbe4ef;
+  border-radius: 22px;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+}
+
+.calendar-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.35rem 1.5rem;
+  border-bottom: 1px solid #e8edf5;
+}
+
+.month-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.month-nav h2 {
+  margin: 0;
+  font-size: 2.2rem;
+  line-height: 1;
+  color: #1e293b;
+  font-weight: 800;
+}
+
+.month-arrows {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.month-arrows button {
+  border: 0;
+  background: transparent;
+  color: #475569;
+  width: 34px;
+  height: 34px;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.month-arrows button + button {
+  border-left: 1px solid #e2e8f0;
+}
+
+.today-btn {
+  border: 0;
+  background: transparent;
+  color: #475569;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.toolbar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.legend-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding-right: 0.8rem;
+  border-right: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.legend-inline span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  color: #64748b;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.legend-chip {
+  width: 20px;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  display: inline-block;
+}
+
+.legend-chip.status-confirmed {
+  background: #16a34a;
+}
+
+.legend-chip.status-provisional {
+  border: 1px dashed #d97706;
+  background-image: repeating-linear-gradient(45deg, #fef3c7, #fef3c7 4px, #fffbeb 4px, #fffbeb 8px);
+}
+
+.legend-chip.status-tentative {
+  border: 1px dashed #60a5fa;
+  background: #eff6ff;
+}
+
+.legend-chip.status-open-proposal {
+  background: #2563eb;
+}
+
+.legend-chip.status-appointment {
+  border: 2px solid #3b82f6;
+  background: #ffffff;
+}
+
+.legend-chip.status-venue-event {
+  background: #0d9488;
+}
+
+.add-event-btn {
+  border: 1px solid #1d4ed8;
+  background: #2563eb;
+  color: #fff;
+  border-radius: 13px;
+  padding: 0.62rem 1.15rem;
+  font-size: 1rem;
+  font-weight: 700;
+  box-shadow: 0 10px 18px rgba(37, 99, 235, 0.22);
+}
+
+.calendar-grid-wrap {
+  overflow-x: auto;
+}
+
+.weekdays-row,
+.month-grid {
+  min-width: 1080px;
+}
+
+.weekdays-row {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  border-bottom: 1px solid #e8edf5;
+}
+
+.weekdays-row div {
+  text-align: center;
+  padding: 0.7rem 0.45rem;
+  color: #94a3b8;
+  font-size: 0.97rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.day-cell {
+  border-right: 1px solid #eef2f8;
+  border-bottom: 1px solid #eef2f8;
+  min-height: 168px;
+  padding: 0.68rem 0.62rem 0.72rem;
+  display: grid;
+  gap: 0.52rem;
+  align-content: start;
+  background: #ffffff;
+}
+
+.day-cell:nth-child(7n) {
+  border-right: 0;
+}
+
+.day-cell.outside-month {
+  background: #fbfdff;
+}
+
+.day-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.38rem;
+}
+
+.day-number {
+  color: #475569;
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.day-cell.outside-month .day-number {
+  color: #c4cfdd;
+}
+
+.event-count {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.event-list {
+  display: grid;
+  gap: 0.38rem;
+  align-content: start;
+}
+
+.event-chip-wrap {
+  position: relative;
+}
+
+.event-chip {
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 0.34rem 0.55rem;
+  text-align: left;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+.event-chip.status-confirmed {
+  background: #16a34a;
+}
+
+.event-chip.status-provisional {
+  color: #1f2937;
+  border: 2px dashed #d97706;
+  background-image: repeating-linear-gradient(45deg, #fef3c7, #fef3c7 4px, #fffbeb 4px, #fffbeb 8px);
+}
+
+.event-chip.status-new,
+.event-chip.status-tentative {
+  color: #1e40af;
+  border: 1px dashed #60a5fa;
+  background: #eff6ff;
+}
+
+.event-chip.status-open-proposal {
+  background: #2563eb;
+}
+
+.event-chip.status-completed {
+  background: #86efac;
+  color: #14532d;
+}
+
+.event-chip.status-blocked {
+  background: #9ca3af;
+}
+
+.event-chip.status-appointment {
+  background: #ffffff;
+  color: #1d4ed8;
+  border: 2px solid #3b82f6;
+}
+
+.event-chip.status-venue-event {
+  background: #0d9488;
+}
+
+.event-chip.status-lost {
+  background: #fecaca;
+  color: #991b1b;
+}
+
+.event-chip.status-archived {
+  background: #e5e7eb;
+  color: #334155;
+}
+
+.event-chip.unassigned {
+  background: #64748b;
+  color: #ffffff;
+  border-color: #64748b;
+}
+
+.more-events {
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.event-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 30;
+  width: 255px;
+  border-radius: 12px;
+  border: 1px solid #1e293b;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 0.5rem 0.56rem;
+  display: grid;
+  gap: 0.2rem;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.35);
+}
+
+.event-popover strong {
+  font-size: 0.76rem;
+}
+
+.event-popover span {
+  font-size: 0.67rem;
+  color: #cbd5e1;
+}
+
+.event-popover b {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+@media (max-width: 1024px) {
+  .calendar-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .toolbar-right {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .title-block h1 {
+    font-size: 1.65rem;
+  }
+
+  .title-block p {
+    font-size: 0.94rem;
+  }
+
+  .month-nav h2 {
+    font-size: 1.5rem;
+  }
+
+  .legend-inline {
+    border-right: 0;
+    padding-right: 0;
+    justify-content: flex-start;
+  }
+}

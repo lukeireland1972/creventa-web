@@ -1,0 +1,1579 @@
+<section class="settings-page">
+  <header class="page-header">
+    <div>
+      <h1>Settings</h1>
+      <p>{{ venueName }} configuration for operations, commercial workflows, and compliance.</p>
+    </div>
+  </header>
+
+  <section class="layout">
+    <aside class="section-list" aria-label="Settings sections">
+      @for (section of sections; track section.key) {
+        <button
+          type="button"
+          class="section-card"
+          [class.active]="section.key === activeSectionKey"
+          (click)="setSection(section.key)">
+          <strong>{{ section.title }}</strong>
+          <span>{{ section.description }}</span>
+        </button>
+      }
+    </aside>
+
+    <section class="panel">
+      <header class="panel-header">
+        <h2>{{ activeSection.title }}</h2>
+        <p>{{ activeSection.description }}</p>
+      </header>
+
+      @if (!selectedVenueId) {
+        <article class="empty-state">
+          <h3>No Venue Selected</h3>
+          <p>Select a venue from the top navigation to configure settings.</p>
+        </article>
+      } @else {
+        @if (sectionStates[activeSectionKey].loading) {
+          <article class="loading-state">
+            <p>Loading {{ activeSection.title.toLowerCase() }}...</p>
+          </article>
+        } @else {
+          @if (sectionStates[activeSectionKey].error) {
+            <p class="message error">{{ sectionStates[activeSectionKey].error }}</p>
+          }
+          @if (sectionStates[activeSectionKey].success) {
+            <p class="message success">{{ sectionStates[activeSectionKey].success }}</p>
+          }
+
+          @if (activeSectionKey === 'venue-profile') {
+            <form class="form-grid" [formGroup]="venueForm" (ngSubmit)="saveVenueProfile()">
+              <label>
+                Venue Name
+                <input type="text" formControlName="name" />
+              </label>
+
+              <label>
+                Legal Entity Name
+                <input type="text" formControlName="legalEntityName" />
+              </label>
+
+              <label>
+                Address Line 1
+                <input type="text" formControlName="addressLine1" />
+              </label>
+
+              <label>
+                Address Line 2
+                <input type="text" formControlName="addressLine2" />
+              </label>
+
+              <label>
+                City
+                <input type="text" formControlName="city" />
+              </label>
+
+              <label>
+                Region/County
+                <input type="text" formControlName="region" />
+              </label>
+
+              <label>
+                Postcode
+                <input type="text" formControlName="postcode" />
+              </label>
+
+              <label>
+                Country Code
+                <input type="text" formControlName="countryCode" />
+              </label>
+
+              <label>
+                Enquiries Phone (E.164)
+                <input type="text" formControlName="phoneNumberE164" placeholder="+447700900111" />
+              </label>
+
+              <label>
+                Enquiries Email
+                <input type="email" formControlName="enquiriesEmail" />
+              </label>
+
+              <label>
+                Website URL
+                <input type="url" formControlName="websiteUrl" />
+              </label>
+
+              <label>
+                VAT Number
+                <input type="text" formControlName="vatNumber" />
+              </label>
+
+              <label>
+                Company Registration Number
+                <input type="text" formControlName="companyRegistrationNumber" />
+              </label>
+
+              <label>
+                Logo URL
+                <input type="url" formControlName="logoUrl" />
+              </label>
+
+              <label>
+                Currency
+                <input type="text" formControlName="currencyCode" />
+              </label>
+
+              <label>
+                Default VAT (%)
+                <input type="number" min="0" step="0.01" formControlName="defaultVatRate" />
+              </label>
+
+              <label>
+                Time Zone
+                <input type="text" formControlName="timeZone" />
+              </label>
+
+              <label>
+                Locale
+                <input type="text" formControlName="locale" />
+              </label>
+
+              <label>
+                Min Booking Notice (days)
+                <input type="number" min="0" formControlName="minimumBookingNoticeDays" />
+              </label>
+
+              <label>
+                Default Hold Period (days)
+                <input type="number" min="1" formControlName="defaultHoldPeriodDays" />
+              </label>
+
+              <label>
+                Hold Warning (days)
+                <input type="number" min="0" formControlName="holdWarningDays" />
+              </label>
+
+              <label>
+                Hold Auto Release
+                <select formControlName="holdAutoReleaseMode">
+                  @for (mode of holdAutoReleaseModes; track mode) {
+                    <option [value]="mode">{{ mode }}</option>
+                  }
+                </select>
+              </label>
+
+              <label>
+                Max Holds per Date/Space
+                <input type="number" min="1" formControlName="maxHoldsPerDateAndSpace" />
+              </label>
+
+              <label class="full-width">
+                Description
+                <textarea rows="3" formControlName="description"></textarea>
+              </label>
+
+              <label class="full-width">
+                Cancellation Policy
+                <textarea rows="4" formControlName="cancellationPolicy"></textarea>
+              </label>
+
+              <div class="actions full-width">
+                <button type="submit" class="primary" [disabled]="sectionStates['venue-profile'].saving">
+                  {{ sectionStates['venue-profile'].saving ? 'Saving...' : 'Save Venue Profile' }}
+                </button>
+              </div>
+            </form>
+          }
+
+          @if (activeSectionKey === 'spaces') {
+            <section class="two-column">
+              <article class="card">
+                <header class="card-header">
+                  <h3>Spaces</h3>
+                  <button type="button" class="ghost" (click)="startNewSpace()">New Space</button>
+                </header>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Active</th>
+                        <th>Turnaround</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (space of spaces; track space.id) {
+                        <tr>
+                          <td>
+                            <strong>{{ space.name }}</strong>
+                            <small>{{ space.locationText || 'No location' }}</small>
+                          </td>
+                          <td>{{ space.isActive ? 'Yes' : 'No' }}</td>
+                          <td>{{ space.turnaroundMinutes }} min</td>
+                          <td>
+                            <button type="button" class="link" (click)="editSpace(space)">Edit</button>
+                          </td>
+                        </tr>
+                      }
+                      @if (spaces.length === 0) {
+                        <tr>
+                          <td colspan="4" class="empty-row">No spaces configured yet.</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article class="card">
+                <header class="card-header">
+                  <h3>{{ editingSpaceId ? 'Edit Space' : 'Create Space' }}</h3>
+                </header>
+
+                <form class="form-grid compact" [formGroup]="spaceForm" (ngSubmit)="saveSpace()">
+                  <label>
+                    Space Name
+                    <input type="text" formControlName="name" />
+                  </label>
+
+                  <label>
+                    Location
+                    <input type="text" formControlName="locationText" />
+                  </label>
+
+                  <label>
+                    Floor Area (sqm)
+                    <input type="number" min="0" step="0.01" formControlName="floorAreaSqm" />
+                  </label>
+
+                  <label>
+                    Turnaround (minutes)
+                    <input type="number" min="0" formControlName="turnaroundMinutes" />
+                  </label>
+
+                  <label>
+                    Min Spend
+                    <input type="number" min="0" step="0.01" formControlName="minimumSpendAmount" />
+                  </label>
+
+                  <label>
+                    Min Spend Currency
+                    <input type="text" formControlName="minimumSpendCurrencyCode" />
+                  </label>
+
+                  <label class="full-width">
+                    Facilities (comma separated)
+                    <input type="text" formControlName="facilitiesCsv" />
+                  </label>
+
+                  <label class="full-width">
+                    Description
+                    <textarea rows="3" formControlName="description"></textarea>
+                  </label>
+
+                  <label class="full-width checkbox">
+                    <input type="checkbox" formControlName="isActive" />
+                    <span>Active and bookable</span>
+                  </label>
+
+                  <section class="matrix-section full-width">
+                    <header>
+                      <h4>Capacity by Setup Style</h4>
+                      <button type="button" class="ghost" (click)="addSpaceCapacityRule()">Add</button>
+                    </header>
+                    <div formArrayName="capacityBySetup" class="matrix-grid">
+                      @for (rule of spaceCapacityControls.controls; track $index; let i = $index) {
+                        <div [formGroupName]="i" class="matrix-row">
+                          <select formControlName="setupStyle">
+                            @for (style of setupStyles; track style) {
+                              <option [value]="style">{{ style }}</option>
+                            }
+                          </select>
+                          <input type="number" min="1" formControlName="capacity" />
+                          <button type="button" class="icon" (click)="removeSpaceCapacityRule(i)">&#10005;</button>
+                        </div>
+                      }
+                    </div>
+                  </section>
+
+                  <section class="matrix-section full-width">
+                    <header>
+                      <h4>Pricing Rules</h4>
+                      <button type="button" class="ghost" (click)="addSpacePricingRule()">Add</button>
+                    </header>
+                    <div formArrayName="pricing" class="matrix-grid">
+                      @for (rule of spacePricingControls.controls; track $index; let i = $index) {
+                        <div [formGroupName]="i" class="matrix-row wide">
+                          <select formControlName="rateType">
+                            @for (rate of pricingRateTypes; track rate) {
+                              <option [value]="rate">{{ rate }}</option>
+                            }
+                          </select>
+                          <input type="number" min="0" step="0.01" formControlName="amount" />
+                          <input type="text" formControlName="currencyCode" />
+                          <select formControlName="dayOfWeek">
+                            <option value="">Any day</option>
+                            @for (day of dayOfWeekOptions; track day) {
+                              <option [value]="day">{{ day }}</option>
+                            }
+                          </select>
+                          <button type="button" class="icon" (click)="removeSpacePricingRule(i)">&#10005;</button>
+                        </div>
+                      }
+                    </div>
+                  </section>
+
+                  <div class="actions full-width">
+                    <button type="submit" class="primary" [disabled]="sectionStates.spaces.saving">
+                      {{ sectionStates.spaces.saving ? 'Saving...' : (editingSpaceId ? 'Update Space' : 'Create Space') }}
+                    </button>
+                  </div>
+                </form>
+              </article>
+            </section>
+
+            <section class="two-column combinations-block">
+              <article class="card">
+                <header class="card-header">
+                  <h3>Space Combinations</h3>
+                  <button type="button" class="ghost" (click)="startNewCombination()">New Combination</button>
+                </header>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Members</th>
+                        <th>Price</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (combination of combinations; track combination.id) {
+                        <tr>
+                          <td>{{ combination.name }}</td>
+                          <td>{{ combination.spaceIds.length }}</td>
+                          <td>
+                            @if (combination.priceAmount !== null && combination.priceAmount !== undefined) {
+                              {{ combination.currencyCode }} {{ combination.priceAmount | number: '1.2-2' }}
+                            } @else {
+                              -
+                            }
+                          </td>
+                          <td>
+                            <button type="button" class="link" (click)="editCombination(combination)">Edit</button>
+                          </td>
+                        </tr>
+                      }
+                      @if (combinations.length === 0) {
+                        <tr>
+                          <td colspan="4" class="empty-row">No space combinations configured yet.</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article class="card">
+                <header class="card-header">
+                  <h3>{{ editingCombinationId ? 'Edit Combination' : 'Create Combination' }}</h3>
+                </header>
+
+                <form class="form-grid compact" [formGroup]="combinationForm" (ngSubmit)="saveCombination()">
+                  <label>
+                    Combination Name
+                    <input type="text" formControlName="name" />
+                  </label>
+
+                  <label>
+                    Price Amount
+                    <input type="number" min="0" step="0.01" formControlName="priceAmount" />
+                  </label>
+
+                  <label>
+                    Currency
+                    <input type="text" formControlName="currencyCode" />
+                  </label>
+
+                  <label class="full-width">
+                    Description
+                    <textarea rows="2" formControlName="description"></textarea>
+                  </label>
+
+                  <section class="space-picker full-width">
+                    <h4>Included Spaces</h4>
+                    <div class="pill-grid">
+                      @for (space of spaces; track space.id) {
+                        <label class="pill-option">
+                          <input
+                            type="checkbox"
+                            [checked]="isCombinationSpaceSelected(space.id)"
+                            (change)="toggleCombinationSpace(space.id, $event)" />
+                          <span>{{ space.name }}</span>
+                        </label>
+                      }
+                    </div>
+                  </section>
+
+                  <section class="matrix-section full-width">
+                    <header>
+                      <h4>Combined Capacity Rules</h4>
+                      <button type="button" class="ghost" (click)="addCombinationCapacityRule()">Add</button>
+                    </header>
+                    <div formArrayName="capacityBySetup" class="matrix-grid">
+                      @for (rule of combinationCapacityControls.controls; track $index; let i = $index) {
+                        <div [formGroupName]="i" class="matrix-row">
+                          <select formControlName="setupStyle">
+                            @for (style of setupStyles; track style) {
+                              <option [value]="style">{{ style }}</option>
+                            }
+                          </select>
+                          <input type="number" min="1" formControlName="capacity" />
+                          <button type="button" class="icon" (click)="removeCombinationCapacityRule(i)">&#10005;</button>
+                        </div>
+                      }
+                    </div>
+                  </section>
+
+                  <div class="actions full-width">
+                    <button type="submit" class="primary" [disabled]="sectionStates.spaces.saving">
+                      {{ sectionStates.spaces.saving ? 'Saving...' : (editingCombinationId ? 'Update Combination' : 'Create Combination') }}
+                    </button>
+                  </div>
+                </form>
+              </article>
+            </section>
+          }
+
+          @if (activeSectionKey === 'budgets') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Annual Budgets</h3>
+                <div class="inline-actions">
+                  <button type="button" class="ghost" (click)="changeBudgetYear(-1)">Previous</button>
+                  <span>{{ selectedBudgetYear }}</span>
+                  <button type="button" class="ghost" (click)="changeBudgetYear(1)">Next</button>
+                </div>
+              </header>
+
+              <div class="month-nav">
+                @for (month of monthNumbers; track month) {
+                  <button
+                    type="button"
+                    [class.active]="month === selectedBudgetMonth"
+                    (click)="setBudgetMonth(month)">
+                    {{ getMonthLabel(month) }}
+                  </button>
+                }
+              </div>
+
+              @if (currentBudgetForm; as monthForm) {
+                <form [formGroup]="monthForm" class="form-grid compact">
+                  <label>
+                    Overall Revenue Target
+                    <input type="number" min="0" step="0.01" formControlName="overallRevenueTarget" />
+                  </label>
+
+                  <label>
+                    Currency
+                    <input type="text" formControlName="currencyCode" />
+                  </label>
+
+                  <section class="targets-table full-width" formArrayName="targetsByEventType">
+                    <header>
+                      <h4>Targets by Event Type</h4>
+                      <button type="button" class="ghost" (click)="addBudgetTargetRow(selectedBudgetMonth)">Add Row</button>
+                    </header>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Event Type</th>
+                          <th>Revenue</th>
+                          <th>Covers</th>
+                          <th>Bookings</th>
+                          <th>ASP</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @if (getBudgetTargetsArray(selectedBudgetMonth); as targetsArray) {
+                          @for (target of targetsArray.controls; track $index; let i = $index) {
+                            <tr [formGroupName]="i">
+                              <td><input type="text" formControlName="eventType" /></td>
+                              <td><input type="number" min="0" step="0.01" formControlName="revenueTarget" /></td>
+                              <td><input type="number" min="0" formControlName="coversTarget" /></td>
+                              <td><input type="number" min="0" formControlName="bookingCountTarget" /></td>
+                              <td><input type="number" min="0" step="0.01" formControlName="averageSellingPriceTarget" /></td>
+                              <td>
+                                <button type="button" class="icon" (click)="removeBudgetTargetRow(selectedBudgetMonth, i)">&#10005;</button>
+                              </td>
+                            </tr>
+                          }
+                        }
+                      </tbody>
+                    </table>
+                  </section>
+
+                  <div class="actions full-width">
+                    <button
+                      type="button"
+                      class="primary"
+                      [disabled]="sectionStates.budgets.saving"
+                      (click)="saveBudgetMonth(selectedBudgetMonth)">
+                      {{ sectionStates.budgets.saving ? 'Saving...' : ('Save ' + getMonthLabel(selectedBudgetMonth) + ' Budget') }}
+                    </button>
+                  </div>
+                </form>
+              }
+
+              <section class="csv-import">
+                <h4>Import from CSV</h4>
+                <p>Header format: `year,month,overallRevenueTarget,currency,eventType,revenueTarget,coversTarget,bookingCountTarget,aspTarget`.</p>
+                <div class="inline-actions">
+                  <input type="file" accept=".csv,text/csv" (change)="onBudgetCsvSelected($event)" />
+                  <button
+                    type="button"
+                    class="ghost"
+                    [disabled]="!selectedBudgetCsvFile || sectionStates.budgets.saving"
+                    (click)="uploadBudgetCsv()">
+                    Import CSV
+                  </button>
+                </div>
+              </section>
+            </section>
+          }
+
+          @if (activeSectionKey === 'payment-schedules') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Payment Schedule Templates</h3>
+              </header>
+
+              <p class="hint">Templates are stored per venue and used as defaults when events are confirmed.</p>
+
+              <form class="form-grid compact" [formGroup]="paymentTemplateForm" (ngSubmit)="savePaymentScheduleTemplate()">
+                <label>
+                  Template Name
+                  <input type="text" formControlName="name" />
+                </label>
+
+                <label>
+                  Event Type
+                  <input type="text" formControlName="eventType" />
+                </label>
+
+                <label>
+                  Milestone Name
+                  <input type="text" formControlName="milestoneName" />
+                </label>
+
+                <label>
+                  Due Date Rule
+                  <input type="text" formControlName="dueDateRule" />
+                </label>
+
+                <label>
+                  Amount Type
+                  <select formControlName="amountType">
+                    <option value="Percentage">Percentage</option>
+                    <option value="Fixed">Fixed</option>
+                  </select>
+                </label>
+
+                <label>
+                  Amount
+                  <input type="number" min="0.01" step="0.01" formControlName="amount" />
+                </label>
+
+                <label class="full-width">
+                  Accepted Methods (comma separated)
+                  <input type="text" formControlName="acceptedMethodsCsv" />
+                </label>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates['payment-schedules'].saving">
+                    {{ sectionStates['payment-schedules'].saving ? 'Saving...' : 'Save Template' }}
+                  </button>
+                </div>
+              </form>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Event Type</th>
+                      <th>Milestone</th>
+                      <th>Amount</th>
+                      <th>Updated</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (template of paymentScheduleTemplates; track template.id) {
+                      <tr>
+                        <td>{{ template.name }}</td>
+                        <td>{{ template.eventType }}</td>
+                        <td>{{ template.milestones[0]?.name || '-' }}</td>
+                        <td>
+                          @if ((template.milestones[0]?.amountType || '') === 'Percentage') {
+                            {{ template.milestones[0]?.amount | number: '1.0-2' }}%
+                          } @else {
+                            {{ venueForm.get('currencyCode')?.value || 'GBP' }} {{ template.milestones[0]?.amount | number: '1.2-2' }}
+                          }
+                        </td>
+                        <td>-</td>
+                        <td>
+                          <button type="button" class="link danger" (click)="deletePaymentScheduleTemplate(template.id)">Delete</button>
+                        </td>
+                      </tr>
+                    }
+                    @if (paymentScheduleTemplates.length === 0) {
+                      <tr>
+                        <td colspan="6" class="empty-row">No payment schedule templates yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
+          @if (activeSectionKey === 'terms') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Terms & Conditions</h3>
+              </header>
+
+              <p class="hint">Terms are stored per venue with version history for proposal and contract use.</p>
+
+              <form class="form-grid compact" [formGroup]="termsForm" (ngSubmit)="saveTermsDocument()">
+                <label>
+                  Terms Title
+                  <input type="text" formControlName="title" placeholder="Wedding Terms" />
+                </label>
+
+                <label>
+                  Event Type
+                  <input type="text" formControlName="eventType" />
+                </label>
+
+                <label class="full-width">
+                  Terms Content
+                  <textarea rows="8" formControlName="content"></textarea>
+                </label>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates.terms.saving">
+                    {{ sectionStates.terms.saving ? 'Saving...' : 'Save Terms Version' }}
+                  </button>
+                </div>
+              </form>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Title</th>
+                      <th>Version</th>
+                      <th>Event Type</th>
+                      <th>Updated</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (doc of termsDocuments; track doc.id) {
+                      <tr>
+                        <td>{{ doc.title }}</td>
+                        <td>{{ doc.version }}</td>
+                        <td>{{ doc.eventType }}</td>
+                        <td>{{ doc.updatedAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+                        <td>
+                          <button type="button" class="link danger" (click)="deleteTermsDocument(doc.id)">Delete</button>
+                        </td>
+                      </tr>
+                    }
+                    @if (termsDocuments.length === 0) {
+                      <tr>
+                        <td colspan="5" class="empty-row">No terms documents yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
+          @if (activeSectionKey === 'proposal-templates') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Proposal Templates</h3>
+              </header>
+
+              <form class="form-grid compact" [formGroup]="proposalTemplateForm" (ngSubmit)="saveProposalTemplate()">
+                <label>
+                  Template Key
+                  <input type="text" formControlName="key" placeholder="wedding-premium" />
+                </label>
+
+                <label>
+                  Label
+                  <input type="text" formControlName="label" placeholder="Wedding Premium" />
+                </label>
+
+                <label>
+                  Event Type
+                  <input type="text" formControlName="eventType" />
+                </label>
+
+                <label>
+                  Validity Days
+                  <input type="number" min="1" max="365" formControlName="defaultValidityDays" />
+                </label>
+
+                <label>
+                  Default Terms Version
+                  <input type="text" formControlName="defaultTermsVersion" />
+                </label>
+
+                <label class="full-width">
+                  Introduction
+                  <textarea rows="3" formControlName="defaultIntroduction"></textarea>
+                </label>
+
+                <section class="targets-table full-width">
+                  <header>
+                    <h4>Default Line Item</h4>
+                  </header>
+                  <div class="form-grid compact">
+                    <label>
+                      Category
+                      <input type="text" formControlName="itemCategory" />
+                    </label>
+                    <label>
+                      Description
+                      <input type="text" formControlName="itemDescription" />
+                    </label>
+                    <label>
+                      Quantity
+                      <input type="number" min="0.01" step="0.01" formControlName="itemQuantity" />
+                    </label>
+                    <label>
+                      Unit
+                      <input type="text" formControlName="itemUnit" />
+                    </label>
+                    <label>
+                      Unit Price (ex VAT)
+                      <input type="number" min="0" step="0.01" formControlName="itemUnitPriceExclVat" />
+                    </label>
+                    <label>
+                      VAT Rate (%)
+                      <input type="number" min="0" step="0.01" formControlName="itemVatRate" />
+                    </label>
+                    <label>
+                      Discount (%)
+                      <input type="number" min="0" step="0.01" formControlName="itemDiscountPercent" />
+                    </label>
+                    <label>
+                      Discount Amount
+                      <input type="number" min="0" step="0.01" formControlName="itemDiscountAmount" />
+                    </label>
+                  </div>
+                </section>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates['proposal-templates'].saving">
+                    {{ sectionStates['proposal-templates'].saving ? 'Saving...' : 'Save Template' }}
+                  </button>
+                </div>
+              </form>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Key</th>
+                      <th>Label</th>
+                      <th>Event Type</th>
+                      <th>Validity</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (template of proposalTemplates; track template.key) {
+                      <tr>
+                        <td>{{ template.key }}</td>
+                        <td>{{ template.label }}</td>
+                        <td>{{ template.eventType }}</td>
+                        <td>{{ template.defaultValidityDays }} days</td>
+                        <td>
+                          <button type="button" class="link danger" (click)="deleteProposalTemplate(template.key)">Delete</button>
+                        </td>
+                      </tr>
+                    }
+                    @if (proposalTemplates.length === 0) {
+                      <tr>
+                        <td colspan="5" class="empty-row">No proposal templates configured yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
+          @if (activeSectionKey === 'planning-milestones') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Planning Milestones</h3>
+              </header>
+
+              <form class="form-grid compact" [formGroup]="planningMilestoneForm" (ngSubmit)="savePlanningMilestone()">
+                <label>
+                  Key
+                  <input type="text" formControlName="key" placeholder="menus_confirmed" />
+                </label>
+
+                <label>
+                  Label
+                  <input type="text" formControlName="label" placeholder="Menus Confirmed" />
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="isEnabled" />
+                  <span>Enabled</span>
+                </label>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates['planning-milestones'].saving">
+                    {{ sectionStates['planning-milestones'].saving ? 'Saving...' : 'Add Milestone' }}
+                  </button>
+                </div>
+              </form>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Key</th>
+                      <th>Label</th>
+                      <th>Enabled</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (milestone of planningMilestones; track milestone.key) {
+                      <tr>
+                        <td>{{ milestone.key }}</td>
+                        <td>{{ milestone.label }}</td>
+                        <td>{{ milestone.isEnabled ? 'Yes' : 'No' }}</td>
+                        <td>
+                          <button type="button" class="link danger" (click)="deletePlanningMilestone(milestone.key)">Delete</button>
+                        </td>
+                      </tr>
+                    }
+                    @if (planningMilestones.length === 0) {
+                      <tr>
+                        <td colspan="4" class="empty-row">No planning milestones configured yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
+          @if (activeSectionKey === 'report-configuration') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Report Conversion Weights</h3>
+              </header>
+
+              <form class="form-grid compact" [formGroup]="reportConfigurationForm" (ngSubmit)="saveReportConfiguration()">
+                <label>
+                  Provisional Weight (%)
+                  <input type="number" min="0" max="100" step="0.01" formControlName="provisionalWeightPercent" />
+                </label>
+
+                <label>
+                  Tentative Weight (%)
+                  <input type="number" min="0" max="100" step="0.01" formControlName="tentativeWeightPercent" />
+                </label>
+
+                <label>
+                  Open Proposal Weight (%)
+                  <input type="number" min="0" max="100" step="0.01" formControlName="openProposalWeightPercent" />
+                </label>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates['report-configuration'].saving">
+                    {{ sectionStates['report-configuration'].saving ? 'Saving...' : 'Save Report Configuration' }}
+                  </button>
+                </div>
+              </form>
+            </section>
+          }
+
+          @if (activeSectionKey === 'automation') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Automation Settings</h3>
+              </header>
+
+              <form class="form-grid compact" [formGroup]="automationSettingsForm" (ngSubmit)="saveAutomationSettings()">
+                <label>
+                  Proposal Accepted Target Status
+                  <select formControlName="proposalAcceptedTargetStatus">
+                    @for (status of proposalAcceptedStatuses; track status) {
+                      <option [value]="status">{{ status }}</option>
+                    }
+                  </select>
+                </label>
+
+                <label>
+                  Follow-up Inactive Days
+                  <input type="number" min="1" max="30" formControlName="followUpInactiveDays" />
+                </label>
+
+                <label>
+                  Auto-Archive Days
+                  <input type="number" min="7" max="3650" formControlName="autoArchiveDays" />
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="autoArchiveEnabled" />
+                  <span>Enable Auto-Archive</span>
+                </label>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates.automation.saving">
+                    {{ sectionStates.automation.saving ? 'Saving...' : 'Save Automation Settings' }}
+                  </button>
+                </div>
+              </form>
+            </section>
+          }
+
+          @if (activeSectionKey === 'email-templates') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Email Templates</h3>
+              </header>
+
+              <form class="form-grid compact" [formGroup]="emailTemplateForm" (ngSubmit)="saveEmailTemplate()">
+                <label>
+                  Template Key
+                  <input type="text" formControlName="key" placeholder="proposal_sent" />
+                </label>
+
+                <label>
+                  Template Name
+                  <input type="text" formControlName="name" placeholder="Proposal Sent" />
+                </label>
+
+                <label class="full-width">
+                  Subject Template
+                  <input type="text" formControlName="subjectTemplate" placeholder="Your proposal for {event_name}" />
+                </label>
+
+                <label class="full-width">
+                  HTML Body Template
+                  <textarea rows="5" formControlName="bodyHtmlTemplate"></textarea>
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="isActive" />
+                  <span>Active</span>
+                </label>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates['email-templates'].saving">
+                    {{ sectionStates['email-templates'].saving ? 'Saving...' : 'Save Template' }}
+                  </button>
+                </div>
+              </form>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Key</th>
+                      <th>Name</th>
+                      <th>Subject</th>
+                      <th>Active</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (template of emailTemplates; track template.key) {
+                      <tr>
+                        <td>{{ template.key }}</td>
+                        <td>{{ template.name }}</td>
+                        <td>{{ template.subjectTemplate }}</td>
+                        <td>{{ template.isActive ? 'Yes' : 'No' }}</td>
+                        <td>
+                          <button type="button" class="link danger" (click)="deleteEmailTemplate(template.key)">Delete</button>
+                        </td>
+                      </tr>
+                    }
+                    @if (emailTemplates.length === 0) {
+                      <tr>
+                        <td colspan="5" class="empty-row">No email templates configured yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
+          @if (activeSectionKey === 'website-forms') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Website Forms</h3>
+              </header>
+
+              <form class="form-grid compact" [formGroup]="websiteFormForm" (ngSubmit)="saveWebsiteForm()">
+                <label>
+                  Form Name
+                  <input type="text" formControlName="name" placeholder="Wedding Enquiry Form" />
+                </label>
+
+                <label>
+                  Slug
+                  <input type="text" formControlName="slug" placeholder="weddings" />
+                </label>
+
+                <label class="full-width">
+                  Success Message
+                  <input type="text" formControlName="successMessage" />
+                </label>
+
+                <label>
+                  Redirect URL
+                  <input type="url" formControlName="redirectUrl" />
+                </label>
+
+                <label>
+                  Required Fields (CSV)
+                  <input type="text" formControlName="requiredFieldsCsv" />
+                </label>
+
+                <label class="full-width">
+                  Optional Fields (CSV)
+                  <input type="text" formControlName="optionalFieldsCsv" />
+                </label>
+
+                <label class="full-width">
+                  Style JSON
+                  <textarea rows="3" formControlName="styleJson"></textarea>
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="isActive" />
+                  <span>Active</span>
+                </label>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates['website-forms'].saving">
+                    {{ sectionStates['website-forms'].saving ? 'Saving...' : 'Save Website Form' }}
+                  </button>
+                </div>
+              </form>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Slug</th>
+                      <th>Active</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (form of websiteForms; track form.id) {
+                      <tr>
+                        <td>{{ form.name }}</td>
+                        <td>{{ form.slug }}</td>
+                        <td>{{ form.isActive ? 'Yes' : 'No' }}</td>
+                        <td>
+                          <button type="button" class="link" (click)="editWebsiteForm(form)">Edit</button>
+                          <button type="button" class="link danger" (click)="deleteWebsiteForm(form.id)">Delete</button>
+                        </td>
+                      </tr>
+                    }
+                    @if (websiteForms.length === 0) {
+                      <tr>
+                        <td colspan="4" class="empty-row">No website forms configured yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
+          @if (activeSectionKey === 'calendar-accounts') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Calendar Accounts</h3>
+              </header>
+
+              <form class="form-grid compact" [formGroup]="calendarAccountForm" (ngSubmit)="saveCalendarAccount()">
+                <label>
+                  Account Address
+                  <input type="email" formControlName="address" />
+                </label>
+
+                <label>
+                  Provider
+                  <input type="text" formControlName="provider" />
+                </label>
+
+                <label>
+                  External Calendar ID
+                  <input type="text" formControlName="externalCalendarId" />
+                </label>
+
+                <label>
+                  Connection Status
+                  <input type="text" formControlName="connectionStatus" />
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="isActive" />
+                  <span>Active</span>
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="syncProvisionalHolds" />
+                  <span>Sync provisional holds</span>
+                </label>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates['calendar-accounts'].saving">
+                    {{ sectionStates['calendar-accounts'].saving ? 'Saving...' : 'Save Calendar Account' }}
+                  </button>
+                </div>
+              </form>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Address</th>
+                      <th>Provider</th>
+                      <th>Status</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (account of calendarAccounts; track account.id) {
+                      <tr>
+                        <td>{{ account.address }}</td>
+                        <td>{{ account.provider }}</td>
+                        <td>{{ account.connectionStatus }}</td>
+                        <td>
+                          <button type="button" class="link" (click)="editCalendarAccount(account)">Edit</button>
+                          <button type="button" class="link danger" (click)="deleteCalendarAccount(account.id)">Delete</button>
+                        </td>
+                      </tr>
+                    }
+                    @if (calendarAccounts.length === 0) {
+                      <tr>
+                        <td colspan="4" class="empty-row">No calendar accounts configured yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
+          @if (activeSectionKey === 'task-templates') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Task Templates</h3>
+              </header>
+
+              <form class="form-grid compact" [formGroup]="taskTemplateForm" (ngSubmit)="saveTaskTemplate()">
+                <label>
+                  Template Name
+                  <input type="text" formControlName="name" />
+                </label>
+
+                <label>
+                  Event Type
+                  <input type="text" formControlName="eventType" />
+                </label>
+
+                <label>
+                  Trigger Status
+                  <input type="text" formControlName="triggerStatus" />
+                </label>
+
+                <label>
+                  Task Title
+                  <input type="text" formControlName="itemTitle" />
+                </label>
+
+                <label>
+                  Priority
+                  <input type="text" formControlName="itemPriority" />
+                </label>
+
+                <label>
+                  Due Rule
+                  <input type="text" formControlName="itemDueDateRule" />
+                </label>
+
+                <label>
+                  Due Offset Days
+                  <input type="number" min="0" formControlName="itemDueOffsetDays" />
+                </label>
+
+                <label class="full-width">
+                  Description
+                  <textarea rows="2" formControlName="itemDescription"></textarea>
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="assignToEventManager" />
+                  <span>Assign to event manager</span>
+                </label>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates['task-templates'].saving">
+                    {{ sectionStates['task-templates'].saving ? 'Saving...' : 'Save Task Template' }}
+                  </button>
+                </div>
+              </form>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Event Type</th>
+                      <th>Trigger</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (template of taskTemplates; track template.id) {
+                      <tr>
+                        <td>{{ template.name }}</td>
+                        <td>{{ template.eventType }}</td>
+                        <td>{{ template.triggerStatus }}</td>
+                        <td>
+                          <button type="button" class="link" (click)="editTaskTemplate(template)">Edit</button>
+                          <button type="button" class="link danger" (click)="deleteTaskTemplate(template.id)">Delete</button>
+                        </td>
+                      </tr>
+                    }
+                    @if (taskTemplates.length === 0) {
+                      <tr>
+                        <td colspan="4" class="empty-row">No task templates configured yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
+          @if (activeSectionKey === 'report-schedules') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Report Schedules</h3>
+              </header>
+
+              <form class="form-grid compact" [formGroup]="reportScheduleForm" (ngSubmit)="saveReportSchedule()">
+                <label>
+                  Name
+                  <input type="text" formControlName="name" />
+                </label>
+
+                <label>
+                  Report Key
+                  <input type="text" formControlName="reportKey" />
+                </label>
+
+                <label>
+                  Frequency
+                  <input type="text" formControlName="frequency" placeholder="daily/weekly/monthly" />
+                </label>
+
+                <label class="full-width">
+                  Recipients (CSV)
+                  <input type="text" formControlName="recipientsCsv" placeholder="ops@venue.co.uk,finance@venue.co.uk" />
+                </label>
+
+                <label>
+                  Next Run UTC
+                  <input type="datetime-local" formControlName="nextRunAtUtc" />
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="isActive" />
+                  <span>Active</span>
+                </label>
+
+                <label class="full-width">
+                  Filters JSON
+                  <textarea rows="3" formControlName="filtersJson"></textarea>
+                </label>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates['report-schedules'].saving">
+                    {{ sectionStates['report-schedules'].saving ? 'Saving...' : 'Save Report Schedule' }}
+                  </button>
+                </div>
+              </form>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Report</th>
+                      <th>Frequency</th>
+                      <th>Active</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (schedule of reportSchedules; track schedule.id) {
+                      <tr>
+                        <td>{{ schedule.name }}</td>
+                        <td>{{ schedule.reportKey }}</td>
+                        <td>{{ schedule.frequency }}</td>
+                        <td>{{ schedule.isActive ? 'Yes' : 'No' }}</td>
+                        <td>
+                          <button type="button" class="link" (click)="editReportSchedule(schedule)">Edit</button>
+                          <button type="button" class="link danger" (click)="deleteReportScheduleItem(schedule.id)">Delete</button>
+                        </td>
+                      </tr>
+                    }
+                    @if (reportSchedules.length === 0) {
+                      <tr>
+                        <td colspan="5" class="empty-row">No report schedules configured yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
+          @if (activeSectionKey === 'email-accounts') {
+            <section class="two-column">
+              <article class="card">
+                <header class="card-header">
+                  <h3>Connected Email Accounts</h3>
+                </header>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Address</th>
+                        <th>Provider</th>
+                        <th>Status</th>
+                        <th>Outbound</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (account of emailAccounts; track account.id) {
+                        <tr>
+                          <td>{{ account.address }}</td>
+                          <td>{{ account.provider }}</td>
+                          <td>{{ account.connectionStatus }}</td>
+                          <td>{{ account.useForOutbound ? 'Yes' : 'No' }}</td>
+                          <td>
+                            <button type="button" class="link" (click)="editEmailAccount(account)">Edit</button>
+                            <button type="button" class="link danger" (click)="deleteEmailAccount(account.id)">Delete</button>
+                          </td>
+                        </tr>
+                      }
+                      @if (emailAccounts.length === 0) {
+                        <tr>
+                          <td colspan="5" class="empty-row">No email accounts configured yet.</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article class="card">
+                <header class="card-header">
+                  <h3>{{ editingEmailAccountId ? 'Edit Email Account' : 'Add Email Account' }}</h3>
+                  <button type="button" class="ghost" (click)="startNewEmailAccount()">New</button>
+                </header>
+
+                <form class="form-grid compact" [formGroup]="emailAccountForm" (ngSubmit)="saveEmailAccount()">
+                  <label>
+                    Address
+                    <input type="email" formControlName="address" />
+                  </label>
+
+                  <label>
+                    Provider
+                    <input type="text" formControlName="provider" />
+                  </label>
+
+                  <label class="full-width">
+                    External Reference
+                    <input type="text" formControlName="externalAccountReference" />
+                  </label>
+
+                  <label class="checkbox">
+                    <input type="checkbox" formControlName="isActive" />
+                    <span>Active</span>
+                  </label>
+
+                  <label class="checkbox">
+                    <input type="checkbox" formControlName="useForOutbound" />
+                    <span>Use for outbound</span>
+                  </label>
+
+                  <div class="actions full-width">
+                    <button type="submit" class="primary" [disabled]="sectionStates['email-accounts'].saving">
+                      {{ sectionStates['email-accounts'].saving ? 'Saving...' : (editingEmailAccountId ? 'Update Account' : 'Add Account') }}
+                    </button>
+                  </div>
+                </form>
+              </article>
+            </section>
+          }
+
+          @if (activeSectionKey === 'users') {
+            <section class="two-column users-layout">
+              <article class="card">
+                <header class="card-header">
+                  <h3>Invite User</h3>
+                </header>
+
+                <form class="form-grid compact" [formGroup]="inviteForm" (ngSubmit)="inviteUser()">
+                  <label>
+                    First Name
+                    <input type="text" formControlName="firstName" />
+                  </label>
+
+                  <label>
+                    Last Name
+                    <input type="text" formControlName="lastName" />
+                  </label>
+
+                  <label>
+                    Email
+                    <input type="email" formControlName="email" />
+                  </label>
+
+                  <label>
+                    Phone (optional)
+                    <input type="text" formControlName="phoneNumberE164" placeholder="+447700900111" />
+                  </label>
+
+                  <label>
+                    Role
+                    <select formControlName="role">
+                      @for (role of roleOptions; track role) {
+                        <option [value]="role">{{ role }}</option>
+                      }
+                    </select>
+                  </label>
+
+                  <label class="checkbox">
+                    <input type="checkbox" formControlName="requiresTotp" />
+                    <span>Require TOTP setup</span>
+                  </label>
+
+                  <div class="actions full-width">
+                    <button type="submit" class="primary" [disabled]="sectionStates.users.saving">
+                      {{ sectionStates.users.saving ? 'Sending...' : 'Send Invitation' }}
+                    </button>
+                  </div>
+
+                  @if (inviteDebugToken) {
+                    <p class="hint full-width">
+                      Dev invite token: <code>{{ inviteDebugToken }}</code>
+                    </p>
+                  }
+                </form>
+              </article>
+
+              <article class="card">
+                <header class="card-header">
+                  <h3>Users for Selected Venue</h3>
+                </header>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (user of users; track user.id) {
+                        <tr>
+                          <td>{{ user.firstName }} {{ user.lastName }}</td>
+                          <td>{{ user.email }}</td>
+                          <td>{{ getUserRoleForSelectedVenue(user) }}</td>
+                          <td>{{ user.isActive ? 'Active' : 'Inactive' }}</td>
+                          <td>
+                            @if (user.isActive) {
+                              <button type="button" class="link danger" (click)="toggleUserActive(user, false)">Deactivate</button>
+                            } @else {
+                              <button type="button" class="link" (click)="toggleUserActive(user, true)">Activate</button>
+                            }
+                          </td>
+                        </tr>
+                      }
+                      @if (users.length === 0) {
+                        <tr>
+                          <td colspan="5" class="empty-row">No users assigned to this venue.</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+            </section>
+
+            <section class="card">
+              <header class="card-header">
+                <h3>Recent User Activity</h3>
+              </header>
+
+              <ul class="activity-list">
+                @for (entry of userActivity; track entry.id) {
+                  <li>
+                    <div>
+                      <strong>{{ entry.actionType }}</strong>
+                      <small>{{ entry.entityType }} · {{ entry.entityId }}</small>
+                    </div>
+                    <span>{{ entry.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</span>
+                  </li>
+                }
+                @if (userActivity.length === 0) {
+                  <li class="empty-row">No recent activity available.</li>
+                }
+              </ul>
+            </section>
+          }
+        }
+      }
+    </section>
+  </section>
+</section>

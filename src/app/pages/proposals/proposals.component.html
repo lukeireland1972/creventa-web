@@ -1,0 +1,425 @@
+<section class="page-header">
+  <div>
+    <h1>Proposal Maker</h1>
+    <p>Create, version, price, and send branded proposals from a single workflow.</p>
+  </div>
+  <div class="header-actions">
+    <button type="button" class="btn-primary" (click)="openBuilderForCreate()">Create New Proposal</button>
+    @if (selectedProposalCanEdit) {
+      <button type="button" class="btn-secondary" (click)="openBuilderForEdit()">Edit Draft</button>
+    }
+    @if (listResponse; as list) {
+      <span class="count-pill">{{ list.page.totalCount }} total</span>
+    }
+  </div>
+</section>
+
+@if (isBuilderOpen) {
+  <section class="builder-panel">
+    <header>
+      <div>
+        <h2>{{ builderMode === 'edit' ? 'Edit Proposal Draft' : 'Create Proposal' }}</h2>
+        <p>Build line items, VAT, terms, validity, and send to the client portal.</p>
+      </div>
+      <button type="button" class="btn-close" (click)="closeBuilder()">Close</button>
+    </header>
+
+    @if (builderError) {
+      <p class="builder-message error">{{ builderError }}</p>
+    }
+
+    @if (builderNotice) {
+      <p class="builder-message info">{{ builderNotice }}</p>
+    }
+
+    <form class="builder-form" [formGroup]="builderForm" (ngSubmit)="saveBuilder(false)">
+      <div class="builder-meta-grid">
+        <label>
+          <span>Enquiry</span>
+          <select formControlName="enquiryId">
+            <option value="">Select enquiry</option>
+            @for (enquiry of enquiryOptions; track trackByEnquiryId($index, enquiry)) {
+              <option [value]="enquiry.id">{{ getEnquiryLabel(enquiry) }}</option>
+            }
+          </select>
+        </label>
+
+        <label>
+          <span>Template</span>
+          <select formControlName="templateKey">
+            <option value="">No template</option>
+            @for (template of templateOptions; track trackByTemplateKey($index, template)) {
+              <option [value]="template.key">{{ template.label }} ({{ template.eventType }})</option>
+            }
+          </select>
+        </label>
+
+        <label>
+          <span>Title</span>
+          <input type="text" formControlName="title" placeholder="Proposal title" />
+        </label>
+
+        <label>
+          <span>Valid Until</span>
+          <input type="date" formControlName="validUntilDate" />
+        </label>
+
+        <label>
+          <span>Terms Version</span>
+          <select formControlName="termsVersion">
+            <option value="">Select terms</option>
+            @for (doc of termsDocuments; track doc) {
+              <option [value]="doc.version">{{ doc.title }} · {{ doc.version }}</option>
+            }
+          </select>
+        </label>
+
+        <label>
+          <span>Currency</span>
+          <input type="text" formControlName="currencyCode" maxlength="8" />
+        </label>
+
+        <label>
+          <span>Service Charge %</span>
+          <input type="number" min="0" max="100" step="0.01" formControlName="serviceChargePercent" />
+        </label>
+      </div>
+
+      <label class="full-width">
+        <span>Introduction</span>
+        <textarea formControlName="introduction" rows="3" placeholder="Welcome message shown in proposal section"></textarea>
+      </label>
+
+      <section class="line-editor" formArrayName="lineItems">
+        <header>
+          <h3>Pricing Line Items</h3>
+          <button type="button" class="btn-secondary" (click)="addLineItem()">Add Line Item</button>
+        </header>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Description</th>
+              <th>Qty</th>
+              <th>Unit</th>
+              <th>Unit Price (ex VAT)</th>
+              <th>VAT %</th>
+              <th>Discount %</th>
+              <th>Discount Amt</th>
+              <th>Subtotal</th>
+              <th>VAT</th>
+              <th>Total</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (lineControl of lineItemControls; track lineControl; let i = $index) {
+              <tr [formGroupName]="i">
+                <td>
+                  <select formControlName="category">
+                    <option value="Room Hire">Room Hire</option>
+                    <option value="Food & Beverage">Food &amp; Beverage</option>
+                    <option value="Equipment">Equipment</option>
+                    <option value="Entertainment">Entertainment</option>
+                    <option value="Staffing">Staffing</option>
+                    <option value="Accommodation">Accommodation</option>
+                    <option value="Miscellaneous">Miscellaneous</option>
+                  </select>
+                </td>
+                <td><input type="text" formControlName="description" placeholder="Description" /></td>
+                <td><input type="number" min="0.01" step="0.01" formControlName="quantity" /></td>
+                <td>
+                  <select formControlName="unit">
+                    <option value="Per person">Per person</option>
+                    <option value="Per item">Per item</option>
+                    <option value="Per hour">Per hour</option>
+                    <option value="Flat rate">Flat rate</option>
+                  </select>
+                </td>
+                <td><input type="number" min="0" step="0.01" formControlName="unitPriceExclVat" /></td>
+                <td>
+                  <select formControlName="vatRate">
+                    <option [value]="20">20</option>
+                    <option [value]="5">5</option>
+                    <option [value]="0">0</option>
+                  </select>
+                </td>
+                <td><input type="number" min="0" max="100" step="0.01" formControlName="discountPercent" /></td>
+                <td><input type="number" min="0" step="0.01" formControlName="discountAmount" /></td>
+                <td>{{ lineSubtotal(i) | number: '1.2-2' }}</td>
+                <td>{{ lineVat(i) | number: '1.2-2' }}</td>
+                <td>{{ lineTotal(i) | number: '1.2-2' }}</td>
+                <td>
+                  <button type="button" class="btn-link" (click)="removeLineItem(i)">Remove</button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </section>
+
+      <section class="totals-grid">
+        <article>
+          <span>Subtotal (ex VAT)</span>
+          <strong>{{ builderSubtotalExclVat | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
+        </article>
+        <article>
+          <span>Service Charge</span>
+          <strong>{{ builderServiceChargeAmount | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
+        </article>
+        <article>
+          <span>Total VAT</span>
+          <strong>{{ builderTotalVat | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
+        </article>
+        <article>
+          <span>Total (inc VAT)</span>
+          <strong>{{ builderTotalInclVat | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
+        </article>
+      </section>
+
+      @if (builderVatBreakdown.length > 0) {
+        <section class="vat-breakdown">
+          <h4>VAT Breakdown</h4>
+          <div class="chips">
+            @for (vat of builderVatBreakdown; track vat) {
+              <span>VAT {{ vat.vatRate }}%: {{ vat.vatAmount | number: '1.2-2' }}</span>
+            }
+          </div>
+        </section>
+      }
+
+      <footer class="builder-actions">
+        <button type="submit" class="btn-secondary" [disabled]="builderSaving">
+          {{ builderSaving ? 'Saving…' : 'Save Draft' }}
+        </button>
+        <button type="button" class="btn-primary" [disabled]="builderSaving" (click)="saveBuilder(true)">
+          {{ builderSaving ? 'Saving…' : 'Save & Send' }}
+        </button>
+      </footer>
+    </form>
+  </section>
+}
+
+<form class="filters" [formGroup]="filtersForm">
+  <select formControlName="status">
+    @for (status of statusOptions; track status) {
+      <option [value]="status.value">{{ status.label }}</option>
+    }
+  </select>
+
+  <select formControlName="enquiryId">
+    <option value="">All enquiries</option>
+    @for (enquiry of enquiryOptions; track trackByEnquiryId($index, enquiry)) {
+      <option [value]="enquiry.id">{{ enquiry.reference }}</option>
+    }
+  </select>
+
+  <input type="text" formControlName="eventType" placeholder="Filter by event type (e.g. Wedding)" />
+
+  <select formControlName="sortBy">
+    <option value="createdAt">Sort by Created</option>
+    <option value="eventDate">Sort by Event Date</option>
+    <option value="value">Sort by Value</option>
+    <option value="status">Sort by Status</option>
+  </select>
+
+  <select formControlName="sortDirection">
+    <option value="desc">Newest first</option>
+    <option value="asc">Oldest first</option>
+  </select>
+
+  <select formControlName="pageSize">
+    <option [value]="10">10 per page</option>
+    <option [value]="25">25 per page</option>
+    <option [value]="50">50 per page</option>
+    <option [value]="100">100 per page</option>
+  </select>
+</form>
+
+@if (listResponse; as list) {
+  <section class="status-row">
+    @for (status of statusOptions; track status) {
+      <button
+        type="button"
+        (click)="setStatus(status.value)"
+        [class.active]="filtersForm.value.status === status.value"
+      >
+        <span>{{ status.label }}</span>
+        <em>{{ getStatusCount(status.value, list) }}</em>
+      </button>
+    }
+  </section>
+}
+
+@if (lastActionMessage) {
+  <p class="action-message">{{ lastActionMessage }}</p>
+}
+
+@if (!loadingList) {
+  <section class="layout">
+    <article class="list-panel">
+      <table>
+        <thead>
+          <tr>
+            <th>Version</th>
+            <th>Enquiry</th>
+            <th>Client</th>
+            <th>Event</th>
+            <th>Status</th>
+            <th>Value</th>
+            <th>Created</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (proposal of proposals; track proposal) {
+            <tr
+              (click)="selectProposal(proposal.id)"
+              [class.selected]="proposal.id === selectedProposalId"
+            >
+              <td>
+                <div class="cell-main">{{ proposal.version }}</div>
+                <div class="cell-sub">{{ proposal.enquiryReference }}</div>
+              </td>
+              <td>
+                <a class="enquiry-link" href="" (click)="openEnquiry(proposal.enquiryId, $event)">
+                  {{ proposal.enquiryReference }}
+                </a>
+              </td>
+              <td>{{ proposal.clientName }}</td>
+              <td>
+                <div class="cell-main">{{ proposal.eventType }}</div>
+                <div class="cell-sub">{{ proposal.eventStartUtc | date: 'dd/MM/yyyy HH:mm' }}</div>
+              </td>
+              <td>
+                <span class="status" [attr.data-status]="statusToken(proposal.status)">
+                  {{ proposal.status }}
+                </span>
+              </td>
+              <td>{{ proposal.totalAmount | number: '1.2-2' }} {{ proposal.currencyCode }}</td>
+              <td>{{ proposal.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+
+      @if (proposals.length === 0) {
+        <p class="empty">No proposals match the current filters.</p>
+      }
+    </article>
+
+    @if (selectedProposal; as proposal) {
+      <aside class="detail-panel">
+        @if (!loadingDetail) {
+          <header>
+            <div>
+              <h2>{{ proposal.title || (proposal.enquiryReference + ' ' + proposal.version) }}</h2>
+              <p>{{ proposal.clientName }} · {{ proposal.eventType }}</p>
+            </div>
+            <span class="status" [attr.data-status]="statusToken(proposal.status)">
+              {{ proposal.status }}
+            </span>
+          </header>
+
+          <section class="summary-grid">
+            <p><strong>Reference:</strong> {{ proposal.enquiryReference }}</p>
+            <p><strong>Version:</strong> {{ proposal.version }}</p>
+            <p><strong>Total:</strong> {{ proposal.totalAmount | number: '1.2-2' }} {{ proposal.currencyCode }}</p>
+            <p><strong>Valid Until:</strong> {{ proposal.validUntilDate || 'Not set' }}</p>
+            <p><strong>Terms:</strong> {{ proposal.termsVersion }}</p>
+            <p><strong>Sent:</strong> {{ proposal.sentAtUtc ? (proposal.sentAtUtc | date: 'dd/MM/yyyy HH:mm') : 'Not sent' }}</p>
+            <p><strong>Viewed:</strong> {{ proposal.lastViewedAtUtc ? (proposal.lastViewedAtUtc | date: 'dd/MM/yyyy HH:mm') : 'Not viewed' }}</p>
+            <p><strong>Accepted:</strong> {{ proposal.acceptedAtUtc ? (proposal.acceptedAtUtc | date: 'dd/MM/yyyy HH:mm') : 'Not accepted' }}</p>
+          </section>
+
+          <section class="actions">
+            <button type="button" (click)="sendSelectedProposal()">Send to Client</button>
+            <button type="button" (click)="duplicateSelectedProposal()">Duplicate</button>
+            @if (selectedProposalCanEdit) {
+              <button type="button" (click)="openBuilderForEdit()">Edit Draft</button>
+            }
+          </section>
+
+          <section class="line-items">
+            <h3>Line Items</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Description</th>
+                  <th>Qty</th>
+                  <th>Unit</th>
+                  <th>Unit Price</th>
+                  <th>Discount</th>
+                  <th>VAT</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (line of proposal.lineItems; track line) {
+                  <tr>
+                    <td>{{ line.category }}</td>
+                    <td>{{ line.description }}</td>
+                    <td>{{ line.quantity }}</td>
+                    <td>{{ line.unit }}</td>
+                    <td>{{ line.unitPriceExclVat | number: '1.2-2' }}</td>
+                    <td>{{ line.discountPercent }}% + {{ line.discountAmount | number: '1.2-2' }}</td>
+                    <td>{{ line.vatRate }}%</td>
+                    <td>{{ line.totalInclVat | number: '1.2-2' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </section>
+
+          <section class="versions">
+            <h3>Version Comparison</h3>
+            <div class="compare-controls">
+              <select [(ngModel)]="compareWithProposalId" [ngModelOptions]="{ standalone: true }">
+                <option value="">Select version to compare</option>
+                @for (version of proposal.versions; track version) {
+                  @if (version.id !== proposal.id) {
+                    <option [value]="version.id">
+                      {{ version.version }} · {{ version.status }} · {{ version.totalAmount | number: '1.2-2' }}
+                    </option>
+                  }
+                }
+              </select>
+              <button type="button" (click)="compareSelectedProposal()">Compare</button>
+            </div>
+
+            @if (comparison; as diff) {
+              <div class="comparison-summary">
+                <p><strong>Left total:</strong> {{ diff.leftTotal | number: '1.2-2' }}</p>
+                <p><strong>Right total:</strong> {{ diff.rightTotal | number: '1.2-2' }}</p>
+                <p><strong>Delta:</strong> {{ diff.totalDelta | number: '1.2-2' }}</p>
+              </div>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Description</th>
+                    <th>Change Type</th>
+                    <th>Delta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (line of diff.lineDeltas; track line) {
+                    <tr>
+                      <td>{{ line.description }}</td>
+                      <td>{{ line.changeType }}</td>
+                      <td>{{ line.delta | number: '1.2-2' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
+          </section>
+        } @else {
+          <p class="loading">Loading proposal details...</p>
+        }
+      </aside>
+    }
+  </section>
+} @else {
+  <section class="loading">Loading proposals...</section>
+}

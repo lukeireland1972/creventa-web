@@ -1,0 +1,415 @@
+import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import {
+  ApiService,
+  UpdateVenueProfileRequest,
+  UserSummaryDto,
+  VenueProfileDto,
+  VenueSummaryDto
+} from '../../services/api.service';
+import { AuthService } from '../../services/auth.service';
+
+type HoldAutoReleaseMode = 'NotifyOnly' | 'AutoReleaseNotifyOperator' | 'AutoReleaseNotifyBoth';
+
+interface InviteFormModel {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumberE164: string;
+  role: string;
+  requiresTotp: boolean;
+}
+
+@Component({
+  selector: 'app-admin',
+  standalone: true,
+  imports: [FormsModule],
+  templateUrl: './admin.component.html',
+  styleUrl: './admin.component.scss'
+})
+export class AdminComponent implements OnInit {
+  private api = inject(ApiService);
+  private auth = inject(AuthService);
+  private router = inject(Router);
+  private destroyRef = inject(DestroyRef);
+
+  readonly roleOptions = [
+    'GroupAdmin',
+    'VenueAdmin',
+    'SalesManager',
+    'EventsCoordinator',
+    'Finance',
+    'Operations',
+    'ReadOnly'
+  ];
+
+  readonly holdAutoReleaseModes: HoldAutoReleaseMode[] = [
+    'NotifyOnly',
+    'AutoReleaseNotifyOperator',
+    'AutoReleaseNotifyBoth'
+  ];
+
+  venues: VenueSummaryDto[] = [];
+  selectedVenueId: string | null = null;
+  venueDraft: UpdateVenueProfileRequest | null = null;
+  users: UserSummaryDto[] = [];
+
+  loadingVenues = false;
+  loadingVenueProfile = false;
+  loadingUsers = false;
+  savingVenue = false;
+  invitingUser = false;
+  updatingUser = false;
+
+  pageError = '';
+  venueMessage = '';
+  userMessage = '';
+
+  inviteForm: InviteFormModel = this.createDefaultInviteForm();
+  inviteDebugToken = '';
+
+  ngOnInit(): void {
+    if (this.auth.isOperationsOnly()) {
+      this.router.navigateByUrl('/operations');
+      return;
+    }
+
+    this.loadVenues();
+  }
+
+  onVenueSelectionChanged(venueId: string): void {
+    if (!venueId) {
+      return;
+    }
+
+    this.selectedVenueId = venueId;
+    this.auth.setSelectedVenue(venueId);
+    this.venueMessage = '';
+    this.userMessage = '';
+    this.inviteDebugToken = '';
+
+    this.loadVenueProfile();
+    this.loadUsers();
+  }
+
+  saveVenue(): void {
+    const venueId = this.selectedVenueId;
+    const draft = this.venueDraft;
+    if (!venueId || !draft) {
+      return;
+    }
+
+    if (!draft.name.trim()) {
+      this.venueMessage = 'Venue name is required.';
+      return;
+    }
+
+    if (!draft.currencyCode.trim() || !draft.countryCode.trim() || !draft.timeZone.trim() || !draft.locale.trim()) {
+      this.venueMessage = 'Country, currency, time zone, and locale are required.';
+      return;
+    }
+
+    this.savingVenue = true;
+    this.venueMessage = '';
+
+    const payload: UpdateVenueProfileRequest = {
+      ...draft,
+      name: draft.name.trim(),
+      legalEntityName: this.normalizeOptionalText(draft.legalEntityName),
+      addressLine1: this.normalizeOptionalText(draft.addressLine1),
+      addressLine2: this.normalizeOptionalText(draft.addressLine2),
+      city: this.normalizeOptionalText(draft.city),
+      region: this.normalizeOptionalText(draft.region),
+      postcode: this.normalizeOptionalText(draft.postcode),
+      countryCode: draft.countryCode.trim().toUpperCase(),
+      phoneNumberE164: this.normalizeOptionalText(draft.phoneNumberE164),
+      enquiriesEmail: this.normalizeOptionalText(draft.enquiriesEmail),
+      websiteUrl: this.normalizeOptionalText(draft.websiteUrl),
+      vatNumber: this.normalizeOptionalText(draft.vatNumber),
+      companyRegistrationNumber: this.normalizeOptionalText(draft.companyRegistrationNumber),
+      logoUrl: this.normalizeOptionalText(draft.logoUrl),
+      description: this.normalizeOptionalText(draft.description),
+      cancellationPolicy: this.normalizeOptionalText(draft.cancellationPolicy),
+      currencyCode: draft.currencyCode.trim().toUpperCase(),
+      timeZone: draft.timeZone.trim(),
+      locale: draft.locale.trim(),
+      defaultVatRate: this.sanitizeNumber(draft.defaultVatRate, 0),
+      minimumBookingNoticeDays: this.sanitizeInteger(draft.minimumBookingNoticeDays, 0),
+      defaultHoldPeriodDays: this.sanitizeInteger(draft.defaultHoldPeriodDays, 7, 1),
+      holdWarningDays: this.sanitizeInteger(draft.holdWarningDays, 2, 0),
+      holdAutoReleaseMode: this.normalizeHoldMode(draft.holdAutoReleaseMode),
+      maxHoldsPerDateAndSpace: this.sanitizeInteger(draft.maxHoldsPerDateAndSpace, 1, 1)
+    };
+
+    this.api
+      .updateVenueProfile(venueId, payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (profile) => {
+          this.venueDraft = this.mapVenueProfileToDraft(profile);
+          this.venueMessage = 'Venue details saved.';
+          this.savingVenue = false;
+          this.loadVenues();
+        },
+        error: (error) => {
+          this.venueMessage = this.resolveError(error, 'Unable to save venue details.');
+          this.savingVenue = false;
+        }
+      });
+  }
+
+  sendInvite(): void {
+    const venueId = this.selectedVenueId;
+    if (!venueId) {
+      this.userMessage = 'Select a venue first.';
+      return;
+    }
+
+    const payload = {
+      firstName: this.inviteForm.firstName.trim(),
+      lastName: this.inviteForm.lastName.trim(),
+      email: this.inviteForm.email.trim().toLowerCase(),
+      phoneNumberE164: this.normalizeOptionalText(this.inviteForm.phoneNumberE164),
+      role: this.inviteForm.role,
+      requiresTotp: this.inviteForm.requiresTotp
+    };
+
+    if (!payload.firstName || !payload.lastName || !payload.email || !payload.role) {
+      this.userMessage = 'First name, last name, email, and role are required.';
+      return;
+    }
+
+    this.invitingUser = true;
+    this.userMessage = '';
+    this.inviteDebugToken = '';
+
+    this.api
+      .inviteUser({
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        email: payload.email,
+        phoneNumberE164: payload.phoneNumberE164,
+        requiresTotp: payload.requiresTotp,
+        venueRoles: [{ venueId, role: payload.role }]
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.userMessage = `Invitation sent to ${response.email}.`;
+          this.inviteDebugToken = response.debugToken ?? '';
+          this.invitingUser = false;
+          this.inviteForm = this.createDefaultInviteForm();
+          this.loadUsers();
+        },
+        error: (error) => {
+          this.userMessage = this.resolveError(error, 'Unable to invite user.');
+          this.invitingUser = false;
+        }
+      });
+  }
+
+  setUserActive(user: UserSummaryDto, isActive: boolean): void {
+    this.updatingUser = true;
+    this.userMessage = '';
+
+    this.api
+      .updateUserStatus(user.id, isActive)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.userMessage = `${user.firstName} ${user.lastName} ${isActive ? 'activated' : 'deactivated'}.`;
+          this.updatingUser = false;
+          this.loadUsers();
+        },
+        error: (error) => {
+          this.userMessage = this.resolveError(error, 'Unable to update user status.');
+          this.updatingUser = false;
+        }
+      });
+  }
+
+  roleForSelectedVenue(user: UserSummaryDto): string {
+    const venueId = this.selectedVenueId;
+    if (!venueId) {
+      return 'N/A';
+    }
+
+    return user.venueRoles.find((role) => role.venueId === venueId)?.role ?? 'N/A';
+  }
+
+  private loadVenues(): void {
+    this.loadingVenues = true;
+    this.pageError = '';
+
+    this.api
+      .getVenues()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (venues) => {
+          this.venues = venues;
+          this.loadingVenues = false;
+
+          if (venues.length === 0) {
+            this.selectedVenueId = null;
+            this.venueDraft = null;
+            this.users = [];
+            this.pageError = 'No venues are available for your account.';
+            return;
+          }
+
+          const preferredVenueId = this.auth.selectedVenueId;
+          const initialVenueId = venues.some((venue) => venue.id === preferredVenueId) ? preferredVenueId : venues[0].id;
+          if (!initialVenueId) {
+            this.pageError = 'Unable to determine active venue.';
+            return;
+          }
+
+          this.onVenueSelectionChanged(initialVenueId);
+        },
+        error: (error) => {
+          this.loadingVenues = false;
+          this.pageError = this.resolveError(error, 'Unable to load venues.');
+        }
+      });
+  }
+
+  private loadVenueProfile(): void {
+    const venueId = this.selectedVenueId;
+    if (!venueId) {
+      this.venueDraft = null;
+      return;
+    }
+
+    this.loadingVenueProfile = true;
+    this.venueMessage = '';
+
+    this.api
+      .getVenueProfile(venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (profile) => {
+          this.venueDraft = this.mapVenueProfileToDraft(profile);
+          this.loadingVenueProfile = false;
+        },
+        error: (error) => {
+          this.loadingVenueProfile = false;
+          this.venueMessage = this.resolveError(error, 'Unable to load venue details.');
+        }
+      });
+  }
+
+  private loadUsers(): void {
+    const venueId = this.selectedVenueId;
+    if (!venueId) {
+      this.users = [];
+      return;
+    }
+
+    this.loadingUsers = true;
+    this.userMessage = '';
+
+    this.api
+      .getUsers(venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (users) => {
+          this.users = users;
+          this.loadingUsers = false;
+        },
+        error: (error) => {
+          this.loadingUsers = false;
+          this.userMessage = this.resolveError(error, 'Unable to load users.');
+        }
+      });
+  }
+
+  private mapVenueProfileToDraft(profile: VenueProfileDto): UpdateVenueProfileRequest {
+    return {
+      name: profile.name,
+      legalEntityName: profile.legalEntityName ?? '',
+      addressLine1: profile.addressLine1 ?? '',
+      addressLine2: profile.addressLine2 ?? '',
+      city: profile.city ?? '',
+      region: profile.region ?? '',
+      postcode: profile.postcode ?? '',
+      countryCode: profile.countryCode || 'GB',
+      phoneNumberE164: profile.phoneNumberE164 ?? '',
+      enquiriesEmail: profile.enquiriesEmail ?? '',
+      websiteUrl: profile.websiteUrl ?? '',
+      vatNumber: profile.vatNumber ?? '',
+      companyRegistrationNumber: profile.companyRegistrationNumber ?? '',
+      logoUrl: profile.logoUrl ?? '',
+      description: profile.description ?? '',
+      cancellationPolicy: profile.cancellationPolicy ?? '',
+      currencyCode: profile.currencyCode || 'GBP',
+      defaultVatRate: profile.defaultVatRate,
+      timeZone: profile.timeZone || 'Europe/London',
+      locale: profile.locale || 'en-GB',
+      minimumBookingNoticeDays: profile.minimumBookingNoticeDays,
+      defaultHoldPeriodDays: profile.defaultHoldPeriodDays,
+      holdWarningDays: profile.holdWarningDays,
+      holdAutoReleaseMode: this.normalizeHoldMode(profile.holdAutoReleaseMode),
+      maxHoldsPerDateAndSpace: profile.maxHoldsPerDateAndSpace
+    };
+  }
+
+  private createDefaultInviteForm(): InviteFormModel {
+    return {
+      firstName: '',
+      lastName: '',
+      email: '',
+      phoneNumberE164: '',
+      role: 'EventsCoordinator',
+      requiresTotp: false
+    };
+  }
+
+  private normalizeOptionalText(value: string | null | undefined): string | null {
+    if (!value) {
+      return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  private sanitizeNumber(value: number, fallback: number): number {
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  private sanitizeInteger(value: number, fallback: number, minValue = Number.MIN_SAFE_INTEGER): number {
+    const normalized = Number.isFinite(value) ? Math.round(value) : fallback;
+    return normalized < minValue ? minValue : normalized;
+  }
+
+  private normalizeHoldMode(value: string): HoldAutoReleaseMode {
+    switch (value) {
+      case 'AutoReleaseNotifyOperator':
+      case 'AutoReleaseNotifyBoth':
+        return value;
+      default:
+        return 'NotifyOnly';
+    }
+  }
+
+  private resolveError(error: unknown, fallback: string): string {
+    if (typeof error === 'object' && error !== null) {
+      const maybeError = error as { error?: { message?: string } | string; message?: string };
+      if (typeof maybeError.error === 'string' && maybeError.error.trim()) {
+        return maybeError.error;
+      }
+
+      if (typeof maybeError.error === 'object' && maybeError.error && typeof maybeError.error.message === 'string') {
+        return maybeError.error.message;
+      }
+
+      if (typeof maybeError.message === 'string' && maybeError.message.trim()) {
+        return maybeError.message;
+      }
+    }
+
+    return fallback;
+  }
+}

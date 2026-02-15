@@ -1,0 +1,74 @@
+/* Global design tokens aligned with Figma visual language. */
+:root {
+  --cf-bg: #f8fafc;
+  --cf-surface: #ffffff;
+  --cf-border: #e2e8f0;
+  --cf-border-soft: #f1f5f9;
+  --cf-text: #0f172a;
+  --cf-text-muted: #64748b;
+  --cf-primary: #2563eb;
+  --cf-primary-hover: #1d4ed8;
+  --cf-primary-soft: #eff6ff;
+  --cf-danger: #dc2626;
+  --cf-warning: #d97706;
+  --cf-success: #16a34a;
+  --cf-radius-xl: 16px;
+  --cf-radius-2xl: 20px;
+  --cf-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --cf-shadow-md: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--cf-bg);
+  color: var(--cf-text);
+  font-family: 'Inter', 'Avenir Next', 'Segoe UI', sans-serif;
+  font-weight: 100;
+  line-height: 1.4;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button:not(:disabled),
+a {
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+::selection {
+  background: rgba(37, 99, 235, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
