@@ -6,12 +6,12 @@
     <form [formGroup]="form" (ngSubmit)="submit()">
       <label>
         Tenant subdomain
-        <input type="text" formControlName="tenantSubdomain" placeholder="grandhotel" />
+        <input type="text" formControlName="tenantSubdomain" placeholder="your-tenant" />
       </label>
 
       <label>
         Email
-        <input type="email" formControlName="email" placeholder="alice@grandhotel.co.uk" />
+        <input type="email" formControlName="email" placeholder="you@company.com" />
       </label>
 
       <label>
@@ -34,7 +34,5 @@
         {{ isSubmitting ? 'Signing in...' : requiresTotp ? 'Verify TOTP' : 'Sign in' }}
       </button>
     </form>
-
-    <small>Seed user: alice&#64;grandhotel.co.uk / Passw0rd!</small>
   </article>
 </section>

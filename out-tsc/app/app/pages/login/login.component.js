@@ -27,9 +27,9 @@ export class LoginComponent {
         this.errorMessage = '';
         this.requiresTotp = false;
         this.form = new FormBuilder().group({
-            tenantSubdomain: ['grandhotel', Validators.required],
-            email: ['alice@grandhotel.co.uk', [Validators.required, Validators.email]],
-            password: ['Passw0rd!', Validators.required],
+            tenantSubdomain: ['', Validators.required],
+            email: ['', [Validators.required, Validators.email]],
+            password: ['', Validators.required],
             totpCode: ['']
         });
     }
@@ -72,7 +72,7 @@ export class LoginComponent {
         });
     }
     static { this.ɵfac = function LoginComponent_Factory(__ngFactoryType__) { return new (__ngFactoryType__ || LoginComponent)(i0.ɵɵdirectiveInject(i1.AuthService), i0.ɵɵdirectiveInject(i2.Router)); }; }
-    static { this.ɵcmp = /*@__PURE__*/ i0.ɵɵdefineComponent({ type: LoginComponent, selectors: [["app-login"]], decls: 22, vars: 5, consts: [[1, "login-page"], [1, "login-card"], [3, "ngSubmit", "formGroup"], ["type", "text", "formControlName", "tenantSubdomain", "placeholder", "grandhotel"], ["type", "email", "formControlName", "email", "placeholder", "alice@grandhotel.co.uk"], ["type", "password", "formControlName", "password"], [1, "error"], ["type", "submit", 3, "disabled"], ["type", "text", "formControlName", "totpCode", "maxlength", "6", "placeholder", "123456"]], template: function LoginComponent_Template(rf, ctx) { if (rf & 1) {
+    static { this.ɵcmp = /*@__PURE__*/ i0.ɵɵdefineComponent({ type: LoginComponent, selectors: [["app-login"]], decls: 20, vars: 5, consts: [[1, "login-page"], [1, "login-card"], [3, "ngSubmit", "formGroup"], ["type", "text", "formControlName", "tenantSubdomain", "placeholder", "your-tenant"], ["type", "email", "formControlName", "email", "placeholder", "you@company.com"], ["type", "password", "formControlName", "password"], [1, "error"], ["type", "submit", 3, "disabled"], ["type", "text", "formControlName", "totpCode", "maxlength", "6", "placeholder", "123456"]], template: function LoginComponent_Template(rf, ctx) { if (rf & 1) {
             i0.ɵɵelementStart(0, "section", 0)(1, "article", 1)(2, "h1");
             i0.ɵɵtext(3, "CreventaFlow");
             i0.ɵɵelementEnd();
@@ -97,10 +97,7 @@ export class LoginComponent {
             i0.ɵɵconditionalCreate(17, LoginComponent_Conditional_17_Template, 2, 1, "p", 6);
             i0.ɵɵelementStart(18, "button", 7);
             i0.ɵɵtext(19);
-            i0.ɵɵelementEnd()();
-            i0.ɵɵelementStart(20, "small");
-            i0.ɵɵtext(21, "Seed user: alice@grandhotel.co.uk / Passw0rd!");
-            i0.ɵɵelementEnd()()();
+            i0.ɵɵelementEnd()()()();
         } if (rf & 2) {
             i0.ɵɵadvance(6);
             i0.ɵɵproperty("formGroup", ctx.form);
@@ -116,7 +113,7 @@ export class LoginComponent {
 }
 (() => { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassMetadata(LoginComponent, [{
         type: Component,
-        args: [{ selector: 'app-login', imports: [ReactiveFormsModule], template: "<section class=\"login-page\">\n  <article class=\"login-card\">\n    <h1>CreventaFlow</h1>\n    <p>Phase 1 tenant login</p>\n\n    <form [formGroup]=\"form\" (ngSubmit)=\"submit()\">\n      <label>\n        Tenant subdomain\n        <input type=\"text\" formControlName=\"tenantSubdomain\" placeholder=\"grandhotel\" />\n      </label>\n\n      <label>\n        Email\n        <input type=\"email\" formControlName=\"email\" placeholder=\"alice@grandhotel.co.uk\" />\n      </label>\n\n      <label>\n        Password\n        <input type=\"password\" formControlName=\"password\" />\n      </label>\n\n      @if (requiresTotp) {\n        <label>\n          TOTP code\n          <input type=\"text\" formControlName=\"totpCode\" maxlength=\"6\" placeholder=\"123456\" />\n        </label>\n      }\n\n      @if (errorMessage) {\n        <p class=\"error\">{{ errorMessage }}</p>\n      }\n\n      <button type=\"submit\" [disabled]=\"isSubmitting\">\n        {{ isSubmitting ? 'Signing in...' : requiresTotp ? 'Verify TOTP' : 'Sign in' }}\n      </button>\n    </form>\n\n    <small>Seed user: alice&#64;grandhotel.co.uk / Passw0rd!</small>\n  </article>\n</section>\n", styles: [":host {\n  display: block;\n  min-height: 100vh;\n  background: linear-gradient(145deg, #041b3a 0%, #0d3a69 50%, #c6d9f0 100%);\n  font-family: 'Inter', 'Avenir Next', 'Segoe UI', sans-serif;\n  font-weight: 100;\n}\n\n.login-page {\n  min-height: 100vh;\n  display: grid;\n  place-items: center;\n  padding: 2rem;\n}\n\n.login-card {\n  width: min(440px, 100%);\n  background: rgba(255, 255, 255, 0.94);\n  backdrop-filter: blur(12px);\n  border-radius: 24px;\n  padding: 2rem;\n  box-shadow: 0 24px 48px rgba(2, 6, 23, 0.28);\n  display: grid;\n  gap: 1rem;\n}\n\nh1 {\n  margin: 0;\n  font-size: 1.9rem;\n}\n\np {\n  margin: 0;\n  color: #475467;\n}\n\nform {\n  display: grid;\n  gap: 0.9rem;\n}\n\nlabel {\n  display: grid;\n  gap: 0.35rem;\n  color: #344054;\n  font-size: 0.87rem;\n}\n\ninput {\n  border: 1px solid #d0d5dd;\n  border-radius: 12px;\n  padding: 0.62rem 0.75rem;\n  font: inherit;\n}\n\nbutton {\n  margin-top: 0.4rem;\n  border: none;\n  border-radius: 999px;\n  padding: 0.75rem 1rem;\n  background: #1155cc;\n  color: #fff;\n  font-weight: 700;\n}\n\nbutton[disabled] {\n  opacity: 0.65;\n}\n\n.error {\n  color: #b42318;\n  background: #fee4e2;\n  border-radius: 10px;\n  padding: 0.5rem 0.75rem;\n  font-size: 0.86rem;\n}\n\nsmall {\n  color: #667085;\n}\n"] }]
+        args: [{ selector: 'app-login', imports: [ReactiveFormsModule], template: "<section class=\"login-page\">\n  <article class=\"login-card\">\n    <h1>CreventaFlow</h1>\n    <p>Phase 1 tenant login</p>\n\n    <form [formGroup]=\"form\" (ngSubmit)=\"submit()\">\n      <label>\n        Tenant subdomain\n        <input type=\"text\" formControlName=\"tenantSubdomain\" placeholder=\"your-tenant\" />\n      </label>\n\n      <label>\n        Email\n        <input type=\"email\" formControlName=\"email\" placeholder=\"you@company.com\" />\n      </label>\n\n      <label>\n        Password\n        <input type=\"password\" formControlName=\"password\" />\n      </label>\n\n      @if (requiresTotp) {\n        <label>\n          TOTP code\n          <input type=\"text\" formControlName=\"totpCode\" maxlength=\"6\" placeholder=\"123456\" />\n        </label>\n      }\n\n      @if (errorMessage) {\n        <p class=\"error\">{{ errorMessage }}</p>\n      }\n\n      <button type=\"submit\" [disabled]=\"isSubmitting\">\n        {{ isSubmitting ? 'Signing in...' : requiresTotp ? 'Verify TOTP' : 'Sign in' }}\n      </button>\n    </form>\n  </article>\n</section>\n", styles: [":host {\n  display: block;\n  min-height: 100vh;\n  background: linear-gradient(145deg, #041b3a 0%, #0d3a69 50%, #c6d9f0 100%);\n  font-family: 'Inter', 'Avenir Next', 'Segoe UI', sans-serif;\n  font-weight: 100;\n}\n\n.login-page {\n  min-height: 100vh;\n  display: grid;\n  place-items: center;\n  padding: 2rem;\n}\n\n.login-card {\n  width: min(440px, 100%);\n  background: rgba(255, 255, 255, 0.94);\n  backdrop-filter: blur(12px);\n  border-radius: 24px;\n  padding: 2rem;\n  box-shadow: 0 24px 48px rgba(2, 6, 23, 0.28);\n  display: grid;\n  gap: 1rem;\n}\n\nh1 {\n  margin: 0;\n  font-size: 1.9rem;\n}\n\np {\n  margin: 0;\n  color: #475467;\n}\n\nform {\n  display: grid;\n  gap: 0.9rem;\n}\n\nlabel {\n  display: grid;\n  gap: 0.35rem;\n  color: #344054;\n  font-size: 0.87rem;\n}\n\ninput {\n  border: 1px solid #d0d5dd;\n  border-radius: 12px;\n  padding: 0.62rem 0.75rem;\n  font: inherit;\n}\n\nbutton {\n  margin-top: 0.4rem;\n  border: none;\n  border-radius: 999px;\n  padding: 0.75rem 1rem;\n  background: #1155cc;\n  color: #fff;\n  font-weight: 700;\n}\n\nbutton[disabled] {\n  opacity: 0.65;\n}\n\n.error {\n  color: #b42318;\n  background: #fee4e2;\n  border-radius: 10px;\n  padding: 0.5rem 0.75rem;\n  font-size: 0.86rem;\n}\n\nsmall {\n  color: #667085;\n}\n"] }]
     }], () => [{ type: i1.AuthService }, { type: i2.Router }], null); })();
 (() => { (typeof ngDevMode === "undefined" || ngDevMode) && i0.ɵsetClassDebugInfo(LoginComponent, { className: "LoginComponent", filePath: "src/app/pages/login/login.component.ts", lineNumber: 13 }); })();
 //# sourceMappingURL=login.component.js.map

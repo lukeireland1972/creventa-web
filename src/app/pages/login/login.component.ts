@@ -16,9 +16,9 @@ export class LoginComponent {
   requiresTotp = false;
 
   form = new FormBuilder().group({
-    tenantSubdomain: ['grandhotel', Validators.required],
-    email: ['alice@grandhotel.co.uk', [Validators.required, Validators.email]],
-    password: ['Passw0rd!', Validators.required],
+    tenantSubdomain: ['', Validators.required],
+    email: ['', [Validators.required, Validators.email]],
+    password: ['', Validators.required],
     totpCode: ['']
   });
 
