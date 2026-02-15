@@ -19,6 +19,8 @@ interface InviteFormModel {
   firstName: string;
   lastName: string;
   email: string;
+  password: string;
+  confirmPassword: string;
   phoneNumberE164: string;
   role: string;
   requiresTotp: boolean;
@@ -70,7 +72,7 @@ export class AdminComponent implements OnInit {
   loadingVenueProfile = false;
   loadingUsers = false;
   savingVenue = false;
-  invitingUser = false;
+  creatingUser = false;
   updatingUserStatus = false;
   savingUserEdit = false;
 
@@ -79,7 +81,6 @@ export class AdminComponent implements OnInit {
   userMessage = '';
 
   inviteForm: InviteFormModel = this.createDefaultInviteForm();
-  inviteDebugToken = '';
   editingUser: UserSummaryDto | null = null;
   editUserForm: EditUserFormModel = this.createDefaultEditUserForm();
 
@@ -101,7 +102,6 @@ export class AdminComponent implements OnInit {
     this.auth.setSelectedVenue(venueId);
     this.venueMessage = '';
     this.userMessage = '';
-    this.inviteDebugToken = '';
     this.editingUser = null;
     this.editUserForm = this.createDefaultEditUserForm();
 
@@ -175,7 +175,7 @@ export class AdminComponent implements OnInit {
       });
   }
 
-  sendInvite(): void {
+  createUser(): void {
     const venueId = this.selectedVenueId;
     if (!venueId) {
       this.userMessage = 'Select a venue first.';
@@ -186,41 +186,52 @@ export class AdminComponent implements OnInit {
       firstName: this.inviteForm.firstName.trim(),
       lastName: this.inviteForm.lastName.trim(),
       email: this.inviteForm.email.trim().toLowerCase(),
+      password: this.inviteForm.password.trim(),
+      confirmPassword: this.inviteForm.confirmPassword.trim(),
       phoneNumberE164: this.normalizeOptionalText(this.inviteForm.phoneNumberE164),
       role: this.inviteForm.role,
       requiresTotp: this.inviteForm.requiresTotp
     };
 
-    if (!payload.firstName || !payload.lastName || !payload.email || !payload.role) {
-      this.userMessage = 'First name, last name, email, and role are required.';
+    if (!payload.firstName || !payload.lastName || !payload.email || !payload.role || !payload.password || !payload.confirmPassword) {
+      this.userMessage = 'First name, last name, email, role, and password are required.';
       return;
     }
 
-    this.invitingUser = true;
+    if (payload.password !== payload.confirmPassword) {
+      this.userMessage = 'Password and confirm password must match.';
+      return;
+    }
+
+    if (!this.isPasswordComplex(payload.password)) {
+      this.userMessage = 'Password must be 8+ characters with uppercase, lowercase, number, and special character.';
+      return;
+    }
+
+    this.creatingUser = true;
     this.userMessage = '';
-    this.inviteDebugToken = '';
 
     this.api
-      .inviteUser({
+      .createUser({
         firstName: payload.firstName,
         lastName: payload.lastName,
         email: payload.email,
+        password: payload.password,
         phoneNumberE164: payload.phoneNumberE164,
         requiresTotp: payload.requiresTotp,
         venueRoles: [{ venueId, role: payload.role }]
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (response) => {
-          this.userMessage = `Invitation sent to ${response.email}.`;
-          this.inviteDebugToken = response.debugToken ?? '';
-          this.invitingUser = false;
+        next: (user) => {
+          this.userMessage = `User created: ${user.firstName} ${user.lastName}. Login is available immediately.`;
+          this.creatingUser = false;
           this.inviteForm = this.createDefaultInviteForm();
           this.loadUsers();
         },
         error: (error) => {
-          this.userMessage = this.resolveError(error, 'Unable to invite user.');
-          this.invitingUser = false;
+          this.userMessage = this.resolveError(error, 'Unable to create user.');
+          this.creatingUser = false;
         }
       });
   }
@@ -452,6 +463,8 @@ export class AdminComponent implements OnInit {
       firstName: '',
       lastName: '',
       email: '',
+      password: '',
+      confirmPassword: '',
       phoneNumberE164: '',
       role: 'EventsCoordinator',
       requiresTotp: false

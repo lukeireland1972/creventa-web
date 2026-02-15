@@ -184,7 +184,7 @@
       <div class="panel-header">
         <div>
           <h2>User Management</h2>
-          <p>Invite users to this venue and manage active status.</p>
+          <p>Create users directly and manage active status.</p>
         </div>
       </div>
 
@@ -206,6 +206,18 @@
           <input type="email" [(ngModel)]="inviteForm.email" name="inviteEmail" />
         </label>
         <label class="field">
+          <span>Password</span>
+          <input type="password" [(ngModel)]="inviteForm.password" name="createPassword" autocomplete="new-password" />
+        </label>
+        <label class="field">
+          <span>Confirm Password</span>
+          <input
+            type="password"
+            [(ngModel)]="inviteForm.confirmPassword"
+            name="createConfirmPassword"
+            autocomplete="new-password" />
+        </label>
+        <label class="field">
           <span>Phone (optional)</span>
           <input type="text" [(ngModel)]="inviteForm.phoneNumberE164" name="invitePhone" placeholder="+447700900111" />
         </label>
@@ -224,14 +236,10 @@
       </div>
 
       <div class="panel-actions">
-        <button type="button" class="primary" (click)="sendInvite()" [disabled]="invitingUser || !selectedVenueId">
-          {{ invitingUser ? 'Sending...' : 'Send Invite' }}
+        <button type="button" class="primary" (click)="createUser()" [disabled]="creatingUser || !selectedVenueId">
+          {{ creatingUser ? 'Creating...' : 'Create User' }}
         </button>
       </div>
-
-      @if (inviteDebugToken) {
-        <p class="hint">Debug invitation token: <code>{{ inviteDebugToken }}</code></p>
-      }
 
       @if (editingUser) {
         <div class="password-panel">
@@ -334,14 +342,14 @@
                     <button
                       type="button"
                       (click)="setUserActive(user, !user.isActive)"
-                      [disabled]="updatingUserStatus || savingUserEdit">
+                      [disabled]="updatingUserStatus || savingUserEdit || creatingUser">
                       {{ user.isActive ? 'Deactivate' : 'Activate' }}
                     </button>
                     <button
                       type="button"
                       class="secondary"
                       (click)="beginEditUser(user)"
-                      [disabled]="savingUserEdit">
+                      [disabled]="savingUserEdit || creatingUser">
                       Edit User
                     </button>
                   </td>

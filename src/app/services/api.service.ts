@@ -189,6 +189,16 @@ export interface InviteUserRequest {
   requiresTotp: boolean;
 }
 
+export interface CreateUserRequest {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  phoneNumberE164?: string | null;
+  venueRoles: InviteVenueRoleRequest[];
+  requiresTotp: boolean;
+}
+
 export interface InviteUserResponse {
   invitationId: string;
   email: string;
@@ -1225,6 +1235,10 @@ export class ApiService {
 
   inviteUser(payload: InviteUserRequest): Observable<InviteUserResponse> {
     return this.http.post<InviteUserResponse>('/api/users/invite', payload);
+  }
+
+  createUser(payload: CreateUserRequest): Observable<UserSummaryDto> {
+    return this.http.post<UserSummaryDto>('/api/users', payload);
   }
 
   updateUserStatus(userId: string, isActive: boolean): Observable<void> {
