@@ -306,6 +306,24 @@ export interface VenueEmailAccountDto {
   useForOutbound: boolean;
 }
 
+export interface NylasStatusDto {
+  isConfigured: boolean;
+  redirectUri: string;
+  defaultProvider: string;
+}
+
+export interface CreateNylasConnectUrlRequest {
+  venueId: string;
+  provider?: string;
+  loginHint?: string;
+  returnPath?: string;
+}
+
+export interface CreateNylasConnectUrlResponse {
+  connectUrl: string;
+  expiresAtUtc: string;
+}
+
 export interface VenueEmailTemplateDto {
   key: string;
   name: string;
@@ -390,6 +408,18 @@ export interface EnquiryListResponse {
   page: PagedResult<EnquiryListItemDto>;
 }
 
+export interface BulkActionFailureDto {
+  enquiryId: string;
+  reference: string;
+  reason: string;
+}
+
+export interface BulkActionResultResponse {
+  requested: number;
+  succeeded: number;
+  failed: BulkActionFailureDto[];
+}
+
 export interface SubEventDto {
   id: string;
   name: string;
@@ -453,6 +483,31 @@ export interface SpaceAvailabilityGroupDto {
 export interface AvailabilitySidebarResponse {
   date: string;
   spaces: SpaceAvailabilityGroupDto[];
+}
+
+export interface DuplicateEnquiryMatchDto {
+  enquiryId: string;
+  reference: string;
+  contactName: string;
+  eventName: string;
+  eventStartUtc: string;
+  status: string;
+  matchedOnEmail: boolean;
+  matchedOnPhone: boolean;
+}
+
+export interface SameDateEnquiryConflictDto {
+  enquiryId: string;
+  reference: string;
+  contactName: string;
+  eventName: string;
+  eventStartUtc: string;
+  status: string;
+}
+
+export interface EnquiryDuplicateCheckResponse {
+  duplicateMatches: DuplicateEnquiryMatchDto[];
+  sameDateConflicts: SameDateEnquiryConflictDto[];
 }
 
 export interface EnquiryDetailResponse {
@@ -1140,6 +1195,14 @@ export interface ReportResponse {
   note?: string | null;
 }
 
+export interface ReportFilterParams {
+  venueId: string;
+  from?: string;
+  to?: string;
+  eventType?: string;
+  status?: string;
+}
+
 export interface ReportScheduleDto {
   id: string;
   name: string;
@@ -1371,6 +1434,18 @@ export class ApiService {
     return this.http.delete<void>(`/api/venues/${venueId}/email-accounts/${accountId}`);
   }
 
+  getNylasStatus(): Observable<NylasStatusDto> {
+    return this.http.get<NylasStatusDto>('/api/integrations/nylas/status');
+  }
+
+  createNylasConnectUrl(payload: CreateNylasConnectUrlRequest): Observable<CreateNylasConnectUrlResponse> {
+    return this.http.post<CreateNylasConnectUrlResponse>('/api/integrations/nylas/connect-url', payload);
+  }
+
+  disconnectNylasAccount(venueId: string, emailAccountId: string): Observable<void> {
+    return this.http.post<void>('/api/integrations/nylas/disconnect', { venueId, emailAccountId });
+  }
+
   getRecentEnquiries(): Observable<RecentlyViewedDto[]> {
     return this.http.get<RecentlyViewedDto[]>('/api/enquiries/recent');
   }
@@ -1439,9 +1514,46 @@ export class ApiService {
     return this.http.post<void>(`/api/enquiries/${enquiryId}/status-transition`, payload);
   }
 
+  bulkAssignEnquiries(payload: {
+    enquiryIds: string[];
+    eventManagerUserId?: string | null;
+  }): Observable<BulkActionResultResponse> {
+    return this.http.post<BulkActionResultResponse>('/api/enquiries/bulk-assign', payload);
+  }
+
+  bulkTransitionEnquiries(payload: {
+    enquiryIds: string[];
+    targetStatus: string;
+    lostReason?: string;
+    lostReasonDetail?: string;
+    holdDaysOverride?: number;
+  }): Observable<BulkActionResultResponse> {
+    return this.http.post<BulkActionResultResponse>('/api/enquiries/bulk-status-transition', payload);
+  }
+
   getAvailability(venueId: string, date: string): Observable<AvailabilitySidebarResponse> {
     const params = new HttpParams().set('venueId', venueId).set('date', date);
     return this.http.get<AvailabilitySidebarResponse>('/api/enquiries/availability', { params });
+  }
+
+  getEnquiryDuplicateCheck(params: {
+    venueId: string;
+    email?: string;
+    phone?: string;
+    eventDate?: string;
+  }): Observable<EnquiryDuplicateCheckResponse> {
+    let queryParams = new HttpParams().set('venueId', params.venueId);
+    if (params.email) {
+      queryParams = queryParams.set('email', params.email);
+    }
+    if (params.phone) {
+      queryParams = queryParams.set('phone', params.phone);
+    }
+    if (params.eventDate) {
+      queryParams = queryParams.set('eventDate', params.eventDate);
+    }
+
+    return this.http.get<EnquiryDuplicateCheckResponse>('/api/enquiries/duplicate-check', { params: queryParams });
   }
 
   getDiary(params: {
@@ -1799,10 +1911,7 @@ export class ApiService {
     return this.http.get<ReportsCatalogResponse>('/api/reports');
   }
 
-  getReport(
-    reportKey: string,
-    params: { venueId: string; from?: string; to?: string; eventType?: string; status?: string }
-  ): Observable<ReportResponse> {
+  getReport(reportKey: string, params: ReportFilterParams): Observable<ReportResponse> {
     let queryParams = new HttpParams().set('venueId', params.venueId);
     if (params.from) {
       queryParams = queryParams.set('from', params.from);
@@ -1819,13 +1928,39 @@ export class ApiService {
     return this.http.get<ReportResponse>(`/api/reports/${reportKey}`, { params: queryParams });
   }
 
-  exportReport(reportKey: string, params: { venueId: string; format: 'csv' | 'xlsx' | 'pdf'; from?: string; to?: string }): Observable<Blob> {
+  getSalesPerformanceReport(params: ReportFilterParams): Observable<ReportResponse> {
+    return this.getReport('sales-performance', params);
+  }
+
+  getPipelineConversionReport(params: ReportFilterParams): Observable<ReportResponse> {
+    return this.getReport('pipeline-conversion', params);
+  }
+
+  getRevenueForecastReport(params: ReportFilterParams): Observable<ReportResponse> {
+    return this.getReport('revenue-forecast', params);
+  }
+
+  getSourceAnalysisReport(params: ReportFilterParams): Observable<ReportResponse> {
+    return this.getReport('source-analysis', params);
+  }
+
+  getLostReasonAnalysisReport(params: ReportFilterParams): Observable<ReportResponse> {
+    return this.getReport('lost-reason-analysis', params);
+  }
+
+  exportReport(
+    reportKey: string,
+    params: { venueId: string; format: 'csv' | 'xlsx' | 'pdf'; from?: string; to?: string; eventType?: string }
+  ): Observable<Blob> {
     let queryParams = new HttpParams().set('venueId', params.venueId).set('format', params.format);
     if (params.from) {
       queryParams = queryParams.set('from', params.from);
     }
     if (params.to) {
       queryParams = queryParams.set('to', params.to);
+    }
+    if (params.eventType) {
+      queryParams = queryParams.set('eventType', params.eventType);
     }
     return this.http.get(`/api/reports/${reportKey}/export`, { params: queryParams, responseType: 'blob' });
   }

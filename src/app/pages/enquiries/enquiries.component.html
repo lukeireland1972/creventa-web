@@ -76,12 +76,62 @@
   </select>
 </form>
 
+@if (bulkActionFeedback && selectedCount === 0) {
+  <p class="bulk-feedback-banner">{{ bulkActionFeedback }}</p>
+}
+
+@if (selectedCount > 0) {
+  <section class="bulk-toolbar">
+    <div class="bulk-toolbar-left">
+      <strong>{{ selectedCount }} {{ selectedCount === 1 ? 'enquiry' : 'enquiries' }} selected</strong>
+      @if (bulkActionFeedback) {
+        <span class="bulk-feedback">{{ bulkActionFeedback }}</span>
+      }
+    </div>
+    <div class="bulk-toolbar-actions">
+      <select
+        [value]="pendingBulkAssignValue"
+        (change)="applyBulkAssign($any($event.target).value)"
+        [disabled]="bulkActionBusy">
+        <option value="">Assign To</option>
+        <option value="unassigned">Unassigned</option>
+        @for (user of assignableUsers; track user.id) {
+          <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+        }
+      </select>
+
+      <select
+        [value]="pendingBulkStatusValue"
+        (change)="applyBulkStatus($any($event.target).value)"
+        [disabled]="bulkActionBusy">
+        <option value="">Change Status</option>
+        @for (statusOption of bulkStatusOptions; track statusOption.value) {
+          <option [value]="statusOption.value">{{ statusOption.label }}</option>
+        }
+      </select>
+
+      <button type="button" (click)="openBulkEmailComposer()" [disabled]="bulkActionBusy || loadingBulkEmailRecipients">
+        {{ loadingBulkEmailRecipients ? 'Loading...' : 'Send Email' }}
+      </button>
+      <button type="button" (click)="exportSelected()" [disabled]="bulkActionBusy">Export Selected</button>
+      <button type="button" class="ghost" (click)="clearBulkSelection()" [disabled]="bulkActionBusy">Clear</button>
+    </div>
+  </section>
+}
+
 @if (!loading) {
   <section class="layout">
     <article class="list-panel">
       <table>
         <thead>
           <tr>
+            <th class="checkbox-col">
+              <input
+                type="checkbox"
+                [checked]="allVisibleSelected"
+                [indeterminate]="partiallyVisibleSelected"
+                (change)="toggleSelectAll($any($event.target).checked)" />
+            </th>
             <th>Ref</th>
             <th>Contact</th>
             <th>Event</th>
@@ -99,6 +149,13 @@
               [class.selected]="enquiry.id === selectedEnquiryId"
               (click)="selectEnquiry(enquiry.id)"
               >
+              <td class="checkbox-col" (click)="$event.stopPropagation()">
+                <input
+                  type="checkbox"
+                  [checked]="isEnquirySelected(enquiry.id)"
+                  (click)="$event.stopPropagation()"
+                  (change)="toggleEnquirySelection(enquiry.id, $any($event.target).checked)" />
+              </td>
               <td class="ref-cell">{{ enquiry.reference }}</td>
               <td>
                 <div class="cell-main">{{ enquiry.contactName }}</div>
@@ -281,4 +338,63 @@
   </section>
 } @else {
   <section class="loading">Loading enquiries...</section>
+}
+
+@if (showLostReasonModal) {
+  <div class="modal-backdrop" (click)="cancelLostReasonModal()"></div>
+  <section class="modal-card" role="dialog" aria-modal="true" aria-label="Bulk lost reason">
+    <h3>Lost reason required</h3>
+    <p>Add a reason to move selected enquiries to Lost.</p>
+    <label>
+      <span>Reason</span>
+      <select [value]="bulkLostReason" (change)="bulkLostReason = $any($event.target).value">
+        <option value="">Select reason</option>
+        @for (reason of lostReasonOptions; track reason) {
+          <option [value]="reason">{{ reason }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>Additional details</span>
+      <textarea
+        rows="3"
+        [value]="bulkLostReasonDetail"
+        (input)="bulkLostReasonDetail = $any($event.target).value"
+        placeholder="Optional notes for loss reporting"></textarea>
+    </label>
+    <div class="modal-actions">
+      <button type="button" class="ghost" (click)="cancelLostReasonModal()">Cancel</button>
+      <button type="button" (click)="confirmLostStatusTransition()">Confirm</button>
+    </div>
+  </section>
+}
+
+@if (showBulkEmailModal) {
+  <div class="modal-backdrop" (click)="closeBulkEmailModal()"></div>
+  <section class="modal-card email-modal" role="dialog" aria-modal="true" aria-label="Bulk email compose">
+    <h3>Send email to selected contacts</h3>
+    <p>This sends the same message to each selected enquiry contact.</p>
+
+    <div class="recipient-list">
+      @for (recipient of bulkEmailRecipients; track recipient.enquiryId) {
+        <span>{{ recipient.name }} ({{ recipient.email }}) · {{ recipient.reference }}</span>
+      }
+    </div>
+
+    <label>
+      <span>Subject</span>
+      <input type="text" [value]="bulkEmailSubject" (input)="bulkEmailSubject = $any($event.target).value" />
+    </label>
+    <label>
+      <span>Message</span>
+      <textarea rows="7" [value]="bulkEmailBody" (input)="bulkEmailBody = $any($event.target).value"></textarea>
+    </label>
+
+    <div class="modal-actions">
+      <button type="button" class="ghost" (click)="closeBulkEmailModal()" [disabled]="sendingBulkEmail">Cancel</button>
+      <button type="button" (click)="sendBulkEmail()" [disabled]="sendingBulkEmail">
+        {{ sendingBulkEmail ? 'Sending...' : 'Send Email' }}
+      </button>
+    </div>
+  </section>
 }

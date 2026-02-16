@@ -741,6 +741,51 @@
   font-weight: 600;
 }
 
+.advisory-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.76rem;
+  color: #92400e;
+  font-weight: 600;
+}
+
+.advisory-banner {
+  grid-column: 1 / -1;
+  margin: 0;
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #78350f;
+  border-radius: 12px;
+  padding: 0.62rem 0.72rem;
+  display: grid;
+  gap: 0.38rem;
+}
+
+.advisory-banner p {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 600;
+}
+
+.advisory-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.inline-link {
+  border: 0;
+  background: transparent;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0;
+  text-decoration: underline;
+}
+
 .availability {
   grid-column: 1 / -1;
   border: 1px solid #ddd6fe;

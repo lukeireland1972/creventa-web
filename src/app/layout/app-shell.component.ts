@@ -7,10 +7,13 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   ApiService,
   AvailabilitySidebarResponse,
+  DuplicateEnquiryMatchDto,
+  EnquiryDuplicateCheckResponse,
   GlobalSearchGroupDto,
   GlobalSearchResultDto,
   NotificationItemDto,
   RecentlyViewedDto,
+  SameDateEnquiryConflictDto,
   VenueSummaryDto
 } from '../services/api.service';
 import { AuthService } from '../services/auth.service';
@@ -53,12 +56,18 @@ export class AppShellComponent implements OnInit {
   selectedVenueId: string | null = null;
   recentItems: RecentlyViewedDto[] = [];
   availability: AvailabilitySidebarResponse | null = null;
+  duplicateCheck: EnquiryDuplicateCheckResponse | null = null;
+  duplicateCheckLoading = false;
+  dismissDuplicateAdvisory = false;
+  dismissDateConflictAdvisory = false;
   notifications: NotificationItemDto[] = [];
   unreadNotifications = 0;
   searchQuery = '';
   searchGroups: GlobalSearchGroupDto[] = [];
   recentSearches: string[] = [];
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private duplicateCheckDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private duplicateCheckRequestId = 0;
 
   navItems: NavItem[] = [];
 
@@ -145,6 +154,22 @@ export class AppShellComponent implements OnInit {
     return this.navItems.filter((item) => item.section === 'admin');
   }
 
+  get primaryDuplicateMatch(): DuplicateEnquiryMatchDto | null {
+    return this.duplicateCheck?.duplicateMatches?.[0] ?? null;
+  }
+
+  get primarySameDateConflict(): SameDateEnquiryConflictDto | null {
+    return this.duplicateCheck?.sameDateConflicts?.[0] ?? null;
+  }
+
+  get hasDuplicateAdvisory(): boolean {
+    return !this.dismissDuplicateAdvisory && !!this.primaryDuplicateMatch;
+  }
+
+  get hasDateConflictAdvisory(): boolean {
+    return !this.dismissDateConflictAdvisory && !!this.primarySameDateConflict;
+  }
+
   ngOnInit(): void {
     this.setNavItems();
     this.selectedVenueId = this.auth.selectedVenueId;
@@ -170,15 +195,24 @@ export class AppShellComponent implements OnInit {
     this.enquiryForm.controls.eventDate.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((date) => {
       if (!date || !this.selectedVenueId) {
         this.availability = null;
-        return;
+      } else {
+        this.api
+          .getAvailability(this.selectedVenueId, date)
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe((availability) => {
+            this.availability = availability;
+          });
       }
 
-      this.api
-        .getAvailability(this.selectedVenueId, date)
-        .pipe(takeUntilDestroyed(this.destroyRef))
-        .subscribe((availability) => {
-          this.availability = availability;
-        });
+      this.scheduleDuplicateCheck();
+    });
+
+    this.enquiryForm.controls.contactEmail.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.scheduleDuplicateCheck();
+    });
+
+    this.enquiryForm.controls.contactPhoneNumberE164.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.scheduleDuplicateCheck();
     });
   }
 
@@ -252,12 +286,14 @@ export class AppShellComponent implements OnInit {
 
   openDrawer(): void {
     this.isDrawerOpen = true;
+    this.scheduleDuplicateCheck();
   }
 
   closeDrawer(): void {
     this.isDrawerOpen = false;
     this.submissionError = '';
     this.showValidation = false;
+    this.clearDuplicateAdvisories();
   }
 
   logout(): void {
@@ -347,12 +383,28 @@ export class AppShellComponent implements OnInit {
 
           this.router.navigate(['/enquiries'], { queryParams: { created: created.id } });
           this.loadRecent();
+          this.clearDuplicateAdvisories();
         },
         error: (error) => {
           this.isSubmitting = false;
           this.submissionError = error?.error?.message ?? 'Unable to create enquiry.';
         }
       });
+  }
+
+  proceedWithDuplicateAdvisory(): void {
+    this.dismissDuplicateAdvisory = true;
+  }
+
+  proceedWithDateConflictAdvisory(): void {
+    this.dismissDateConflictAdvisory = true;
+  }
+
+  openExistingEnquiry(enquiryId: string): void {
+    this.closeDrawer();
+    this.router.navigate(['/enquiries'], {
+      queryParams: { enquiry: enquiryId, statusTab: 'all' }
+    });
   }
 
   openRecentItem(item: RecentlyViewedDto): void {
@@ -519,6 +571,85 @@ export class AppShellComponent implements OnInit {
           this.recentSearches = [];
         }
       });
+  }
+
+  private scheduleDuplicateCheck(): void {
+    if (!this.isDrawerOpen) {
+      return;
+    }
+
+    if (this.duplicateCheckDebounceTimer) {
+      clearTimeout(this.duplicateCheckDebounceTimer);
+    }
+
+    this.duplicateCheckDebounceTimer = setTimeout(() => {
+      this.runDuplicateCheck();
+    }, 350);
+  }
+
+  private runDuplicateCheck(): void {
+    if (!this.selectedVenueId) {
+      this.clearDuplicateAdvisories();
+      return;
+    }
+
+    const emailControl = this.enquiryForm.controls.contactEmail;
+    const phoneControl = this.enquiryForm.controls.contactPhoneNumberE164;
+    const dateControl = this.enquiryForm.controls.eventDate;
+
+    const email = emailControl.valid && !!emailControl.value?.trim() ? emailControl.value.trim().toLowerCase() : '';
+    const phone = phoneControl.valid && !!phoneControl.value?.trim() ? phoneControl.value.trim() : '';
+    const eventDate = dateControl.value?.trim() ?? '';
+
+    if (!email && !phone && !eventDate) {
+      this.clearDuplicateAdvisories();
+      return;
+    }
+
+    const requestId = ++this.duplicateCheckRequestId;
+    this.duplicateCheckLoading = true;
+
+    this.api
+      .getEnquiryDuplicateCheck({
+        venueId: this.selectedVenueId,
+        email: email || undefined,
+        phone: phone || undefined,
+        eventDate: eventDate || undefined
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          if (requestId !== this.duplicateCheckRequestId) {
+            return;
+          }
+
+          this.duplicateCheckLoading = false;
+          this.duplicateCheck = response;
+          this.dismissDuplicateAdvisory = false;
+          this.dismissDateConflictAdvisory = false;
+        },
+        error: () => {
+          if (requestId !== this.duplicateCheckRequestId) {
+            return;
+          }
+
+          this.duplicateCheckLoading = false;
+          this.duplicateCheck = null;
+        }
+      });
+  }
+
+  private clearDuplicateAdvisories(): void {
+    this.duplicateCheckRequestId++;
+    this.duplicateCheck = null;
+    this.duplicateCheckLoading = false;
+    this.dismissDuplicateAdvisory = false;
+    this.dismissDateConflictAdvisory = false;
+
+    if (this.duplicateCheckDebounceTimer) {
+      clearTimeout(this.duplicateCheckDebounceTimer);
+      this.duplicateCheckDebounceTimer = null;
+    }
   }
 
   private setNavItems(): void {

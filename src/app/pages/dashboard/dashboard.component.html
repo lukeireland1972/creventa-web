@@ -82,6 +82,60 @@
         </div>
       </article>
 
+      <article class="widget widget-wide chart-widget">
+        <header>
+          <h2>Enquiries by Source</h2>
+          <small>{{ period | uppercase }} view</small>
+        </header>
+
+        @if (chartLibraryUnavailable || chartErrorMessage) {
+          <p class="chart-empty">{{ chartErrorMessage || 'Chart library is unavailable.' }}</p>
+        } @else if (sourceSlices.length > 0) {
+          <div class="source-chart-layout">
+            <div class="chart-canvas chart-canvas-donut">
+              <canvas #sourceChartCanvas></canvas>
+            </div>
+
+            <ul class="source-legend">
+              @for (slice of sourceSlices; track slice.source) {
+                <li>
+                  <button type="button" class="source-segment-btn" (click)="openSourceFilter(slice.source)">
+                    <span class="dot" [style.background]="slice.color"></span>
+                    <span class="source-label">{{ slice.source }}</span>
+                    <strong>{{ slice.count }}</strong>
+                    <small>{{ slice.percentage | number: '1.0-1' }}%</small>
+                  </button>
+                </li>
+              }
+            </ul>
+          </div>
+        } @else {
+          <p class="chart-empty">No source data for this period.</p>
+        }
+      </article>
+
+      <article class="widget widget-wide chart-widget">
+        <header>
+          <h2>Revenue Trend</h2>
+          <small>Trailing 12 months · confirmed revenue</small>
+        </header>
+
+        @if (chartLibraryUnavailable || chartErrorMessage) {
+          <p class="chart-empty">{{ chartErrorMessage || 'Chart library is unavailable.' }}</p>
+        } @else if (revenueTrend.length > 0) {
+          <div class="chart-canvas chart-canvas-line">
+            <canvas #revenueTrendCanvas></canvas>
+          </div>
+          @if (revenueTrendHasBudgetOverlay) {
+            <p class="chart-note">Budget targets are shown as a dashed line overlay.</p>
+          } @else {
+            <p class="chart-note">No budget targets configured for the shown months.</p>
+          }
+        } @else {
+          <p class="chart-empty">No confirmed revenue trend data available.</p>
+        }
+      </article>
+
       <article class="widget">
         <header>
           <h2>Upcoming Payments</h2>

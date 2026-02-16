@@ -284,6 +284,108 @@
   background: #fff7f7;
 }
 
+.chart-widget {
+  align-content: start;
+}
+
+.chart-canvas {
+  position: relative;
+  width: 100%;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 0.55rem;
+}
+
+.chart-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.chart-canvas-donut {
+  min-height: 250px;
+}
+
+.chart-canvas-line {
+  min-height: 280px;
+}
+
+.source-chart-layout {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) 1fr;
+  gap: 0.8rem;
+  align-items: start;
+}
+
+.source-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.36rem;
+}
+
+.source-legend li {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.source-segment-btn {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 0.4rem 0.5rem;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 0.45rem;
+  text-align: left;
+}
+
+.source-segment-btn:hover {
+  background: #eff6ff;
+}
+
+.source-segment-btn .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.source-label {
+  font-size: 0.75rem;
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.source-segment-btn strong {
+  font-size: 0.75rem;
+  color: #0f172a;
+}
+
+.source-segment-btn small {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.chart-empty {
+  margin: 0;
+  border: 1px dashed #cbd5e1;
+  background: #f8fafc;
+  border-radius: 10px;
+  color: #64748b;
+  font-size: 0.78rem;
+  padding: 0.75rem;
+}
+
+.chart-note {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
 .action-list,
 .simple-list,
 .activity-list {
@@ -384,5 +486,9 @@
 
   .widget-wide {
     grid-column: span 1;
+  }
+
+  .source-chart-layout {
+    grid-template-columns: 1fr;
   }
 }

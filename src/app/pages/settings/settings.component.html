@@ -1374,7 +1374,17 @@
               <article class="card">
                 <header class="card-header">
                   <h3>Connected Email Accounts</h3>
+                  <button type="button" class="primary" (click)="connectNylas()" [disabled]="sectionStates['email-accounts'].saving || !nylasStatus?.isConfigured">
+                    Connect with Nylas
+                  </button>
                 </header>
+                <p class="helper-text">
+                  @if (nylasStatus?.isConfigured) {
+                    Nylas integration is configured. Connect Google or Microsoft inboxes for this venue.
+                  } @else {
+                    Nylas integration is not configured on the API yet. Set Nylas keys in server appsettings before connecting.
+                  }
+                </p>
 
                 <div class="table-wrap">
                   <table>
@@ -1396,6 +1406,11 @@
                           <td>{{ account.useForOutbound ? 'Yes' : 'No' }}</td>
                           <td>
                             <button type="button" class="link" (click)="editEmailAccount(account)">Edit</button>
+                            @if (account.provider === 'Nylas' && account.connectionStatus !== 'disconnected') {
+                              <button type="button" class="link warning" (click)="disconnectNylas(account)">Disconnect</button>
+                            } @else if (account.provider === 'Nylas') {
+                              <button type="button" class="link" (click)="connectNylas(account.address)">Reconnect</button>
+                            }
                             <button type="button" class="link danger" (click)="deleteEmailAccount(account.id)">Delete</button>
                           </td>
                         </tr>
@@ -1443,6 +1458,9 @@
                   </label>
 
                   <div class="actions full-width">
+                    <button type="button" class="ghost" (click)="connectNylasFromForm()" [disabled]="sectionStates['email-accounts'].saving || !nylasStatus?.isConfigured">
+                      Connect Nylas for this address
+                    </button>
                     <button type="submit" class="primary" [disabled]="sectionStates['email-accounts'].saving">
                       {{ sectionStates['email-accounts'].saving ? 'Saving...' : (editingEmailAccountId ? 'Update Account' : 'Add Account') }}
                     </button>

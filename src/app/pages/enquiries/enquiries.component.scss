@@ -177,8 +177,91 @@
   font-size: 0.79rem;
 }
 
+.bulk-toolbar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: 0.9rem;
+  width: min(1220px, calc(100% - 2rem));
+  z-index: 20;
+  margin-top: 0.72rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  background: #eff6ff;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14);
+  padding: 0.58rem 0.72rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.72rem;
+  flex-wrap: wrap;
+}
+
+.bulk-toolbar-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.62rem;
+}
+
+.bulk-toolbar-left strong {
+  font-size: 0.82rem;
+  color: #1e3a8a;
+}
+
+.bulk-feedback {
+  font-size: 0.74rem;
+  color: #1e40af;
+  font-weight: 600;
+}
+
+.bulk-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  flex-wrap: wrap;
+}
+
+.bulk-toolbar-actions select,
+.bulk-toolbar-actions button {
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #fff;
+  color: #334155;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.38rem 0.56rem;
+}
+
+.bulk-toolbar-actions button {
+  cursor: pointer;
+}
+
+.bulk-toolbar-actions button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: #1d4ed8;
+}
+
+.bulk-toolbar-actions button:disabled,
+.bulk-toolbar-actions select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.bulk-feedback-banner {
+  margin: 0.7rem 0 0;
+  padding: 0.54rem 0.66rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #1e40af;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .layout {
   margin-top: 0.9rem;
+  margin-bottom: 5.2rem;
   display: grid;
   grid-template-columns: 1.65fr 1fr;
   gap: 0.8rem;
@@ -208,6 +291,18 @@ td {
   border-bottom: 1px solid #f1f5f9;
   text-align: left;
   vertical-align: top;
+}
+
+.checkbox-col {
+  width: 40px;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  text-align: center;
+}
+
+.checkbox-col input[type='checkbox'] {
+  width: 14px;
+  height: 14px;
 }
 
 th {
@@ -507,6 +602,109 @@ tbody tr.selected {
   color: #64748b;
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  background: rgba(15, 23, 42, 0.48);
+}
+
+.modal-card {
+  position: fixed;
+  z-index: 80;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100% - 2rem));
+  border-radius: 14px;
+  border: 1px solid #dbe4ef;
+  background: #ffffff;
+  box-shadow: 0 26px 48px rgba(15, 23, 42, 0.22);
+  padding: 1rem;
+  display: grid;
+  gap: 0.7rem;
+}
+
+.modal-card h3 {
+  margin: 0;
+  font-size: 1rem;
+  color: #0f172a;
+}
+
+.modal-card p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.79rem;
+}
+
+.modal-card label {
+  display: grid;
+  gap: 0.34rem;
+}
+
+.modal-card label span {
+  font-size: 0.72rem;
+  color: #334155;
+  font-weight: 700;
+}
+
+.modal-card input,
+.modal-card select,
+.modal-card textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  padding: 0.52rem 0.62rem;
+  font-size: 0.82rem;
+  color: #1f2937;
+  font-family: inherit;
+}
+
+.modal-card textarea {
+  resize: vertical;
+}
+
+.recipient-list {
+  display: grid;
+  gap: 0.22rem;
+  max-height: 132px;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 0.52rem 0.56rem;
+}
+
+.recipient-list span {
+  font-size: 0.72rem;
+  color: #475569;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.44rem;
+}
+
+.modal-actions button {
+  border: 1px solid #1d4ed8;
+  border-radius: 9px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.42rem 0.68rem;
+}
+
+.modal-actions button.ghost {
+  border-color: #cbd5e1;
+  background: #fff;
+  color: #475569;
+}
+
+.modal-actions button:disabled {
+  opacity: 0.65;
+}
+
 .loading {
   margin-top: 0.8rem;
   background: #fff;
@@ -538,6 +736,11 @@ tbody tr.selected {
   .stats,
   .filters {
     grid-template-columns: 1fr;
+  }
+
+  .bulk-toolbar {
+    width: calc(100% - 1rem);
+    bottom: 0.45rem;
   }
 
   th,

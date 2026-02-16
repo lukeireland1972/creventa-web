@@ -216,6 +216,10 @@ button.link.danger {
   color: #b91c1c;
 }
 
+button.link.warning {
+  color: #b45309;
+}
+
 button.icon {
   border: 1px solid #e2e8f0;
   background: #fff;
@@ -247,6 +251,12 @@ button.icon {
   margin: 0;
   color: #0f172a;
   font-size: 1rem;
+}
+
+.helper-text {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.78rem;
 }
 
 .table-wrap {

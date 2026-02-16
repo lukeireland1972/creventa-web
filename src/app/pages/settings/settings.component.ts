@@ -25,6 +25,7 @@ import {
   UserSummaryDto,
   VenueEmailTemplateDto,
   VenueEmailAccountDto,
+  NylasStatusDto,
   WebsiteFormSettingDto,
   VenueProfileDto
 } from '../../services/api.service';
@@ -223,6 +224,8 @@ export class SettingsComponent implements OnInit {
   reportSchedules: ReportScheduleDto[] = [];
   emailAccounts: VenueEmailAccountDto[] = [];
   editingEmailAccountId: string | null = null;
+  nylasStatus: NylasStatusDto | null = null;
+  nylasPopup: Window | null = null;
 
   readonly venueForm = this.formBuilder.group({
     name: ['', Validators.required],
@@ -399,6 +402,7 @@ export class SettingsComponent implements OnInit {
   });
 
   private budgetForms = new Map<number, FormGroup>();
+  private readonly nylasMessageHandler = (event: MessageEvent) => this.handleNylasMessage(event);
 
   get activeSection(): SettingsSection {
     return this.sections.find((section) => section.key === this.activeSectionKey) ?? this.sections[0];
@@ -430,6 +434,15 @@ export class SettingsComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    window.addEventListener('message', this.nylasMessageHandler);
+    this.destroyRef.onDestroy(() => {
+      window.removeEventListener('message', this.nylasMessageHandler);
+      if (this.nylasPopup && !this.nylasPopup.closed) {
+        this.nylasPopup.close();
+      }
+      this.nylasPopup = null;
+    });
+
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const section = params.get('section') as SettingsSectionKey | null;
       if (section && this.sections.some((item) => item.key === section)) {
@@ -1658,6 +1671,68 @@ export class SettingsComponent implements OnInit {
       });
   }
 
+  connectNylasFromForm(): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    const addressValue = this.optionalText(this.emailAccountForm.get('address')?.value);
+    this.connectNylas(addressValue);
+  }
+
+  connectNylas(loginHint?: string | null): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    this.setSectionSaving('email-accounts', true);
+    this.api
+      .createNylasConnectUrl({
+        venueId: this.selectedVenueId,
+        provider: 'google',
+        loginHint: loginHint ?? undefined,
+        returnPath: '/settings?section=email-accounts'
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.setSectionSaving('email-accounts', false);
+          this.nylasPopup = window.open(response.connectUrl, 'creventa-nylas-connect', 'width=720,height=840');
+          if (!this.nylasPopup) {
+            this.setSectionError('email-accounts', 'Popup was blocked. Allow popups and try again.');
+          } else {
+            this.setSectionSuccess('email-accounts', 'Complete the Nylas sign-in flow in the opened window.');
+          }
+        },
+        error: (error) => {
+          this.setSectionSaving('email-accounts', false);
+          this.setSectionError('email-accounts', this.resolveError(error, 'Unable to start Nylas connection.'));
+        }
+      });
+  }
+
+  disconnectNylas(account: VenueEmailAccountDto): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    this.setSectionSaving('email-accounts', true);
+    this.api
+      .disconnectNylasAccount(this.selectedVenueId, account.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.setSectionSaving('email-accounts', false);
+          this.setSectionSuccess('email-accounts', `${account.address} disconnected from Nylas.`);
+          this.loadEmailAccountsSection(true);
+        },
+        error: (error) => {
+          this.setSectionSaving('email-accounts', false);
+          this.setSectionError('email-accounts', this.resolveError(error, 'Unable to disconnect Nylas account.'));
+        }
+      });
+  }
+
   getBudgetForm(month: number): FormGroup | null {
     return this.budgetForms.get(month) ?? null;
   }
@@ -2197,6 +2272,18 @@ export class SettingsComponent implements OnInit {
 
     this.setSectionLoading('email-accounts', true);
     this.api
+      .getNylasStatus()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (status) => {
+          this.nylasStatus = status;
+        },
+        error: () => {
+          this.nylasStatus = { isConfigured: false, redirectUri: '', defaultProvider: 'google' };
+        }
+      });
+
+    this.api
       .getVenueEmailAccounts(this.selectedVenueId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -2486,6 +2573,36 @@ export class SettingsComponent implements OnInit {
   private setSectionSuccess(section: SettingsSectionKey, message: string): void {
     this.sectionStates[section].success = message;
     this.sectionStates[section].error = '';
+  }
+
+  private handleNylasMessage(event: MessageEvent): void {
+    if (event.origin !== window.location.origin || !event.data || typeof event.data !== 'object') {
+      return;
+    }
+
+    const payload = event.data as {
+      source?: string;
+      success?: boolean;
+      message?: string;
+      venueId?: string;
+    };
+
+    if (payload.source !== 'creventaflow-nylas') {
+      return;
+    }
+
+    if (!this.selectedVenueId || (payload.venueId && payload.venueId !== this.selectedVenueId)) {
+      return;
+    }
+
+    if (payload.success) {
+      this.setSectionSuccess('email-accounts', payload.message ?? 'Nylas account connected.');
+      this.startNewEmailAccount();
+      this.loadEmailAccountsSection(true);
+      return;
+    }
+
+    this.setSectionError('email-accounts', payload.message ?? 'Nylas connection failed.');
   }
 
   private optionalText(value: unknown): string | null {

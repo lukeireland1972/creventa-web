@@ -58,8 +58,14 @@ export class ApiService {
     inviteUser(payload) {
         return this.http.post('/api/users/invite', payload);
     }
+    createUser(payload) {
+        return this.http.post('/api/users', payload);
+    }
     updateUserStatus(userId, isActive) {
         return this.http.patch(`/api/users/${userId}/status`, { isActive });
+    }
+    updateUserProfile(userId, payload) {
+        return this.http.patch(`/api/users/${userId}/profile`, payload);
     }
     updateUserPassword(userId, password) {
         return this.http.patch(`/api/users/${userId}/password`, { password });
@@ -133,6 +139,15 @@ export class ApiService {
     }
     deleteVenueEmailAccount(venueId, accountId) {
         return this.http.delete(`/api/venues/${venueId}/email-accounts/${accountId}`);
+    }
+    getNylasStatus() {
+        return this.http.get('/api/integrations/nylas/status');
+    }
+    createNylasConnectUrl(payload) {
+        return this.http.post('/api/integrations/nylas/connect-url', payload);
+    }
+    disconnectNylasAccount(venueId, emailAccountId) {
+        return this.http.post('/api/integrations/nylas/disconnect', { venueId, emailAccountId });
     }
     getRecentEnquiries() {
         return this.http.get('/api/enquiries/recent');

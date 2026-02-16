@@ -11,10 +11,10 @@
   <section class="calendar-card">
     <div class="calendar-toolbar">
       <div class="month-nav">
-        <h2>{{ selectedView === 'timeline' ? timelineRangeLabel : monthLabel }}</h2>
+        <h2>{{ currentRangeLabel }}</h2>
         <div class="month-arrows">
-          <button type="button" (click)="shiftMonth(-1)" aria-label="Previous month">&#10094;</button>
-          <button type="button" (click)="shiftMonth(1)" aria-label="Next month">&#10095;</button>
+          <button type="button" (click)="shiftMonth(-1)" aria-label="Previous range">&#10094;</button>
+          <button type="button" (click)="shiftMonth(1)" aria-label="Next range">&#10095;</button>
         </div>
         <button type="button" class="today-btn" (click)="goToToday()">Today</button>
       </div>
@@ -76,6 +76,7 @@
                       [ngClass]="eventChipClass(event)"
                       [attr.draggable]="canDrag(event)"
                       (dragstart)="onDragStart(event, $event)"
+                      (dragend)="onDragEnd()"
                       (mouseenter)="hoveredEventKey = eventKey(event)"
                       (mouseleave)="hoveredEventKey = null"
                       (click)="openDetails(event)">
@@ -104,7 +105,7 @@
           }
         </div>
       </div>
-    } @else {
+    } @else if (selectedView === 'timeline') {
       <div class="timeline-wrap">
         <p class="timeline-hint">
           Timeline view: six months shown down the left, aligned by the first Monday of each month.
@@ -145,6 +146,7 @@
                           [ngClass]="eventChipClass(event)"
                           [attr.draggable]="canDrag(event)"
                           (dragstart)="onDragStart(event, $event)"
+                          (dragend)="onDragEnd()"
                           (mouseenter)="hoveredEventKey = eventKey(event)"
                           (mouseleave)="hoveredEventKey = null"
                           (click)="openDetails(event)">
@@ -175,6 +177,154 @@
           }
         </div>
       </div>
+    } @else if (selectedView === 'week') {
+      <div class="week-wrap">
+        <div class="week-grid">
+          <aside class="week-time-axis">
+            <div class="week-time-head">Time</div>
+            @for (hour of timeAxisHours; track hour) {
+              <div class="week-time-cell">{{ formatHour(hour) }}</div>
+            }
+          </aside>
+
+          <div class="week-days-grid">
+            @for (day of weekColumns; track day.isoDate) {
+              <section class="week-day-column">
+                <header class="week-day-header">
+                  <strong>{{ day.label }}</strong>
+                  <span>{{ day.subLabel }}</span>
+                </header>
+
+                <div
+                  class="week-day-body"
+                  #weekColumn
+                  (dragover)="$event.preventDefault()"
+                  (drop)="onDropWeekColumn(day.isoDate, $event, weekColumn)">
+                  @for (hour of timeSlotHours; track hour) {
+                    <div class="week-hour-line" [style.top.%]="timeMarkerPercent(hour)"></div>
+                  }
+
+                  @for (event of day.events; track eventKey(event)) {
+                    <article
+                      class="week-event-block"
+                      [ngClass]="eventChipClass(event)"
+                      [style.top.%]="weekEventTopPercent(event)"
+                      [style.height.%]="weekEventHeightPercent(event)"
+                      [attr.draggable]="canDrag(event)"
+                      (dragstart)="onDragStart(event, $event)"
+                      (dragend)="onDragEnd()"
+                      (click)="openDetails(event)">
+                      <button
+                        type="button"
+                        class="resize-handle top"
+                        (mousedown)="onResizeHandleMouseDown($event, event, 'start', 'week', weekColumn)">
+                      </button>
+                      <div class="week-event-content">
+                        <strong>{{ eventDisplayLabel(event) }}</strong>
+                        <span>{{ event.startUtc | date: 'HH:mm' }} - {{ event.endUtc | date: 'HH:mm' }}</span>
+                        <span>{{ event.spaceName }}</span>
+                      </div>
+                      <button
+                        type="button"
+                        class="resize-handle bottom"
+                        (mousedown)="onResizeHandleMouseDown($event, event, 'end', 'week', weekColumn)">
+                      </button>
+                    </article>
+                  }
+                </div>
+              </section>
+            }
+          </div>
+        </div>
+      </div>
+    } @else {
+      <div class="day-wrap">
+        <div class="day-time-header">
+          @for (hour of timeAxisHours; track hour) {
+            <span>{{ formatHour(hour) }}</span>
+          }
+        </div>
+
+        <div class="day-events-stack">
+          @for (event of dayEvents; track eventKey(event)) {
+            <article class="day-event-row">
+              <div class="day-event-details">
+                <strong>{{ eventDisplayLabel(event) }}</strong>
+                <span>{{ event.spaceName }} · {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
+                <span>{{ event.eventStyle || 'No style' }} · {{ event.covers || '-' }} covers</span>
+              </div>
+
+              <div
+                class="day-event-track"
+                #dayTrack
+                (dragover)="$event.preventDefault()"
+                (drop)="onDropDayTrack($event, dayTrack)">
+                @for (slot of timeSlotHours; track slot) {
+                  <div class="day-slot-marker" [style.left.%]="timeMarkerPercent(slot)"></div>
+                }
+
+                <div
+                  class="day-event-bar"
+                  [ngClass]="eventChipClass(event)"
+                  [style.left.%]="dayEventLeftPercent(event)"
+                  [style.width.%]="dayEventWidthPercent(event)"
+                  [attr.draggable]="canDrag(event)"
+                  (dragstart)="onDragStart(event, $event)"
+                  (dragend)="onDragEnd()"
+                  (click)="openDetails(event)">
+                  <button
+                    type="button"
+                    class="resize-handle left"
+                    (mousedown)="onResizeHandleMouseDown($event, event, 'start', 'day', dayTrack)">
+                  </button>
+                  <div class="day-bar-content">
+                    <strong>{{ eventDisplayLabel(event) }}</strong>
+                    <span>{{ event.startUtc | date: 'HH:mm' }} - {{ event.endUtc | date: 'HH:mm' }}</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="resize-handle right"
+                    (mousedown)="onResizeHandleMouseDown($event, event, 'end', 'day', dayTrack)">
+                  </button>
+                </div>
+              </div>
+            </article>
+          }
+
+          @if (dayEvents.length === 0) {
+            <p class="day-empty">No events scheduled for this day.</p>
+          }
+        </div>
+      </div>
     }
   </section>
+
+  @if (hasPendingMove && pendingMove; as move) {
+    <div class="move-modal-backdrop" (click)="cancelPendingMove()"></div>
+    <section class="move-modal" role="dialog" aria-modal="true" aria-label="Confirm event update">
+      <h3>Confirm Event Update</h3>
+      <p>{{ move.actionLabel }}</p>
+      <div class="move-summary">
+        <div>
+          <span>Event</span>
+          <strong>{{ move.event.label }}</strong>
+        </div>
+        <div>
+          <span>Old</span>
+          <strong>{{ move.oldStartUtc | date: 'dd/MM/yyyy HH:mm' }} - {{ move.oldEndUtc | date: 'HH:mm' }}</strong>
+        </div>
+        <div>
+          <span>New</span>
+          <strong>{{ move.newStartUtc | date: 'dd/MM/yyyy HH:mm' }} - {{ move.newEndUtc | date: 'HH:mm' }}</strong>
+        </div>
+      </div>
+
+      <div class="move-modal-actions">
+        <button type="button" class="ghost" (click)="cancelPendingMove()" [disabled]="applyingMove">Cancel</button>
+        <button type="button" class="primary" (click)="confirmPendingMove()" [disabled]="applyingMove">
+          {{ applyingMove ? 'Applying...' : 'Confirm Move' }}
+        </button>
+      </div>
+    </section>
+  }
 </section>

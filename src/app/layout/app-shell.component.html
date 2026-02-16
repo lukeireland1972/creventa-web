@@ -315,6 +315,28 @@
         <input type="text" formControlName="contactPhoneNumberE164" placeholder="+447700900111" />
       </label>
 
+      @if (duplicateCheckLoading) {
+        <p class="advisory-note">Checking existing contacts and enquiries...</p>
+      }
+
+      @if (hasDuplicateAdvisory && primaryDuplicateMatch; as duplicateMatch) {
+        <section class="advisory-banner">
+          <p>
+            Possible duplicate: <strong>{{ duplicateMatch.contactName }}</strong> has an existing enquiry
+            <strong>{{ duplicateMatch.reference }}</strong> for
+            <strong>{{ duplicateMatch.eventName }}</strong> on
+            <strong>{{ duplicateMatch.eventStartUtc | date: 'dd/MM/yyyy' }}</strong>.
+            @if ((duplicateCheck?.duplicateMatches?.length ?? 0) > 1) {
+              <span> +{{ (duplicateCheck?.duplicateMatches?.length ?? 1) - 1 }} additional possible match(es).</span>
+            }
+          </p>
+          <div class="advisory-actions">
+            <button type="button" class="inline-link" (click)="openExistingEnquiry(duplicateMatch.enquiryId)">View existing enquiry</button>
+            <button type="button" class="inline-link" (click)="proceedWithDuplicateAdvisory()">Proceed anyway</button>
+          </div>
+        </section>
+      }
+
       <label>
         Company
         <input type="text" formControlName="companyName" />
@@ -345,6 +367,23 @@
         Event Date
         <input type="date" formControlName="eventDate" />
       </label>
+
+      @if (hasDateConflictAdvisory && primarySameDateConflict; as sameDateConflict) {
+        <section class="advisory-banner">
+          <p>
+            Potential same-date conflict: <strong>{{ sameDateConflict.reference }}</strong> ({{ sameDateConflict.status }})
+            for <strong>{{ sameDateConflict.eventName }}</strong> on
+            <strong>{{ sameDateConflict.eventStartUtc | date: 'dd/MM/yyyy' }}</strong>.
+            @if ((duplicateCheck?.sameDateConflicts?.length ?? 0) > 1) {
+              <span> +{{ (duplicateCheck?.sameDateConflicts?.length ?? 1) - 1 }} additional enquiry conflict(s).</span>
+            }
+          </p>
+          <div class="advisory-actions">
+            <button type="button" class="inline-link" (click)="openExistingEnquiry(sameDateConflict.enquiryId)">View existing enquiry</button>
+            <button type="button" class="inline-link" (click)="proceedWithDateConflictAdvisory()">Proceed anyway</button>
+          </div>
+        </section>
+      }
 
       <label>
         Start Time

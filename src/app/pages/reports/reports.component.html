@@ -2,131 +2,255 @@
   <header class="page-header">
     <div>
       <h1>Reports</h1>
-      <p>Interactive reporting with exports and scheduled delivery.</p>
-    </div>
-
-    <div class="date-filters">
-      <label>
-        From
-        <input type="date" [(ngModel)]="fromDate" />
-      </label>
-      <label>
-        To
-        <input type="date" [(ngModel)]="toDate" />
-      </label>
-      <button type="button" (click)="loadReport()">Apply</button>
+      <p>Commercial performance, conversion, and forecast insights for your venue.</p>
     </div>
   </header>
 
-  <section class="layout-grid">
-    <aside class="panel report-list">
-      <h2>Standard Reports</h2>
-      <ul>
-        @for (item of catalog; track item.key) {
-          <li>
-            <button type="button" [class.active]="selectedReportKey === item.key" (click)="selectReport(item.key)">
-              <strong>{{ item.name }}</strong>
-              <small>{{ item.description }}</small>
-            </button>
-          </li>
-        }
-      </ul>
+  <section class="filters-card">
+    <div class="preset-row" role="group" aria-label="Date presets">
+      <button type="button" [class.active]="selectedPreset === 'this-month'" (click)="applyPreset('this-month')">This Month</button>
+      <button type="button" [class.active]="selectedPreset === 'last-30d'" (click)="applyPreset('last-30d')">Last 30d</button>
+      <button type="button" [class.active]="selectedPreset === 'last-90d'" (click)="applyPreset('last-90d')">Last 90d</button>
+      <button type="button" [class.active]="selectedPreset === 'this-year'" (click)="applyPreset('this-year')">This Year</button>
+    </div>
 
-      <div class="snapshot-card">
-        <h3>Pace Snapshot</h3>
-        <p>Capture today's on-books baseline for year-over-year pace comparisons.</p>
-        <button type="button" (click)="runSnapshot()">Run Snapshot</button>
-        @if (snapshotMessage) {
-          <small>{{ snapshotMessage }}</small>
-        }
-      </div>
-    </aside>
+    <div class="filter-row">
+      <label>
+        From
+        <input type="date" [(ngModel)]="fromDate" (ngModelChange)="onManualDateChange()" />
+      </label>
+      <label>
+        To
+        <input type="date" [(ngModel)]="toDate" (ngModelChange)="onManualDateChange()" />
+      </label>
+      <label>
+        Event Type
+        <select [(ngModel)]="eventType">
+          @for (type of eventTypes; track type) {
+            <option [value]="type">{{ type === 'all' ? 'All Event Types' : type }}</option>
+          }
+        </select>
+      </label>
+      <button type="button" class="apply-btn" (click)="loadReports()">Apply Filters</button>
+    </div>
+  </section>
 
-    <article class="panel report-view">
-      <header>
-        <h2>{{ report?.name || 'Report' }}</h2>
-        <div class="export-actions">
-          <button type="button" (click)="exportReport('csv')">CSV</button>
-          <button type="button" (click)="exportReport('xlsx')">Excel</button>
-          <button type="button" (click)="exportReport('pdf')">PDF</button>
+  @if (errorMessage) {
+    <article class="state-card error">
+      <h2>Unable to load reports</h2>
+      <p>{{ errorMessage }}</p>
+      <button type="button" (click)="loadReports()">Retry</button>
+    </article>
+  } @else if (isLoading) {
+    <article class="state-card">
+      <h2>Loading reports</h2>
+      <p>Preparing charts and tables from your venue data.</p>
+    </article>
+  } @else {
+    <section class="reports-grid">
+      <article class="report-card report-wide">
+        <header class="card-header">
+          <div>
+            <h2>Sales Performance</h2>
+            <p>Confirmed bookings by month with revenue and average booking value.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('sales-performance', 'csv')" (click)="exportSection('sales-performance', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('sales-performance', 'pdf')" (click)="exportSection('sales-performance', 'pdf')">Export PDF</button>
+          </div>
+        </header>
+
+        <div class="chart-list">
+          @for (row of salesRows; track row.month) {
+            <div class="chart-item">
+              <span>{{ formatMonth(row.month) }}</span>
+              <div class="track">
+                <span class="fill primary" [style.width.%]="salesRevenueMax > 0 ? (row.totalRevenue / salesRevenueMax) * 100 : 0"></span>
+              </div>
+              <em>{{ formatCurrency(row.totalRevenue, row.currencyCode) }}</em>
+            </div>
+          }
+          @if (salesRows.length === 0) {
+            <p class="empty">No confirmed booking data for this period.</p>
+          }
         </div>
-      </header>
-
-      @if (isLoading) {
-        <p class="empty">Loading report...</p>
-      }
-
-      @if (!isLoading && report; as currentReport) {
-        @if (currentReport.note) {
-          <p class="note">{{ currentReport.note }}</p>
-        }
 
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                @for (column of columns; track column) {
-                  <th>{{ column }}</th>
-                }
+                <th>Month</th>
+                <th>Number of Bookings</th>
+                <th>Total Revenue</th>
+                <th>Average Booking Value</th>
               </tr>
             </thead>
             <tbody>
-              @for (row of currentReport.rows; track $index) {
+              @for (row of salesRows; track row.month) {
                 <tr>
-                  @for (column of columns; track column) {
-                    <td>{{ row[column] }}</td>
-                  }
+                  <td>{{ formatMonth(row.month) }}</td>
+                  <td>{{ row.numberOfBookings }}</td>
+                  <td>{{ formatCurrency(row.totalRevenue, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.averageBookingValue, row.currencyCode) }}</td>
                 </tr>
               }
             </tbody>
           </table>
         </div>
+      </article>
 
-        @if (currentReport.rows.length === 0) {
-          <p class="empty">No rows returned for this filter range.</p>
-        }
-      }
-    </article>
+      <article class="report-card">
+        <header class="card-header">
+          <div>
+            <h2>Pipeline Conversion</h2>
+            <p>Funnel from New to Confirmed and Lost.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('pipeline-conversion', 'csv')" (click)="exportSection('pipeline-conversion', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('pipeline-conversion', 'pdf')" (click)="exportSection('pipeline-conversion', 'pdf')">Export PDF</button>
+          </div>
+        </header>
 
-    <aside class="panel schedule-panel">
-      <h2>Scheduled Delivery</h2>
-
-      <label>
-        Name
-        <input type="text" [(ngModel)]="scheduleName" placeholder="Weekly Pace Report" />
-      </label>
-
-      <label>
-        Frequency
-        <select [(ngModel)]="scheduleFrequency">
-          <option value="daily">Daily</option>
-          <option value="weekly">Weekly</option>
-          <option value="monthly">Monthly</option>
-        </select>
-      </label>
-
-      <label>
-        Recipients (comma-separated)
-        <textarea rows="3" [(ngModel)]="scheduleRecipients" placeholder="alice@grandhotel.co.uk, ryan@grandhotel.co.uk"></textarea>
-      </label>
-
-      <button type="button" (click)="createSchedule()">Save Schedule</button>
-
-      <ul class="schedule-list">
-        @for (schedule of schedules; track schedule.id) {
-          <li>
-            <div>
-              <strong>{{ schedule.name }}</strong>
-              <small>{{ schedule.reportKey }} · {{ schedule.frequency }}</small>
-              <small>{{ schedule.recipients.join(', ') }}</small>
+        <div class="funnel-list">
+          @for (row of pipelineRows; track row.stage) {
+            <div class="funnel-stage">
+              <div class="funnel-head">
+                <strong>{{ row.stage }}</strong>
+                <span>{{ row.count }}</span>
+              </div>
+              <div class="track">
+                <span class="fill" [style.width.%]="pipelineCountMax > 0 ? (row.count / pipelineCountMax) * 100 : 0"></span>
+              </div>
+              <small>{{ formatPercent(row.conversionFromPreviousPercent) }} from previous · {{ formatPercent(row.conversionFromNewPercent) }} from new</small>
             </div>
-            <button type="button" class="danger" (click)="deleteSchedule(schedule.id)">Delete</button>
-          </li>
-        }
-        @if (schedules.length === 0) {
-          <li class="empty">No schedules configured.</li>
-        }
-      </ul>
-    </aside>
-  </section>
+          }
+          @if (pipelineRows.length === 0) {
+            <p class="empty">No pipeline data for this period.</p>
+          }
+        </div>
+      </article>
+
+      <article class="report-card report-wide">
+        <header class="card-header">
+          <div>
+            <h2>Revenue Forecast vs Budget</h2>
+            <p>Confirmed revenue compared to monthly budget targets.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('revenue-forecast', 'csv')" (click)="exportSection('revenue-forecast', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('revenue-forecast', 'pdf')" (click)="exportSection('revenue-forecast', 'pdf')">Export PDF</button>
+          </div>
+        </header>
+
+        <div class="forecast-list">
+          @for (row of revenueForecastRows; track row.month) {
+            <div class="forecast-row">
+              <span class="label">{{ formatMonth(row.month) }}</span>
+              <div class="bars">
+                <div class="track">
+                  <span class="fill confirmed" [style.width.%]="forecastScaleMax > 0 ? (row.confirmedRevenue / forecastScaleMax) * 100 : 0"></span>
+                </div>
+                <div class="track">
+                  <span class="fill budget" [style.width.%]="forecastScaleMax > 0 ? (row.budgetTarget / forecastScaleMax) * 100 : 0"></span>
+                </div>
+              </div>
+              <small>{{ formatCurrency(row.confirmedRevenue, row.currencyCode) }} vs {{ formatCurrency(row.budgetTarget, row.currencyCode) }}</small>
+            </div>
+          }
+          @if (revenueForecastRows.length === 0) {
+            <p class="empty">No forecast data for this period.</p>
+          }
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Confirmed Revenue</th>
+                <th>Budget Target</th>
+                <th>Variance</th>
+                <th>Variance %</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of revenueForecastRows; track row.month) {
+                <tr>
+                  <td>{{ formatMonth(row.month) }}</td>
+                  <td>{{ formatCurrency(row.confirmedRevenue, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.budgetTarget, row.currencyCode) }}</td>
+                  <td [class]="varianceClass(row.variance)">{{ formatCurrency(row.variance, row.currencyCode) }}</td>
+                  <td [class]="varianceClass(row.variance)">{{ formatPercent(row.variancePercent) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card">
+        <header class="card-header">
+          <div>
+            <h2>Source Analysis</h2>
+            <p>Enquiry distribution by lead source.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('source-analysis', 'csv')" (click)="exportSection('source-analysis', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('source-analysis', 'pdf')" (click)="exportSection('source-analysis', 'pdf')">Export PDF</button>
+          </div>
+        </header>
+
+        <div class="source-layout">
+          <div class="donut" [style.background]="sourceDonutBackground">
+            <div class="donut-hole">
+              <strong>{{ sourceTotal }}</strong>
+              <small>Total</small>
+            </div>
+          </div>
+
+          <ul class="legend">
+            @for (row of sourceRows; track row.source) {
+              <li>
+                <span class="dot" [style.background]="row.color"></span>
+                <span class="name">{{ row.source }}</span>
+                <strong>{{ row.count }}</strong>
+                <small>{{ formatPercent(row.percentage) }}</small>
+              </li>
+            }
+            @if (sourceRows.length === 0) {
+              <li class="empty">No source data available.</li>
+            }
+          </ul>
+        </div>
+      </article>
+
+      <article class="report-card">
+        <header class="card-header">
+          <div>
+            <h2>Lost Reason Analysis</h2>
+            <p>Top reasons enquiries are lost.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('lost-reason-analysis', 'csv')" (click)="exportSection('lost-reason-analysis', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('lost-reason-analysis', 'pdf')" (click)="exportSection('lost-reason-analysis', 'pdf')">Export PDF</button>
+          </div>
+        </header>
+
+        <div class="chart-list">
+          @for (row of lostRows; track row.reason) {
+            <div class="chart-item">
+              <span>{{ row.reason }}</span>
+              <div class="track">
+                <span class="fill warning" [style.width.%]="lostCountMax > 0 ? (row.count / lostCountMax) * 100 : 0"></span>
+              </div>
+              <em>{{ row.count }} ({{ formatPercent(row.percentage) }})</em>
+            </div>
+          }
+          @if (lostRows.length === 0) {
+            <p class="empty">No lost enquiry reasons in this period.</p>
+          }
+        </div>
+      </article>
+    </section>
+  }
 </section>
