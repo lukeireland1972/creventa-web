@@ -1,0 +1,502 @@
+<section class="contacts-page">
+  <header class="page-header">
+    <div>
+      <h1>Guest Profiles</h1>
+      <p>Standalone CRM for contacts, repeat-booking intelligence, and hospitality personalisation.</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="add-task-btn" (click)="openAddTaskModal()">+ Add Task</button>
+    </div>
+  </header>
+
+  @if (contactsResponse || analytics) {
+    <section class="summary-grid">
+      <article>
+        <span>Total Guests</span>
+        <strong>{{ contactsResponse?.totalGuests ?? analytics?.totalGuests ?? 0 }}</strong>
+      </article>
+      <article>
+        <span>Returning Guests</span>
+        <strong>{{ contactsResponse?.returningGuests ?? analytics?.returningGuests ?? 0 }}</strong>
+      </article>
+      <article>
+        <span>Repeat Booking Rate</span>
+        <strong>{{ contactsResponse?.repeatBookingRatePercent ?? analytics?.repeatBookingRatePercent ?? 0 | number: '1.0-2' }}%</strong>
+      </article>
+      <article>
+        <span>Avg Bookings / Returning Guest</span>
+        <strong>{{ analytics?.averageBookingsPerReturningGuest ?? 0 | number: '1.0-2' }}</strong>
+      </article>
+    </section>
+  }
+
+  <form class="filters" [formGroup]="filtersForm">
+    <label>
+      Search
+      <input type="text" formControlName="search" placeholder="Name, email, phone, company, tags..." />
+    </label>
+
+    <label>
+      Company
+      <select formControlName="company">
+        <option value="">All</option>
+        @for (name of contactsResponse?.companyNames ?? []; track name) {
+          <option [value]="name">{{ name }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      Tag
+      <select formControlName="tag">
+        <option value="">All</option>
+        @for (tag of contactsResponse?.availableTags ?? []; track tag) {
+          <option [value]="tag">{{ tag }}</option>
+        }
+      </select>
+    </label>
+
+    <label>
+      Page Size
+      <select formControlName="pageSize">
+        <option [value]="25">25</option>
+        <option [value]="50">50</option>
+        <option [value]="100">100</option>
+      </select>
+    </label>
+
+    <label class="checkbox">
+      <input type="checkbox" formControlName="vipOnly" />
+      <span>VIP only</span>
+    </label>
+  </form>
+
+  @if (listError) {
+    <p class="message error">{{ listError }}</p>
+  }
+
+  <section class="layout">
+    <article class="panel list-panel">
+      <header>
+        <h2>Contacts</h2>
+        <span>{{ contacts.length }} shown</span>
+      </header>
+
+      @if (loading) {
+        <p class="empty">Loading contacts...</p>
+      } @else if (contacts.length === 0) {
+        <p class="empty">No contacts match the current filters.</p>
+      } @else {
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Company</th>
+                <th>Bookings</th>
+                <th>Lifetime Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (contact of contacts; track contact.id) {
+                <tr [class.selected]="contact.id === selectedContactId" (click)="selectContact(contact.id)">
+                  <td>
+                    <div class="name-cell">
+                      <strong>{{ contact.fullName }}</strong>
+                      <span>{{ contact.email }}</span>
+                      <span>{{ contact.phoneNumberE164 }}</span>
+                    </div>
+                    <em class="badge" [attr.data-kind]="contactBadgeToken(contact)">
+                      @if (contact.isVip) {
+                        VIP
+                      } @else if (contact.returningGuestInsight.isReturningGuest) {
+                        Returning Guest
+                      } @else {
+                        New Guest
+                      }
+                    </em>
+                  </td>
+                  <td>{{ contact.companyName || '—' }}</td>
+                  <td>{{ contact.totalEnquiries }}</td>
+                  <td>{{ contact.returningGuestInsight.lifetimeValue | number: '1.0-0' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </article>
+
+    <article class="panel detail-panel">
+      @if (!selectedContact) {
+        <p class="empty">Select a contact to view profile, timeline, and personalisation settings.</p>
+      } @else {
+        <header>
+          <div>
+            <h2>{{ selectedContact.firstName }} {{ selectedContact.lastName }}</h2>
+            <p>{{ selectedContactInsightLabel }}</p>
+          </div>
+          <div class="actions">
+            <button type="button" (click)="pullFromCreventa()">Pull from Creventa</button>
+            <button type="button" (click)="pushToCreventa()">Push to Creventa</button>
+          </div>
+        </header>
+
+        @if (syncMessage) {
+          <p class="message info">{{ syncMessage }}</p>
+        }
+
+        @if (loadingDetail) {
+          <p class="empty">Loading contact detail...</p>
+        } @else {
+          <form class="detail-form" [formGroup]="contactForm" (ngSubmit)="saveContact()">
+            <label>
+              First Name
+              <input type="text" formControlName="firstName" />
+            </label>
+            <label>
+              Last Name
+              <input type="text" formControlName="lastName" />
+            </label>
+            <label>
+              Email
+              <input type="email" formControlName="email" />
+            </label>
+            <label>
+              Phone (E.164)
+              <input type="text" formControlName="phoneNumberE164" placeholder="+447700900111" />
+            </label>
+            <label>
+              Company
+              <input type="text" formControlName="companyName" />
+            </label>
+            <label>
+              Job Title
+              <input type="text" formControlName="jobTitle" />
+            </label>
+            <label>
+              Address Line 1
+              <input type="text" formControlName="addressLine1" />
+            </label>
+            <label>
+              Address Line 2
+              <input type="text" formControlName="addressLine2" />
+            </label>
+            <label>
+              City
+              <input type="text" formControlName="city" />
+            </label>
+            <label>
+              Region
+              <input type="text" formControlName="region" />
+            </label>
+            <label>
+              Postcode
+              <input type="text" formControlName="postcode" />
+            </label>
+            <label>
+              Country Code
+              <input type="text" formControlName="countryCode" />
+            </label>
+            <label>
+              Tags (comma separated)
+              <input type="text" formControlName="tagsCsv" placeholder="VIP, Corporate, Wedding" />
+            </label>
+            <label>
+              Preferred Channel
+              <select formControlName="preferredCommunicationChannel">
+                <option value="">Not set</option>
+                <option value="email">Email</option>
+                <option value="phone">Phone</option>
+                <option value="portal">Portal</option>
+              </select>
+            </label>
+            <label>
+              Birthday
+              <input type="date" formControlName="birthday" />
+            </label>
+            <label>
+              Anniversary
+              <input type="date" formControlName="anniversary" />
+            </label>
+            <label class="checkbox">
+              <input type="checkbox" formControlName="isVip" />
+              <span>VIP Guest</span>
+            </label>
+            <label class="full-width">
+              VIP Notes
+              <textarea rows="2" formControlName="vipNotes"></textarea>
+            </label>
+            <label>
+              Dietary Preferences
+              <input type="text" formControlName="dietaryPreferences" placeholder="Vegetarian, Halal" />
+            </label>
+            <label>
+              Allergen Flags (comma separated)
+              <input type="text" formControlName="allergenFlagsCsv" placeholder="Gluten, Dairy" />
+            </label>
+            <label>
+              Seating Preference
+              <input type="text" formControlName="seatingPreference" />
+            </label>
+            <label>
+              Preferred Setup Style
+              <input type="text" formControlName="preferredSetupStyle" />
+            </label>
+            <label>
+              Preferred Event Style
+              <input type="text" formControlName="preferredEventStyle" />
+            </label>
+
+            @if (activeCustomFields.length > 0) {
+              <section class="custom-fields full-width">
+                <h3>Custom Fields</h3>
+                <div class="custom-fields-grid">
+                  @for (field of activeCustomFields; track field.id) {
+                    <label>
+                      {{ field.label }}
+
+                      @if (field.type === 'textarea') {
+                        <textarea rows="2" [formControlName]="customControlName(field.key)"></textarea>
+                      } @else if (field.type === 'number') {
+                        <input type="number" [formControlName]="customControlName(field.key)" />
+                      } @else if (field.type === 'date') {
+                        <input type="date" [formControlName]="customControlName(field.key)" />
+                      } @else if (field.type === 'boolean') {
+                        <span class="checkbox inline">
+                          <input type="checkbox" [formControlName]="customControlName(field.key)" />
+                          <span>Yes</span>
+                        </span>
+                      } @else if (field.type === 'select') {
+                        <select [formControlName]="customControlName(field.key)">
+                          <option value="">Not set</option>
+                          @for (option of field.options; track option) {
+                            <option [value]="option">{{ option }}</option>
+                          }
+                        </select>
+                      } @else {
+                        <input type="text" [formControlName]="customControlName(field.key)" [placeholder]="field.placeholder || ''" />
+                      }
+                    </label>
+                  }
+                </div>
+              </section>
+            }
+
+            <div class="actions full-width">
+              <button type="submit" class="primary" [disabled]="savingDetail">
+                {{ savingDetail ? 'Saving...' : 'Save Contact' }}
+              </button>
+            </div>
+          </form>
+
+          @if (detailError) {
+            <p class="message error">{{ detailError }}</p>
+          }
+
+          <section class="returning-summary">
+            <h3>Returning Guest Intelligence</h3>
+            <ul>
+              <li>Previous enquiries: {{ selectedContact.returningGuestInsight.previousEnquiryCount }}</li>
+              <li>Previous confirmed events: {{ selectedContact.returningGuestInsight.previousConfirmedEventCount }}</li>
+              <li>Lifetime value: {{ selectedContact.returningGuestInsight.lifetimeValue | number: '1.2-2' }}</li>
+              <li>Average event value: {{ selectedContact.returningGuestInsight.averageEventValue | number: '1.2-2' }}</li>
+              <li>Booking frequency/year: {{ selectedContact.returningGuestInsight.bookingFrequencyPerYear | number: '1.2-2' }}</li>
+            </ul>
+
+            @if (selectedContact.previousEvents.length > 0) {
+              <div class="previous-events">
+                <h4>Previous Events</h4>
+                <ul>
+                  @for (event of selectedContact.previousEvents; track event.enquiryId) {
+                    <li>
+                      <button type="button" (click)="openEnquiry(event.enquiryId)">{{ event.enquiryReference }}</button>
+                      <span>{{ event.eventName || event.eventType }} · {{ event.eventStartUtc | date: 'dd/MM/yyyy' }}</span>
+                    </li>
+                  }
+                </ul>
+              </div>
+            }
+          </section>
+
+          <section class="timeline">
+            <header>
+              <h3>Contact Timeline</h3>
+            </header>
+
+            @if (loadingTimeline) {
+              <p class="empty">Loading timeline...</p>
+            } @else if (timelineError) {
+              <p class="message error">{{ timelineError }}</p>
+            } @else if (timelineItems.length === 0) {
+              <p class="empty">No timeline events found.</p>
+            } @else {
+              <ul>
+                @for (item of timelineItems; track item.id) {
+                  <li>
+                    <div class="timeline-head">
+                      <span class="pill" [attr.data-type]="timelineTypeToken(item.type)">{{ item.type }}</span>
+                      <time>{{ item.occurredAtUtc | date: 'dd/MM/yyyy HH:mm' }}</time>
+                    </div>
+                    <strong>{{ item.title }}</strong>
+                    @if (item.summary) {
+                      <p>{{ item.summary }}</p>
+                    }
+                    @if (item.enquiryId) {
+                      <button type="button" class="link" (click)="openEnquiry(item.enquiryId)">Open {{ item.enquiryReference || 'enquiry' }}</button>
+                    }
+                  </li>
+                }
+              </ul>
+
+              @if (timelineHasMore) {
+                <button type="button" class="load-more" (click)="loadMoreTimeline()" [disabled]="loadingTimelineMore">
+                  {{ loadingTimelineMore ? 'Loading...' : 'Load More' }}
+                </button>
+              }
+            }
+          </section>
+        }
+      }
+    </article>
+
+    <article class="panel insights-panel">
+      <section>
+        <h2>Company Records</h2>
+        <form [formGroup]="companySearchForm">
+          <label>
+            Search companies
+            <input type="text" formControlName="search" placeholder="Company name" />
+          </label>
+        </form>
+
+        @if (loadingCompanies) {
+          <p class="empty">Loading companies...</p>
+        } @else if (companyError) {
+          <p class="message error">{{ companyError }}</p>
+        } @else if (companies.length === 0) {
+          <p class="empty">No company records for this venue yet.</p>
+        } @else {
+          <ul class="company-list">
+            @for (company of companies; track company.companyName) {
+              <li [class.active]="company.companyName === selectedCompanyName">
+                <button type="button" (click)="selectCompany(company.companyName)">
+                  <strong>{{ company.companyName }}</strong>
+                  <span>{{ company.contactCount }} contacts · {{ company.confirmedEvents }} confirmed</span>
+                </button>
+              </li>
+            }
+          </ul>
+        }
+
+        @if (selectedCompanyDetail) {
+          <article class="company-detail">
+            <h3>{{ selectedCompanyDetail.summary.companyName }}</h3>
+            <p>
+              Lifetime value: {{ selectedCompanyDetail.summary.lifetimeValue | number: '1.0-0' }}
+              · Avg booking value: {{ selectedCompanyDetail.summary.averageBookingValue | number: '1.0-0' }}
+            </p>
+            <ul>
+              @for (contact of selectedCompanyDetail.contacts; track contact.id) {
+                <li>
+                  <button type="button" (click)="selectContact(contact.id)">{{ contact.fullName }}</button>
+                </li>
+              }
+            </ul>
+          </article>
+        }
+      </section>
+
+      <section>
+        <h2>Guest Analytics</h2>
+        @if (loadingAnalytics) {
+          <p class="empty">Loading analytics...</p>
+        } @else if (analyticsError) {
+          <p class="message error">{{ analyticsError }}</p>
+        } @else if (analytics) {
+          <article class="analytics-card">
+            <h3>Top 10 by Lifetime Value</h3>
+            <ol>
+              @for (guest of analytics.topGuestsByLifetimeValue; track guest.contactId) {
+                <li>
+                  <button type="button" (click)="selectContact(guest.contactId)">{{ guest.contactName }}</button>
+                  <span>{{ guest.lifetimeValue | number: '1.0-0' }}</span>
+                </li>
+              }
+            </ol>
+          </article>
+
+          <article class="analytics-card">
+            <h3>Acquisition by Source</h3>
+            <ul class="source-bars">
+              @for (source of analytics.acquisitionBySource; track source.source) {
+                <li>
+                  <div class="source-head">
+                    <strong>{{ source.source }}</strong>
+                    <span>{{ source.count }} ({{ source.percentage | number: '1.0-1' }}%)</span>
+                  </div>
+                  <div class="bar"><span [style.width.%]="source.percentage"></span></div>
+                </li>
+              }
+            </ul>
+          </article>
+        }
+      </section>
+
+      <section>
+        <h2>Custom Fields</h2>
+        @if (customFieldsError) {
+          <p class="message error">{{ customFieldsError }}</p>
+        }
+        @if (customFieldsSuccess) {
+          <p class="message success">{{ customFieldsSuccess }}</p>
+        }
+
+        @if (loadingCustomFields) {
+          <p class="empty">Loading custom fields...</p>
+        } @else {
+          <div class="custom-field-list">
+            @for (field of customFieldDefinitionDrafts; track field.id; let i = $index) {
+              <div class="custom-field-row">
+                <input type="text" [(ngModel)]="customFieldDefinitionDrafts[i].label" [ngModelOptions]="{standalone: true}" placeholder="Label" />
+                <input type="text" [(ngModel)]="customFieldDefinitionDrafts[i].key" [ngModelOptions]="{standalone: true}" placeholder="key" />
+                <select [(ngModel)]="customFieldDefinitionDrafts[i].type" [ngModelOptions]="{standalone: true}">
+                  <option value="text">Text</option>
+                  <option value="textarea">Textarea</option>
+                  <option value="number">Number</option>
+                  <option value="date">Date</option>
+                  <option value="boolean">Boolean</option>
+                  <option value="select">Select</option>
+                </select>
+                <input type="text" [(ngModel)]="customFieldDefinitionDrafts[i].optionsCsv" [ngModelOptions]="{standalone: true}" placeholder="Options CSV" />
+                <label class="checkbox inline">
+                  <input type="checkbox" [(ngModel)]="customFieldDefinitionDrafts[i].isRequired" [ngModelOptions]="{standalone: true}" />
+                  <span>Required</span>
+                </label>
+                <label class="checkbox inline">
+                  <input type="checkbox" [(ngModel)]="customFieldDefinitionDrafts[i].isActive" [ngModelOptions]="{standalone: true}" />
+                  <span>Active</span>
+                </label>
+                <button type="button" class="link danger" (click)="removeCustomFieldDefinition(i)">Remove</button>
+              </div>
+            }
+          </div>
+
+          <div class="actions">
+            <button type="button" (click)="addCustomFieldDefinition()">Add Field</button>
+            <button type="button" class="primary" (click)="saveCustomFieldDefinitions()" [disabled]="savingCustomFields">
+              {{ savingCustomFields ? 'Saving...' : 'Save Custom Fields' }}
+            </button>
+          </div>
+        }
+      </section>
+    </article>
+  </section>
+</section>
+
+<app-task-quick-create-modal
+  [isOpen]="showAddTaskModal"
+  [defaultEnquiryId]="null"
+  (close)="closeAddTaskModal()"
+  (created)="onTaskQuickCreated($event)">
+</app-task-quick-create-modal>

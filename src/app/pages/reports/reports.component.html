@@ -60,19 +60,22 @@
           </div>
         </header>
 
-        <div class="chart-list">
-          @for (row of salesRows; track row.month) {
-            <div class="chart-item">
-              <span>{{ formatMonth(row.month) }}</span>
-              <div class="track">
-                <span class="fill primary" [style.width.%]="salesRevenueMax > 0 ? (row.totalRevenue / salesRevenueMax) * 100 : 0"></span>
+        <div class="chart-panel">
+          <div class="chart-heading">Monthly Revenue (Bar Chart)</div>
+          <div class="vertical-bar-chart" role="img" aria-label="Sales performance revenue by month">
+            @for (point of salesBarPoints; track point.month) {
+              <div class="bar-column">
+                <small class="bar-value">{{ formatCurrency(point.totalRevenue, point.currencyCode) }}</small>
+                <div class="bar-track">
+                  <span class="bar-fill primary" [style.height.%]="point.heightPercent"></span>
+                </div>
+                <span class="bar-label">{{ point.monthLabel }}</span>
               </div>
-              <em>{{ formatCurrency(row.totalRevenue, row.currencyCode) }}</em>
-            </div>
-          }
-          @if (salesRows.length === 0) {
-            <p class="empty">No confirmed booking data for this period.</p>
-          }
+            }
+            @if (salesBarPoints.length === 0) {
+              <p class="empty">No confirmed booking data for this period.</p>
+            }
+          </div>
         </div>
 
         <div class="table-wrap">
@@ -111,22 +114,48 @@
           </div>
         </header>
 
-        <div class="funnel-list">
-          @for (row of pipelineRows; track row.stage) {
-            <div class="funnel-stage">
-              <div class="funnel-head">
-                <strong>{{ row.stage }}</strong>
-                <span>{{ row.count }}</span>
+        <div class="chart-panel">
+          <div class="chart-heading">Stage Funnel</div>
+          <div class="funnel-chart" role="img" aria-label="Pipeline conversion funnel">
+            @for (row of pipelineFunnelRows; track row.stage) {
+              <div class="funnel-band" [style.width.%]="row.widthPercent">
+                <div class="funnel-band-main">
+                  <strong>{{ row.stage }}</strong>
+                  <span>{{ row.count }}</span>
+                </div>
+                <small>{{ formatPercent(row.conversionFromPreviousPercent) }} from previous · {{ formatPercent(row.conversionFromNewPercent) }} from new</small>
               </div>
-              <div class="track">
-                <span class="fill" [style.width.%]="pipelineCountMax > 0 ? (row.count / pipelineCountMax) * 100 : 0"></span>
-              </div>
-              <small>{{ formatPercent(row.conversionFromPreviousPercent) }} from previous · {{ formatPercent(row.conversionFromNewPercent) }} from new</small>
-            </div>
+            }
+            @if (pipelineFunnelRows.length === 0) {
+              <p class="empty">No pipeline data for this period.</p>
+            }
+          </div>
+          @if (pipelineConversionReport?.note) {
+            <p class="helper-note">{{ pipelineConversionReport?.note }}</p>
           }
-          @if (pipelineRows.length === 0) {
-            <p class="empty">No pipeline data for this period.</p>
-          }
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Stage</th>
+                <th>Count</th>
+                <th>From Previous</th>
+                <th>From New</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of pipelineRows; track row.stage) {
+                <tr>
+                  <td>{{ row.stage }}</td>
+                  <td>{{ row.count }}</td>
+                  <td>{{ formatPercent(row.conversionFromPreviousPercent) }}</td>
+                  <td>{{ formatPercent(row.conversionFromNewPercent) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
         </div>
       </article>
 
@@ -142,23 +171,41 @@
           </div>
         </header>
 
-        <div class="forecast-list">
-          @for (row of revenueForecastRows; track row.month) {
-            <div class="forecast-row">
-              <span class="label">{{ formatMonth(row.month) }}</span>
-              <div class="bars">
-                <div class="track">
-                  <span class="fill confirmed" [style.width.%]="forecastScaleMax > 0 ? (row.confirmedRevenue / forecastScaleMax) * 100 : 0"></span>
-                </div>
-                <div class="track">
-                  <span class="fill budget" [style.width.%]="forecastScaleMax > 0 ? (row.budgetTarget / forecastScaleMax) * 100 : 0"></span>
-                </div>
-              </div>
-              <small>{{ formatCurrency(row.confirmedRevenue, row.currencyCode) }} vs {{ formatCurrency(row.budgetTarget, row.currencyCode) }}</small>
+        <div class="chart-panel">
+          <div class="chart-heading">Predicted vs Actual Trend</div>
+          @if (revenueForecastRows.length > 0) {
+            <div class="trend-chart-canvas">
+              <canvas #forecastTrendCanvas></canvas>
             </div>
-          }
-          @if (revenueForecastRows.length === 0) {
+          } @else {
             <p class="empty">No forecast data for this period.</p>
+          }
+        </div>
+
+        <div class="chart-panel">
+          <div class="chart-heading">Confirmed vs Predicted vs Budget (Grouped Bars)</div>
+          <div class="grouped-bar-chart" role="img" aria-label="Revenue forecast compared to budget">
+            @for (point of revenueGroupedBarPoints; track point.month) {
+              <div class="group-column">
+                <div class="group-bars three-series">
+                  <span class="bar confirmed" [style.height.%]="point.confirmedHeightPercent" title="Confirmed"></span>
+                  <span class="bar predicted" [style.height.%]="point.predictedHeightPercent" title="Predicted"></span>
+                  <span class="bar budget" [style.height.%]="point.budgetHeightPercent" title="Budget"></span>
+                </div>
+                <span class="group-label">{{ point.monthLabel }}</span>
+              </div>
+            }
+            @if (revenueGroupedBarPoints.length === 0) {
+              <p class="empty">No forecast data for this period.</p>
+            }
+          </div>
+          <div class="chart-key">
+            <span><i class="chip confirmed"></i>Confirmed</span>
+            <span><i class="chip predicted"></i>Predicted</span>
+            <span><i class="chip budget"></i>Budget</span>
+          </div>
+          @if (revenueForecastReport?.note) {
+            <p class="helper-note">{{ revenueForecastReport?.note }}</p>
           }
         </div>
 
@@ -168,9 +215,11 @@
               <tr>
                 <th>Month</th>
                 <th>Confirmed Revenue</th>
+                <th>Predicted Revenue</th>
                 <th>Budget Target</th>
                 <th>Variance</th>
                 <th>Variance %</th>
+                <th>Predicted vs Actual</th>
               </tr>
             </thead>
             <tbody>
@@ -178,9 +227,148 @@
                 <tr>
                   <td>{{ formatMonth(row.month) }}</td>
                   <td>{{ formatCurrency(row.confirmedRevenue, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.predictedRevenue, row.currencyCode) }}</td>
                   <td>{{ formatCurrency(row.budgetTarget, row.currencyCode) }}</td>
                   <td [class]="varianceClass(row.variance)">{{ formatCurrency(row.variance, row.currencyCode) }}</td>
                   <td [class]="varianceClass(row.variance)">{{ formatPercent(row.variancePercent) }}</td>
+                  <td [class]="varianceClass(row.predictionVariance)">{{ formatCurrency(row.predictionVariance, row.currencyCode) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card report-wide">
+        <header class="card-header">
+          <div>
+            <h2>Pace Report</h2>
+            <p>On-books pace versus budget and same-month last-year snapshot.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('pace', 'csv')" (click)="exportSection('pace', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('pace', 'pdf')" (click)="exportSection('pace', 'pdf')">Export PDF</button>
+          </div>
+        </header>
+
+        <div class="chart-panel">
+          <div class="chart-heading">Total On Books vs Budget vs LY</div>
+          <div class="grouped-bar-chart" role="img" aria-label="Pace report on-books compared to budget and last year">
+            @for (point of paceBarPoints; track point.month) {
+              <div class="group-column">
+                <div class="group-bars three-series">
+                  <span class="bar on-books" [style.height.%]="point.totalOnBooksHeightPercent" title="Total On Books"></span>
+                  <span class="bar budget" [style.height.%]="point.budgetHeightPercent" title="Budget"></span>
+                  <span class="bar ly" [style.height.%]="point.lyHeightPercent" title="Same Month LY"></span>
+                </div>
+                <span class="group-label">{{ point.monthLabel }}</span>
+              </div>
+            }
+            @if (paceBarPoints.length === 0) {
+              <p class="empty">No pace data available.</p>
+            }
+          </div>
+          <div class="chart-key">
+            <span><i class="chip on-books"></i>Total On Books</span>
+            <span><i class="chip budget"></i>Budget</span>
+            <span><i class="chip ly"></i>Same Month LY</span>
+          </div>
+          @if (paceReport?.note) {
+            <p class="helper-note">{{ paceReport?.note }}</p>
+          }
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Budget Target</th>
+                <th>Confirmed Revenue</th>
+                <th>Weighted Pipeline</th>
+                <th>Total On Books</th>
+                <th>LY Snapshot</th>
+                <th>Variance vs Budget</th>
+                <th>Pace</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of paceRows; track row.month) {
+                <tr>
+                  <td>{{ formatMonth(row.month) }}</td>
+                  <td>{{ formatCurrency(row.budgetTarget, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.confirmedRevenue, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.weightedPipelineRevenue, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.totalOnBooks, row.currencyCode) }}</td>
+                  <td>{{ row.sameMonthLyAtThisPoint > 0 ? formatCurrency(row.sameMonthLyAtThisPoint, row.currencyCode) : 'N/A' }}</td>
+                  <td [class]="varianceClass(row.varianceVsBudget)">{{ formatCurrency(row.varianceVsBudget, row.currencyCode) }}</td>
+                  <td [class]="paceStatusClass(row.paceStatus)">{{ row.paceStatus }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card report-wide">
+        <header class="card-header">
+          <div>
+            <h2>Sustainability</h2>
+            <p>Carbon footprint, waste diversion, and ESG score trends.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('sustainability', 'csv')" (click)="exportSection('sustainability', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('sustainability', 'pdf')" (click)="exportSection('sustainability', 'pdf')">Export PDF</button>
+          </div>
+        </header>
+
+        <div class="chart-panel">
+          <div class="chart-heading">Carbon Trend (kgCO2e)</div>
+          <div class="vertical-bar-chart" role="img" aria-label="Sustainability carbon trend by month">
+            @for (point of sustainabilityBarPoints; track point.month) {
+              <div class="bar-column">
+                <small class="bar-value">{{ point.totalCarbonKgCo2e | number: '1.0-1' }} kg</small>
+                <div class="bar-track">
+                  <span class="bar-fill sustainability" [style.height.%]="point.carbonHeightPercent"></span>
+                </div>
+                <span class="bar-label">{{ point.monthLabel }}</span>
+                <small class="bar-meta">Score {{ point.score | number: '1.0-1' }}</small>
+              </div>
+            }
+            @if (sustainabilityBarPoints.length === 0) {
+              <p class="empty">No sustainability data for this period.</p>
+            }
+          </div>
+          @if (sustainabilityReport?.note) {
+            <p class="helper-note">{{ sustainabilityReport?.note }}</p>
+          }
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Events</th>
+                <th>Total Carbon</th>
+                <th>Diversion %</th>
+                <th>Waste Diverted</th>
+                <th>Avg ESG Score</th>
+                <th>YoY Carbon Δ</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of sustainabilityRows; track row.month) {
+                <tr>
+                  <td>{{ formatMonth(row.month) }}</td>
+                  <td>{{ row.eventCount }}</td>
+                  <td>{{ row.totalCarbonKgCo2e | number: '1.0-2' }} kg</td>
+                  <td>{{ formatPercent(row.wasteDiversionPercent) }}</td>
+                  <td>{{ row.wasteDivertedKg | number: '1.0-2' }} kg</td>
+                  <td>{{ row.averageSustainabilityScore | number: '1.0-1' }}</td>
+                  <td [class]="varianceClass(-row.yoyCarbonDeltaPercent)">{{ formatPercent(row.yoyCarbonDeltaPercent) }}</td>
+                  <td [class]="paceStatusClass(row.status)">{{ row.status }}</td>
                 </tr>
               }
             </tbody>
@@ -236,7 +424,9 @@
           </div>
         </header>
 
-        <div class="chart-list">
+        <div class="chart-panel">
+          <div class="chart-heading">Lost Reasons (Bar Chart)</div>
+          <div class="horizontal-bar-chart" role="img" aria-label="Lost reason distribution">
           @for (row of lostRows; track row.reason) {
             <div class="chart-item">
               <span>{{ row.reason }}</span>
@@ -249,6 +439,7 @@
           @if (lostRows.length === 0) {
             <p class="empty">No lost enquiry reasons in this period.</p>
           }
+          </div>
         </div>
       </article>
     </section>

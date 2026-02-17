@@ -712,6 +712,21 @@
                 <h3>Proposal Templates</h3>
               </header>
 
+              <section class="form-grid compact">
+                <label>
+                  PDF Paper Size
+                  <select [(ngModel)]="proposalPdfSettings.paperSize" [ngModelOptions]="{ standalone: true }">
+                    <option value="A4">A4</option>
+                    <option value="Letter">US Letter</option>
+                  </select>
+                </label>
+                <div class="actions">
+                  <button type="button" class="secondary" [disabled]="sectionStates['proposal-templates'].saving" (click)="saveProposalPdfSettings()">
+                    {{ sectionStates['proposal-templates'].saving ? 'Saving...' : 'Save PDF Settings' }}
+                  </button>
+                </div>
+              </section>
+
               <form class="form-grid compact" [formGroup]="proposalTemplateForm" (ngSubmit)="saveProposalTemplate()">
                 <label>
                   Template Key
@@ -885,6 +900,229 @@
             </section>
           }
 
+          @if (activeSectionKey === 'sustainability') {
+            <section class="card">
+              <header class="card-header">
+                <h3>ESG Targets & Score Weighting</h3>
+              </header>
+
+              <form class="form-grid compact" [formGroup]="sustainabilityForm" (ngSubmit)="saveSustainabilitySettings()">
+                <label>
+                  Travel Emission Factor (kg CO₂e per guest-km)
+                  <input type="number" min="0" max="10" step="0.0001" formControlName="travelKgCo2ePerGuestKm" />
+                </label>
+
+                <label>
+                  Carbon Target (kg CO₂e per guest)
+                  <input type="number" min="0.1" max="500" step="0.01" formControlName="carbonTargetKgPerGuest" />
+                </label>
+
+                <label>
+                  Waste Target (kg per guest)
+                  <input type="number" min="0.01" max="500" step="0.01" formControlName="wasteTargetKgPerGuest" />
+                </label>
+
+                <label>
+                  Diversion Target (%)
+                  <input type="number" min="0" max="100" step="0.01" formControlName="diversionTargetPercent" />
+                </label>
+
+                <label>
+                  Local Sourcing Radius (miles)
+                  <input type="number" min="1" max="500" step="1" formControlName="localSourcingRadiusMiles" />
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="includeInProposalByDefault" />
+                  <span>Include sustainability section in proposals by default</span>
+                </label>
+
+                <div class="full-width section-caption">Score Weighting (%)</div>
+
+                <label>
+                  Carbon Weight
+                  <input type="number" min="0" max="100" step="0.01" formControlName="carbonWeightPercent" />
+                </label>
+
+                <label>
+                  Waste Weight
+                  <input type="number" min="0" max="100" step="0.01" formControlName="wasteWeightPercent" />
+                </label>
+
+                <label>
+                  Sourcing Weight
+                  <input type="number" min="0" max="100" step="0.01" formControlName="sourcingWeightPercent" />
+                </label>
+
+                <p class="full-width helper-text">
+                  ESG weight total: <strong>{{ sustainabilityWeightTotal | number: '1.0-2' }}%</strong>
+                  @if (sustainabilityWeightTotal !== 100) {
+                    <span class="warn"> (recommended: 100%)</span>
+                  }
+                </p>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates.sustainability.saving">
+                    {{ sectionStates.sustainability.saving ? 'Saving...' : 'Save Sustainability Settings' }}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section class="two-column">
+              <article class="card">
+                <header class="card-header">
+                  <h3>Catering Emission Factors</h3>
+                  <button type="button" class="ghost" (click)="addSustainabilityEmissionFactor()">Add Factor</button>
+                </header>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Key</th>
+                        <th>Label</th>
+                        <th>kg CO₂e / guest</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (factor of sustainabilityEmissionFactors; track factor.key) {
+                        <tr>
+                          <td>
+                            <input
+                              type="text"
+                              [ngModel]="factor.key"
+                              (ngModelChange)="factor.key = $event"
+                              [ngModelOptions]="{ standalone: true }" />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              [ngModel]="factor.label"
+                              (ngModelChange)="factor.label = $event"
+                              [ngModelOptions]="{ standalone: true }" />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.0001"
+                              [ngModel]="factor.kgCo2ePerGuest"
+                              (ngModelChange)="factor.kgCo2ePerGuest = +$event"
+                              [ngModelOptions]="{ standalone: true }" />
+                          </td>
+                          <td>
+                            <button type="button" class="link danger" (click)="removeSustainabilityEmissionFactor(factor.key)">Remove</button>
+                          </td>
+                        </tr>
+                      }
+                      @if (sustainabilityEmissionFactors.length === 0) {
+                        <tr>
+                          <td colspan="4" class="empty-row">No catering emission factors configured yet.</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+
+              <article class="card">
+                <header class="card-header">
+                  <h3>Energy Rating Multipliers</h3>
+                </header>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Rating</th>
+                        <th>Multiplier</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      @for (factor of sustainabilityEnergyRatingMultipliers; track factor.rating) {
+                        <tr>
+                          <td>{{ factor.rating }}</td>
+                          <td>
+                            <input
+                              type="number"
+                              min="0.1"
+                              max="3"
+                              step="0.0001"
+                              [ngModel]="factor.multiplier"
+                              (ngModelChange)="factor.multiplier = +$event"
+                              [ngModelOptions]="{ standalone: true }" />
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+            </section>
+          }
+
+          @if (activeSectionKey === 'lost-reasons') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Lost Reasons</h3>
+              </header>
+
+              <form class="form-grid compact" [formGroup]="lostReasonForm" (ngSubmit)="saveLostReason()">
+                <label>
+                  Reason Label
+                  <input type="text" formControlName="label" placeholder="Price Too High" />
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="isActive" />
+                  <span>Active</span>
+                </label>
+
+                <div class="actions full-width">
+                  <button type="submit" class="primary" [disabled]="sectionStates['lost-reasons'].saving">
+                    {{ sectionStates['lost-reasons'].saving ? 'Saving...' : 'Save Lost Reason' }}
+                  </button>
+                </div>
+              </form>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Order</th>
+                      <th>Label</th>
+                      <th>Active</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (reason of lostReasons; track reason.id; let index = $index) {
+                      <tr>
+                        <td>{{ index + 1 }}</td>
+                        <td>{{ reason.label }}</td>
+                        <td>{{ reason.isActive ? 'Yes' : 'No' }}</td>
+                        <td>
+                          <button type="button" class="link" (click)="moveLostReason(reason.id, -1)" [disabled]="index === 0">Up</button>
+                          <button type="button" class="link" (click)="moveLostReason(reason.id, 1)" [disabled]="index === lostReasons.length - 1">Down</button>
+                          <button type="button" class="link" (click)="editLostReason(reason)">Edit</button>
+                          <button type="button" class="link danger" (click)="deleteLostReason(reason.id)">Delete</button>
+                        </td>
+                      </tr>
+                    }
+                    @if (lostReasons.length === 0) {
+                      <tr>
+                        <td colspan="4" class="empty-row">No lost reasons configured yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
           @if (activeSectionKey === 'report-configuration') {
             <section class="card">
               <header class="card-header">
@@ -907,6 +1145,50 @@
                   <input type="number" min="0" max="100" step="0.01" formControlName="openProposalWeightPercent" />
                 </label>
 
+                <div class="full-width section-caption">Conversion Scoring Weights (%)</div>
+
+                <label>
+                  Response Time
+                  <input type="number" min="0" max="100" step="0.01" formControlName="responseTimeWeightPercent" />
+                </label>
+
+                <label>
+                  Lead Source Quality
+                  <input type="number" min="0" max="100" step="0.01" formControlName="leadSourceWeightPercent" />
+                </label>
+
+                <label>
+                  Event Type Quality
+                  <input type="number" min="0" max="100" step="0.01" formControlName="eventTypeWeightPercent" />
+                </label>
+
+                <label>
+                  Engagement Level
+                  <input type="number" min="0" max="100" step="0.01" formControlName="engagementWeightPercent" />
+                </label>
+
+                <label>
+                  Budget Alignment
+                  <input type="number" min="0" max="100" step="0.01" formControlName="budgetAlignmentWeightPercent" />
+                </label>
+
+                <label>
+                  Lead Time
+                  <input type="number" min="0" max="100" step="0.01" formControlName="leadTimeWeightPercent" />
+                </label>
+
+                <label>
+                  Completeness
+                  <input type="number" min="0" max="100" step="0.01" formControlName="completenessWeightPercent" />
+                </label>
+
+                <p class="full-width helper-text">
+                  Scoring weight total: <strong>{{ conversionScoringWeightTotal | number: '1.0-2' }}%</strong>
+                  @if (conversionScoringWeightTotal !== 100) {
+                    <span class="warn"> (recommended: 100%)</span>
+                  }
+                </p>
+
                 <div class="actions full-width">
                   <button type="submit" class="primary" [disabled]="sectionStates['report-configuration'].saving">
                     {{ sectionStates['report-configuration'].saving ? 'Saving...' : 'Save Report Configuration' }}
@@ -919,7 +1201,7 @@
           @if (activeSectionKey === 'automation') {
             <section class="card">
               <header class="card-header">
-                <h3>Automation Settings</h3>
+                <h3>Automation Defaults</h3>
               </header>
 
               <form class="form-grid compact" [formGroup]="automationSettingsForm" (ngSubmit)="saveAutomationSettings()">
@@ -953,6 +1235,362 @@
                   </button>
                 </div>
               </form>
+            </section>
+
+            <section class="card">
+              <header class="card-header">
+                <h3>Automation Rules</h3>
+                <button type="button" class="ghost" (click)="startNewAutomationRule()">Create Rule</button>
+              </header>
+              <p class="helper-text">Build trigger-condition-action rules and toggle each rule on/off without losing configuration.</p>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Active</th>
+                      <th>Rule</th>
+                      <th>Trigger</th>
+                      <th>Conditions</th>
+                      <th>Actions</th>
+                      <th>Updated</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (rule of automationRules; track rule.id) {
+                      <tr>
+                        <td>
+                          <label class="toggle">
+                            <input type="checkbox" [checked]="rule.isActive" (change)="toggleAutomationRule(rule)" />
+                            <span>{{ rule.isActive ? 'On' : 'Off' }}</span>
+                          </label>
+                        </td>
+                        <td>
+                          <strong>{{ rule.name }}</strong>
+                          @if (rule.description) {
+                            <div class="subtle">{{ rule.description }}</div>
+                          }
+                        </td>
+                        <td>
+                          <div class="pill-list">
+                            <span class="pill">{{ rule.trigger.type }}</span>
+                            @if (rule.trigger.status) {
+                              <span class="pill muted">{{ rule.trigger.status }}</span>
+                            }
+                            @if (rule.trigger.days) {
+                              <span class="pill muted">{{ rule.trigger.days }}d</span>
+                            }
+                          </div>
+                        </td>
+                        <td>
+                          <div class="pill-list">
+                            @for (condition of rule.conditions; track $index) {
+                              <span class="pill muted">{{ condition.type }}</span>
+                            }
+                            @if (rule.conditions.length === 0) {
+                              <span class="subtle">None</span>
+                            }
+                          </div>
+                        </td>
+                        <td>
+                          <div class="pill-list">
+                            @for (action of rule.actions; track $index) {
+                              <span class="pill">{{ action.type }}</span>
+                            }
+                          </div>
+                        </td>
+                        <td>{{ rule.updatedAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+                        <td>
+                          <button type="button" class="link" (click)="editAutomationRule(rule)">Edit</button>
+                          <button type="button" class="link danger" (click)="deleteAutomationRule(rule.id)">Delete</button>
+                        </td>
+                      </tr>
+                    }
+                    @if (automationRules.length === 0) {
+                      <tr>
+                        <td colspan="7" class="empty-row">No automation rules configured yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <section class="card">
+              <header class="card-header">
+                <h3>{{ editingAutomationRuleId ? 'Edit Rule' : 'Create Rule' }}</h3>
+              </header>
+              <form class="form-grid compact automation-rule-form" [formGroup]="automationRuleForm" (ngSubmit)="saveAutomationRule()">
+                <label>
+                  Rule Name
+                  <input type="text" formControlName="name" placeholder="Tentative follow-up reminder" />
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="isActive" />
+                  <span>Rule active</span>
+                </label>
+
+                <label class="full-width">
+                  Description
+                  <textarea rows="2" formControlName="description" placeholder="Optional context for the operations team"></textarea>
+                </label>
+
+                <label>
+                  Trigger
+                  <select formControlName="triggerType" (change)="onAutomationTriggerTypeChange()">
+                    @for (trigger of automationTriggerOptions; track trigger.value) {
+                      <option [value]="trigger.value">{{ trigger.label }}</option>
+                    }
+                  </select>
+                </label>
+
+                @if (automationRuleForm.get('triggerType')?.value === 'StatusChanged') {
+                  <label>
+                    Trigger Status
+                    <select formControlName="triggerStatus">
+                      @for (status of enquiryStatuses; track status) {
+                        <option [value]="status">{{ status }}</option>
+                      }
+                    </select>
+                  </label>
+                }
+
+                @if (
+                  automationRuleForm.get('triggerType')?.value === 'DaysSinceLastActivity' ||
+                  automationRuleForm.get('triggerType')?.value === 'EventDateMinusDays'
+                ) {
+                  <label>
+                    Trigger Days
+                    <input type="number" min="1" max="3650" formControlName="triggerDays" />
+                  </label>
+                }
+
+                <div class="full-width nested-card" formArrayName="conditions">
+                  <header class="nested-header">
+                    <h4>Conditions</h4>
+                    <button type="button" class="ghost" (click)="addAutomationCondition()">Add Condition</button>
+                  </header>
+                  @for (control of automationConditionControls.controls; track $index; let index = $index) {
+                    <div class="row-grid" [formGroupName]="index">
+                      <label>
+                        Condition Type
+                        <select formControlName="type">
+                          @for (conditionType of automationConditionTypeOptions; track conditionType.value) {
+                            <option [value]="conditionType.value">{{ conditionType.label }}</option>
+                          }
+                        </select>
+                      </label>
+                      <label>
+                        Operator
+                        <select formControlName="operator">
+                          @for (option of automationConditionOperatorOptions; track option.value) {
+                            <option [value]="option.value">{{ option.label }}</option>
+                          }
+                        </select>
+                      </label>
+                      <label>
+                        Value
+                        <input type="text" formControlName="value" placeholder="Wedding / Phone / user-id" />
+                      </label>
+                      <label>
+                        Amount
+                        <input type="number" min="0" step="0.01" formControlName="amount" />
+                      </label>
+                      <div class="row-actions">
+                        <button type="button" class="link danger" (click)="removeAutomationCondition(index)">Remove</button>
+                      </div>
+                    </div>
+                  }
+                </div>
+
+                <div class="full-width nested-card" formArrayName="actions">
+                  <header class="nested-header">
+                    <h4>Actions</h4>
+                    <button type="button" class="ghost" (click)="addAutomationAction()">Add Action</button>
+                  </header>
+                  @for (control of automationActionControls.controls; track $index; let index = $index) {
+                    <div class="row-grid" [formGroupName]="index">
+                      <label>
+                        Action Type
+                        <select formControlName="type">
+                          @for (actionType of automationActionOptions; track actionType.value) {
+                            <option [value]="actionType.value">{{ actionType.label }}</option>
+                          }
+                        </select>
+                      </label>
+                      <label>
+                        Target Status
+                        <select formControlName="targetStatus">
+                          <option value="">None</option>
+                          @for (status of enquiryStatuses; track status) {
+                            <option [value]="status">{{ status }}</option>
+                          }
+                        </select>
+                      </label>
+                      <label>
+                        Email Template Key
+                        <input type="text" formControlName="templateKey" placeholder="payment_reminder" />
+                      </label>
+                      <label>
+                        Assignee/User
+                        <input type="text" formControlName="assigneeUserId" placeholder="user-id or event-manager" />
+                      </label>
+                      <label>
+                        Task Title
+                        <input type="text" formControlName="taskTitle" placeholder="Confirm final details" />
+                      </label>
+                      <label>
+                        Task Due Offset (days)
+                        <input type="number" min="0" max="3650" formControlName="taskDueOffsetDays" />
+                      </label>
+                      <label class="full-width">
+                        Internal Note
+                        <textarea rows="2" formControlName="note"></textarea>
+                      </label>
+                      <label>
+                        Notification User
+                        <input type="text" formControlName="notificationUserId" placeholder="user-id or event-manager" />
+                      </label>
+                      <div class="row-actions">
+                        <button type="button" class="link danger" (click)="removeAutomationAction(index)">Remove</button>
+                      </div>
+                    </div>
+                  }
+                </div>
+
+                <div class="actions full-width">
+                  <button type="button" class="ghost" (click)="startNewAutomationRule()">Cancel</button>
+                  <button type="submit" class="primary" [disabled]="sectionStates.automation.saving">
+                    {{ sectionStates.automation.saving ? 'Saving...' : (editingAutomationRuleId ? 'Update Rule' : 'Save Rule') }}
+                  </button>
+                </div>
+              </form>
+            </section>
+
+            <section class="card">
+              <header class="card-header">
+                <h3>Rule Execution Log</h3>
+              </header>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Timestamp</th>
+                      <th>Rule</th>
+                      <th>Enquiry Ref</th>
+                      <th>Action Taken</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (entry of automationExecutionLog; track entry.id) {
+                      <tr>
+                        <td>{{ entry.timestampUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+                        <td>{{ entry.ruleName }}</td>
+                        <td>{{ entry.enquiryReference }}</td>
+                        <td>{{ entry.actionTaken }}</td>
+                      </tr>
+                    }
+                    @if (automationExecutionLog.length === 0) {
+                      <tr>
+                        <td colspan="4" class="empty-row">No automated actions have been logged yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
+          @if (activeSectionKey === 'guest-profiles') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Guest Profile Custom Fields</h3>
+                <button type="button" class="ghost" (click)="addGuestProfileField()">Add Field</button>
+              </header>
+              <p class="helper-text">
+                These fields appear in the Contacts CRM profile and support repeat-guest personalisation.
+              </p>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Label</th>
+                      <th>Key</th>
+                      <th>Type</th>
+                      <th>Placeholder</th>
+                      <th>Options (CSV)</th>
+                      <th>Required</th>
+                      <th>Active</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (field of guestProfileCustomFields; track field.id) {
+                      <tr>
+                        <td>
+                          <input type="text" [(ngModel)]="field.label" [ngModelOptions]="{standalone: true}" placeholder="Favourite drink" />
+                        </td>
+                        <td>
+                          <input type="text" [(ngModel)]="field.key" [ngModelOptions]="{standalone: true}" placeholder="favourite_drink" />
+                        </td>
+                        <td>
+                          <select [(ngModel)]="field.type" [ngModelOptions]="{standalone: true}">
+                            <option value="text">text</option>
+                            <option value="textarea">textarea</option>
+                            <option value="number">number</option>
+                            <option value="date">date</option>
+                            <option value="boolean">boolean</option>
+                            <option value="select">select</option>
+                          </select>
+                        </td>
+                        <td>
+                          <input type="text" [(ngModel)]="field.placeholder" [ngModelOptions]="{standalone: true}" />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            [ngModel]="guestProfileOptionsText(field)"
+                            (ngModelChange)="setGuestProfileOptions(field, $event)"
+                            [ngModelOptions]="{standalone: true}" />
+                        </td>
+                        <td>
+                          <label class="checkbox inline">
+                            <input type="checkbox" [(ngModel)]="field.isRequired" [ngModelOptions]="{standalone: true}" />
+                            <span>Yes</span>
+                          </label>
+                        </td>
+                        <td>
+                          <label class="checkbox inline">
+                            <input type="checkbox" [(ngModel)]="field.isActive" [ngModelOptions]="{standalone: true}" />
+                            <span>Yes</span>
+                          </label>
+                        </td>
+                        <td>
+                          <div class="inline-actions">
+                            <button type="button" class="link" (click)="moveGuestProfileField(field.id, -1)">Up</button>
+                            <button type="button" class="link" (click)="moveGuestProfileField(field.id, 1)">Down</button>
+                            <button type="button" class="link danger" (click)="removeGuestProfileField(field.id)">Delete</button>
+                          </div>
+                        </td>
+                      </tr>
+                    }
+                    @if (guestProfileCustomFields.length === 0) {
+                      <tr>
+                        <td colspan="8" class="empty-row">No guest profile custom fields defined yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="actions">
+                <button type="button" class="primary" (click)="saveGuestProfileFields()" [disabled]="sectionStates['guest-profiles'].saving">
+                  {{ sectionStates['guest-profiles'].saving ? 'Saving...' : 'Save Guest Profile Fields' }}
+                </button>
+              </div>
             </section>
           }
 
@@ -1197,6 +1835,7 @@
             <section class="card">
               <header class="card-header">
                 <h3>Task Templates</h3>
+                <button type="button" class="ghost" (click)="startNewTaskTemplate()">Create Template</button>
               </header>
 
               <form class="form-grid compact" [formGroup]="taskTemplateForm" (ngSubmit)="saveTaskTemplate()">
@@ -1211,39 +1850,60 @@
                 </label>
 
                 <label>
-                  Trigger Status
-                  <input type="text" formControlName="triggerStatus" />
+                  Auto-Apply on Status
+                  <select formControlName="autoApplyOnStatus">
+                    @for (option of taskTemplateAutoApplyOptions; track option.value) {
+                      <option [value]="option.value">{{ option.label }}</option>
+                    }
+                  </select>
                 </label>
 
                 <label>
-                  Task Title
-                  <input type="text" formControlName="itemTitle" />
-                </label>
-
-                <label>
-                  Priority
-                  <input type="text" formControlName="itemPriority" />
-                </label>
-
-                <label>
-                  Due Rule
-                  <input type="text" formControlName="itemDueDateRule" />
-                </label>
-
-                <label>
-                  Due Offset Days
-                  <input type="number" min="0" formControlName="itemDueOffsetDays" />
+                  Active
+                  <select formControlName="isActive">
+                    <option [ngValue]="true">Yes</option>
+                    <option [ngValue]="false">No</option>
+                  </select>
                 </label>
 
                 <label class="full-width">
                   Description
-                  <textarea rows="2" formControlName="itemDescription"></textarea>
+                  <textarea rows="2" formControlName="description"></textarea>
                 </label>
 
-                <label class="checkbox">
-                  <input type="checkbox" formControlName="assignToEventManager" />
-                  <span>Assign to event manager</span>
-                </label>
+                <section class="matrix-section full-width">
+                  <header>
+                    <h4>Template Task Items</h4>
+                    <button type="button" class="ghost" (click)="addTaskTemplateItem()">+ Add Task Item</button>
+                  </header>
+                  <div formArrayName="taskItems" class="matrix-grid">
+                    @for (item of taskTemplateItemControls.controls; track $index; let i = $index) {
+                      <div [formGroupName]="i" class="matrix-row wide task-template-row">
+                        <input type="text" formControlName="title" placeholder="Task title" />
+                        <select formControlName="category">
+                          @for (category of taskTemplateCategoryOptions; track category) {
+                            <option [value]="category">{{ category }}</option>
+                          }
+                        </select>
+                        <select formControlName="priority">
+                          @for (priority of taskTemplatePriorityOptions; track priority) {
+                            <option [value]="priority">{{ priority }}</option>
+                          }
+                        </select>
+                        <select formControlName="defaultAssigneeRole">
+                          @for (role of taskTemplateAssigneeRoleOptions; track role) {
+                            <option [value]="role">{{ role }}</option>
+                          }
+                        </select>
+                        <input type="number" formControlName="dueDateOffset" placeholder="Offset days" />
+                        <button type="button" class="icon" (click)="moveTaskTemplateItem(i, -1)">&#8593;</button>
+                        <button type="button" class="icon" (click)="moveTaskTemplateItem(i, 1)">&#8595;</button>
+                        <button type="button" class="icon" (click)="removeTaskTemplateItem(i)">&#10005;</button>
+                        <textarea rows="2" formControlName="description" placeholder="Optional description"></textarea>
+                      </div>
+                    }
+                  </div>
+                </section>
 
                 <div class="actions full-width">
                   <button type="submit" class="primary" [disabled]="sectionStates['task-templates'].saving">
@@ -1258,7 +1918,9 @@
                     <tr>
                       <th>Name</th>
                       <th>Event Type</th>
-                      <th>Trigger</th>
+                      <th>Task Count</th>
+                      <th>Auto-Apply</th>
+                      <th>Active</th>
                       <th></th>
                     </tr>
                   </thead>
@@ -1267,16 +1929,19 @@
                       <tr>
                         <td>{{ template.name }}</td>
                         <td>{{ template.eventType }}</td>
-                        <td>{{ template.triggerStatus }}</td>
+                        <td>{{ template.tasks.length }}</td>
+                        <td>{{ template.autoApplyOnStatus }}</td>
+                        <td>{{ template.isActive ? 'Yes' : 'No' }}</td>
                         <td>
                           <button type="button" class="link" (click)="editTaskTemplate(template)">Edit</button>
+                          <button type="button" class="link" (click)="duplicateTaskTemplate(template.id)">Duplicate</button>
                           <button type="button" class="link danger" (click)="deleteTaskTemplate(template.id)">Delete</button>
                         </td>
                       </tr>
                     }
                     @if (taskTemplates.length === 0) {
                       <tr>
-                        <td colspan="4" class="empty-row">No task templates configured yet.</td>
+                        <td colspan="6" class="empty-row">No task templates configured yet.</td>
                       </tr>
                     }
                   </tbody>
@@ -1298,13 +1963,40 @@
                 </label>
 
                 <label>
-                  Report Key
-                  <input type="text" formControlName="reportKey" />
+                  Frequency
+                  <select formControlName="frequency">
+                    @for (frequency of reportScheduleFrequencyOptions; track frequency) {
+                      <option [value]="frequency">{{ frequency }}</option>
+                    }
+                  </select>
                 </label>
 
                 <label>
-                  Frequency
-                  <input type="text" formControlName="frequency" placeholder="daily/weekly/monthly" />
+                  Delivery Format
+                  <select formControlName="format">
+                    @for (format of reportScheduleFormatOptions; track format) {
+                      <option [value]="format">{{ format }}</option>
+                    }
+                  </select>
+                </label>
+
+                <label>
+                  Day of Week
+                  <select formControlName="dayOfWeek">
+                    @for (day of reportScheduleDayOptions; track day.value) {
+                      <option [ngValue]="day.value">{{ day.label }}</option>
+                    }
+                  </select>
+                </label>
+
+                <label>
+                  Day of Month
+                  <input type="number" min="1" max="31" formControlName="dayOfMonth" />
+                </label>
+
+                <label>
+                  Time (UTC)
+                  <input type="time" formControlName="timeOfDay" />
                 </label>
 
                 <label class="full-width">
@@ -1323,14 +2015,37 @@
                 </label>
 
                 <label class="full-width">
-                  Filters JSON
-                  <textarea rows="3" formControlName="filtersJson"></textarea>
+                  Event Type Filter (optional)
+                  <input type="text" formControlName="eventType" placeholder="Wedding, Corporate Conference, etc." />
                 </label>
+
+                <label>
+                  Filter From Date
+                  <input type="date" formControlName="fromDate" />
+                </label>
+
+                <label>
+                  Filter To Date
+                  <input type="date" formControlName="toDate" />
+                </label>
+
+                <section class="full-width report-key-picker">
+                  <h4>Report Types</h4>
+                  <div class="chip-grid">
+                    @for (report of reportCatalog; track report.key) {
+                      <label class="chip-option">
+                        <input type="checkbox" [checked]="isReportSelected(report.key)" (change)="toggleReportKey(report.key, $event)" />
+                        <span>{{ report.name }}</span>
+                      </label>
+                    }
+                  </div>
+                </section>
 
                 <div class="actions full-width">
                   <button type="submit" class="primary" [disabled]="sectionStates['report-schedules'].saving">
                     {{ sectionStates['report-schedules'].saving ? 'Saving...' : 'Save Report Schedule' }}
                   </button>
+                  <button type="button" class="ghost" (click)="startNewReportSchedule()">New Schedule</button>
                 </div>
               </form>
 
@@ -1339,8 +2054,12 @@
                   <thead>
                     <tr>
                       <th>Name</th>
-                      <th>Report</th>
-                      <th>Frequency</th>
+                      <th>Reports</th>
+                      <th>Cadence</th>
+                      <th>Format</th>
+                      <th>Recipients</th>
+                      <th>Next Run</th>
+                      <th>Last Run</th>
                       <th>Active</th>
                       <th></th>
                     </tr>
@@ -1349,18 +2068,65 @@
                     @for (schedule of reportSchedules; track schedule.id) {
                       <tr>
                         <td>{{ schedule.name }}</td>
-                        <td>{{ schedule.reportKey }}</td>
-                        <td>{{ schedule.frequency }}</td>
+                        <td>
+                          @for (reportKey of schedule.reportKeys; track reportKey) {
+                            <div>{{ getReportDisplayName(reportKey) }}</div>
+                          }
+                        </td>
+                        <td>{{ getScheduleFrequencyLabel(schedule) }}</td>
+                        <td>{{ schedule.format }}</td>
+                        <td>{{ schedule.recipients.join(', ') }}</td>
+                        <td>{{ schedule.nextRunAtUtc ? (schedule.nextRunAtUtc | date:'dd/MM/yyyy HH:mm') : 'Pending' }}</td>
+                        <td>{{ schedule.lastRunAtUtc ? (schedule.lastRunAtUtc | date:'dd/MM/yyyy HH:mm') : 'Never' }}</td>
                         <td>{{ schedule.isActive ? 'Yes' : 'No' }}</td>
                         <td>
                           <button type="button" class="link" (click)="editReportSchedule(schedule)">Edit</button>
+                          <button type="button" class="link" (click)="sendReportScheduleNow(schedule.id)" [disabled]="runningScheduleId === schedule.id">
+                            {{ runningScheduleId === schedule.id ? 'Sending...' : 'Send Now' }}
+                          </button>
+                          <button type="button" class="link" (click)="loadReportScheduleExecutionLogs(schedule.id)">Logs</button>
                           <button type="button" class="link danger" (click)="deleteReportScheduleItem(schedule.id)">Delete</button>
                         </td>
                       </tr>
                     }
                     @if (reportSchedules.length === 0) {
                       <tr>
-                        <td colspan="5" class="empty-row">No report schedules configured yet.</td>
+                        <td colspan="9" class="empty-row">No report schedules configured yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="table-wrap">
+                <header class="card-header">
+                  <h3>Execution Log (last 10 runs)</h3>
+                </header>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Run At</th>
+                      <th>Status</th>
+                      <th>Trigger</th>
+                      <th>Recipients</th>
+                      <th>Attachments</th>
+                      <th>Message</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (log of scheduleExecutionLogs; track log.id) {
+                      <tr>
+                        <td>{{ log.runAtUtc | date:'dd/MM/yyyy HH:mm' }}</td>
+                        <td>{{ log.status }}</td>
+                        <td>{{ log.trigger }}</td>
+                        <td>{{ log.recipientCount }}</td>
+                        <td>{{ log.attachmentCount }}</td>
+                        <td>{{ log.message || '-' }}</td>
+                      </tr>
+                    }
+                    @if (scheduleExecutionLogs.length === 0) {
+                      <tr>
+                        <td colspan="6" class="empty-row">No execution history yet. Select a schedule and click Logs.</td>
                       </tr>
                     }
                   </tbody>

@@ -1,0 +1,201 @@
+<div class="portal-shell" [style.--brand-primary]="model?.branding?.primaryColor || '#0B5FFF'" [style.--brand-secondary]="model?.branding?.secondaryColor || '#0F172A'">
+  @if (loading) {
+    <section class="state-card">
+      <h1>Loading proposal...</h1>
+      <p>Please wait while we fetch your proposal details.</p>
+    </section>
+  } @else if (errorMessage) {
+    <section class="state-card error">
+      <h1>Portal link unavailable</h1>
+      <p>{{ errorMessage }}</p>
+    </section>
+  } @else if (model; as vm) {
+    <header class="portal-header">
+      <div class="brand">
+        @if (vm.branding.logoUrl) {
+          <img [src]="vm.branding.logoUrl || ''" alt="Venue logo" />
+        }
+        <div>
+          <h1>{{ vm.branding.venueName }}</h1>
+          <p>{{ vm.proposal.title || (vm.eventSummary.eventName || vm.eventSummary.eventType) }}</p>
+        </div>
+      </div>
+      <div class="status-wrap">
+        <span class="status-badge" [attr.data-status]="vm.proposal.status.toLowerCase()">{{ vm.proposal.status }}</span>
+        <small>Link expires: {{ resolvedTokenExpiry | date: 'dd/MM/yyyy HH:mm' }}</small>
+      </div>
+    </header>
+
+    @if (successMessage) {
+      <p class="alert success">{{ successMessage }}</p>
+    }
+
+    @if (vm.proposal.hasUpdatedVersion) {
+      <p class="alert info">This proposal has a newer version available.</p>
+    }
+
+    <main class="portal-grid">
+      <section class="panel proposal-overview">
+        <h2>Proposal Overview</h2>
+        <div class="summary-grid">
+          <p><strong>Client</strong><span>{{ vm.proposal.clientName }}</span></p>
+          <p><strong>Event date</strong><span>{{ vm.proposal.eventDateUtc | date: 'dd/MM/yyyy' }}</span></p>
+          <p><strong>Event type</strong><span>{{ vm.eventSummary.eventType }}</span></p>
+          <p><strong>Guest count</strong><span>{{ vm.eventSummary.guestsExpected }}</span></p>
+          <p><strong>Reference</strong><span>{{ vm.eventSummary.reference }}</span></p>
+          <p><strong>Valid until</strong><span>{{ vm.proposal.validUntilDate || 'Not set' }}</span></p>
+        </div>
+
+        <div class="totals">
+          <strong>Total: {{ vm.proposal.totalAmount | number: '1.2-2' }} {{ vm.proposal.currencyCode }}</strong>
+        </div>
+
+        <div class="downloads">
+          <button type="button" (click)="openDownload(vm.proposal.pdfDownloadUrl)">Download Proposal PDF</button>
+          <button type="button" (click)="openDownload(vm.proposal.signedPdfDownloadUrl)" [disabled]="!vm.proposal.signedPdfDownloadUrl">Download Signed PDF</button>
+        </div>
+      </section>
+
+      <section class="panel line-items">
+        <h2>Pricing</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Description</th>
+              <th>Qty</th>
+              <th>Unit Price</th>
+              <th>VAT</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (line of vm.proposal.lines; track line) {
+              <tr>
+                <td>{{ line.category }}</td>
+                <td>{{ line.description }}</td>
+                <td>{{ line.quantity }}</td>
+                <td>{{ line.unitPriceExclVat | number: '1.2-2' }}</td>
+                <td>{{ line.vatRate }}%</td>
+                <td>{{ line.totalInclVat | number: '1.2-2' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+
+        <div class="vat-breakdown">
+          @for (vat of vm.proposal.vatBreakdown; track vat.vatRate) {
+            <span>VAT {{ vat.vatRate }}%: {{ vat.vatAmount | number: '1.2-2' }} {{ vm.proposal.currencyCode }}</span>
+          }
+        </div>
+      </section>
+
+      <section class="panel terms">
+        <h2>Terms &amp; Conditions ({{ vm.proposal.termsVersion }})</h2>
+        <div class="terms-content">{{ vm.proposal.termsContent }}</div>
+      </section>
+
+      <section class="panel acceptance">
+        <h2>Accept Proposal</h2>
+        <label class="check">
+          <input type="checkbox" [(ngModel)]="acceptTerms" />
+          <span>I have read and accept the Terms &amp; Conditions</span>
+        </label>
+
+        <label>
+          <span>Full legal name</span>
+          <input type="text" [(ngModel)]="fullLegalName" />
+        </label>
+
+        <div class="signature-mode">
+          <button type="button" [class.active]="signatureMode === 'typed'" (click)="useSignatureMode('typed')">Type signature</button>
+          <button type="button" [class.active]="signatureMode === 'drawn'" (click)="useSignatureMode('drawn')">Draw signature</button>
+        </div>
+
+        @if (signatureMode === 'typed') {
+          <label>
+            <span>Typed signature</span>
+            <input type="text" [(ngModel)]="typedSignature" placeholder="Type your signature" />
+          </label>
+        } @else {
+          <div class="drawn-signature-wrap">
+            <canvas
+              #signatureCanvas
+              width="480"
+              height="160"
+              (pointerdown)="onCanvasPointerDown($event)"
+              (pointermove)="onCanvasPointerMove($event)"
+              (pointerup)="onCanvasPointerUp($event)"
+              (pointerleave)="onCanvasPointerUp($event)"></canvas>
+            <button type="button" class="link" (click)="clearDrawnSignature()">Clear signature</button>
+          </div>
+        }
+
+        <button type="button" class="primary" (click)="onAccept()" [disabled]="!canSubmitAccept || submittingAccept || !canPerformPortalActions">
+          {{ submittingAccept ? 'Submitting...' : 'Accept Proposal' }}
+        </button>
+      </section>
+
+      <section class="panel responses">
+        <h2>Other Options</h2>
+        <label>
+          <span>Decline reason (optional)</span>
+          <textarea rows="3" [(ngModel)]="declineReason" placeholder="Tell us why this proposal isn't suitable"></textarea>
+        </label>
+        <button type="button" class="danger" (click)="onDecline()" [disabled]="submittingDecline || !canPerformPortalActions">
+          {{ submittingDecline ? 'Submitting...' : 'Decline Proposal' }}
+        </button>
+
+        <label>
+          <span>Request changes</span>
+          <textarea rows="3" [(ngModel)]="requestChangesComment" placeholder="Explain what you would like to change"></textarea>
+        </label>
+        <button type="button" (click)="onRequestChanges()" [disabled]="submittingRequestChanges || !canPerformPortalActions">
+          {{ submittingRequestChanges ? 'Submitting...' : 'Request Changes' }}
+        </button>
+      </section>
+
+      <section class="panel payments">
+        <h2>Payment Schedule</h2>
+        @if (vm.payments.milestones.length === 0) {
+          <p>No payment milestones are available yet.</p>
+        } @else {
+          <table>
+            <thead>
+              <tr>
+                <th>Milestone</th>
+                <th>Due date</th>
+                <th>Amount</th>
+                <th>Paid</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (milestone of vm.payments.milestones; track milestone.id) {
+                <tr>
+                  <td>{{ milestone.label }}</td>
+                  <td>{{ milestone.dueDate | date: 'dd/MM/yyyy' }}</td>
+                  <td>{{ milestone.amount | number: '1.2-2' }} {{ milestone.currencyCode }}</td>
+                  <td>{{ milestone.amountPaid | number: '1.2-2' }} {{ milestone.currencyCode }}</td>
+                  <td>
+                    <span class="status-inline" [attr.data-status]="milestone.status.toLowerCase()">{{ milestone.status }}</span>
+                  </td>
+                  <td>
+                    @if (milestone.payNowUrl) {
+                      <a [href]="milestone.payNowUrl" target="_blank" rel="noopener">Pay now</a>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+          <p class="payments-summary">
+            Total paid: {{ vm.payments.totalPaid | number: '1.2-2' }} {{ vm.proposal.currencyCode }} ·
+            Outstanding: {{ vm.payments.totalOutstanding | number: '1.2-2' }} {{ vm.proposal.currencyCode }}
+          </p>
+        }
+      </section>
+    </main>
+  }
+</div>

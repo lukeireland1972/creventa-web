@@ -4,9 +4,12 @@
       <h1>Connect</h1>
       <p>Unified communications timeline, unmatched inbox, and team chat.</p>
     </div>
-    <div class="status-pills">
-      <span>Unmatched: {{ unmatchedEmailCount }}</span>
-      <span>@ Mentions: {{ unreadMentionCount }}</span>
+    <div class="page-header-actions">
+      <div class="status-pills">
+        <span>Unmatched: {{ unmatchedEmailCount }}</span>
+        <span>@ Mentions: {{ unreadMentionCount }}</span>
+      </div>
+      <button type="button" class="add-task-btn" (click)="openAddTask()">+ Add Task</button>
     </div>
   </header>
 
@@ -38,7 +41,16 @@
               <span>{{ item.occurredAtUtc | date: 'dd/MM HH:mm' }}</span>
             </div>
             <p>{{ item.subject || item.preview }}</p>
-            <small>{{ item.contactName }} · {{ item.type }} · {{ item.direction }}</small>
+            <div class="line-meta">
+              <span class="type-badge" [class]="timelineTypeBadgeClass(item.type)">
+                <i>{{ timelineTypeBadgeIcon(item.type) }}</i>
+                {{ timelineTypeBadgeLabel(item.type) }}
+              </span>
+              <small>{{ item.contactName }} · {{ item.direction }}</small>
+              @if (item.attachmentCount > 0) {
+                <small>{{ item.attachmentCount }} attachment{{ item.attachmentCount === 1 ? '' : 's' }}</small>
+              }
+            </div>
           </li>
         }
 
@@ -57,16 +69,94 @@
       <section>
         <h3>Internal Note</h3>
         <textarea [(ngModel)]="noteDraft" rows="4" placeholder="Add internal note and use @mentions."></textarea>
-        <button type="button" (click)="addNote()" [disabled]="!canCompose || !noteDraft.trim()">Add Note</button>
+        <button type="button" class="primary-action" (click)="addNote()" [disabled]="!canCompose || !noteDraft.trim()">Add Note</button>
       </section>
 
-      <section>
-        <h3>Email</h3>
-        <input type="email" [(ngModel)]="emailTo" placeholder="To" />
-        <input type="text" [(ngModel)]="emailCc" placeholder="CC (optional)" />
-        <input type="text" [(ngModel)]="emailSubject" placeholder="Subject" />
-        <textarea [(ngModel)]="emailBody" rows="5" placeholder="Message"></textarea>
-        <button type="button" (click)="sendEmail()" [disabled]="!canCompose || !emailTo || !emailSubject || !emailBody">Send Email</button>
+      <section class="compose-message-section">
+        <div class="compose-channel-tabs">
+          <button type="button" [class.active]="composeChannel === 'email'" (click)="setComposeChannel('email')">Email</button>
+          <button type="button" [class.active]="composeChannel === 'portal'" (click)="setComposeChannel('portal')">Portal Message</button>
+        </div>
+
+        @if (composeChannel === 'email') {
+          <h3>Email</h3>
+          <div class="compose-toolbar">
+            <button type="button" class="toolbar-button" (click)="toggleTemplatePicker()" [disabled]="!canCompose || templatesLoading">
+              Templates
+            </button>
+            <label class="toolbar-button attach-button" [class.disabled]="!canAttachFiles">
+              <span>Attach</span>
+              <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.csv" (change)="onAttachmentBrowse($event)" [disabled]="!canAttachFiles" />
+            </label>
+          </div>
+
+          @if (showTemplatePicker) {
+            <div class="template-picker">
+              @if (templatesLoading) {
+                <p>Loading templates...</p>
+              } @else if (availableTemplates.length > 0) {
+                @for (template of availableTemplates; track template.key) {
+                  <button type="button" (click)="applyTemplate(template)">
+                    <strong>{{ template.name }}</strong>
+                    <small>{{ template.subjectTemplate }}</small>
+                  </button>
+                }
+              } @else {
+                <p>{{ templateError || 'No active templates available.' }}</p>
+              }
+            </div>
+          }
+
+          <input type="email" [(ngModel)]="emailTo" placeholder="To" />
+          <input type="text" [(ngModel)]="emailCc" placeholder="CC (optional)" />
+          <input type="text" [(ngModel)]="emailSubject" placeholder="Subject" />
+          <textarea [(ngModel)]="emailBody" rows="6" placeholder="Message"></textarea>
+
+          <div
+            class="attachment-dropzone"
+            [class.drag-active]="isAttachmentDragActive"
+            [class.disabled]="!canAttachFiles"
+            (dragover)="onAttachmentDragOver($event)"
+            (dragleave)="onAttachmentDragLeave($event)"
+            (drop)="onAttachmentDrop($event)">
+            <p>Drag and drop files here or use Attach.</p>
+            <small>Max 10MB per file, 25MB total. PDF, DOC/X, XLS/X, JPG, PNG, CSV.</small>
+          </div>
+
+          @if (attachments.length > 0) {
+            <div class="attachment-chip-list">
+              @for (attachment of attachments; track attachment.id) {
+                <span class="attachment-chip">
+                  {{ attachment.fileName }} ({{ formatAttachmentSize(attachment.sizeBytes) }})
+                  <button type="button" (click)="removeAttachment(attachment.id)" aria-label="Remove attachment">×</button>
+                </span>
+              }
+            </div>
+            <small class="attachment-total">Total: {{ formatAttachmentSize(attachmentTotalBytes) }}</small>
+          }
+        } @else {
+          <h3>Portal Message</h3>
+          <input type="text" [(ngModel)]="portalSubject" placeholder="Subject (optional)" />
+          <textarea [(ngModel)]="portalBody" rows="6" placeholder="Message visible in client portal inbox"></textarea>
+        }
+
+        @if (attachmentError) {
+          <p class="compose-error">{{ attachmentError }}</p>
+        }
+        @if (composeError) {
+          <p class="compose-error">{{ composeError }}</p>
+        }
+        @if (composeSuccess) {
+          <p class="compose-success">{{ composeSuccess }}</p>
+        }
+
+        <button
+          type="button"
+          class="primary-action"
+          (click)="sendCompose()"
+          [disabled]="composeChannel === 'email' ? !canSendEmail : !canSendPortalMessage">
+          {{ isSendingCompose ? 'Sending...' : composeChannel === 'email' ? 'Send Email' : 'Send Portal Message' }}
+        </button>
       </section>
 
       <section>
@@ -140,3 +230,10 @@
     </article>
   </section>
 </section>
+
+<app-task-quick-create-modal
+  [isOpen]="showAddTaskModal"
+  [defaultEnquiryId]="selectedEnquiryId || null"
+  (close)="closeAddTaskModal()"
+  (created)="onTaskQuickCreated($event)">
+</app-task-quick-create-modal>

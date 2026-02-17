@@ -47,12 +47,20 @@ describe('DashboardComponent', () => {
     },
     recentActivity: [],
     upcomingEvents: [],
+    taskSummary: {
+      openCount: 0,
+      overdueCount: 0,
+      dueTodayCount: 0
+    },
     tasksDueToday: [],
+    overdueTasks: [],
+    myTasks: [],
     actionRequired: {
       inactiveEnquiries: 1,
       unassignedEnquiries: 2,
       expiringHolds: 3,
-      total: 6
+      total: 6,
+      priorityEnquiries: []
     },
     degradedMode: false,
     warnings: []
@@ -110,4 +118,3 @@ describe('DashboardComponent', () => {
     expect(router.navigateByUrl).toHaveBeenCalledWith('/connect?focus=p1');
   });
 });
-

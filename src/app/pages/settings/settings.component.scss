@@ -153,6 +153,45 @@
   grid-column: 1 / -1;
 }
 
+.report-key-picker {
+  border: 1px solid #dbe5f2;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 0.7rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.report-key-picker h4 {
+  margin: 0;
+  color: #334155;
+  font-size: 0.8rem;
+}
+
+.chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.chip-option {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.32rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #fff;
+  padding: 0.28rem 0.5rem;
+  font-size: 0.74rem !important;
+  font-weight: 600 !important;
+  color: #334155;
+}
+
+.chip-option input {
+  width: 0.92rem !important;
+  height: 0.92rem !important;
+}
+
 .checkbox {
   display: flex;
   align-items: center;
@@ -257,6 +296,20 @@ button.icon {
   margin: 0;
   color: #64748b;
   font-size: 0.78rem;
+}
+
+.section-caption {
+  margin: 0;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 800;
+  color: #475569;
+}
+
+.helper-text .warn {
+  color: #b45309;
+  font-weight: 700;
 }
 
 .table-wrap {
@@ -486,6 +539,81 @@ td small {
   color: #64748b;
 }
 
+.subtle {
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.74rem;
+  color: #334155;
+}
+
+.pill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.12rem 0.45rem;
+}
+
+.pill.muted {
+  border-color: #d1d5db;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.nested-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 0.65rem;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.nested-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.nested-header h4 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+
+.row-grid {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.55rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.row-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+}
+
 @media (max-width: 1180px) {
   .layout {
     grid-template-columns: 1fr;
@@ -512,6 +640,10 @@ td small {
 
   .matrix-row,
   .matrix-row.wide {
+    grid-template-columns: 1fr;
+  }
+
+  .row-grid {
     grid-template-columns: 1fr;
   }
 

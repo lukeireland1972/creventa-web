@@ -20,6 +20,12 @@
           }
         </select>
       </label>
+
+      @if (canCreateVenue) {
+        <button type="button" class="superadmin-btn" (click)="openCreateVenueModal($event)">
+          Superadmin: + New Venue
+        </button>
+      }
     </div>
 
     <div class="sidebar-scroll">
@@ -157,12 +163,21 @@
                   (ngModelChange)="onSearchInput($event)"
                   (focus)="onSearchFocus($event)"
                   name="globalSearch"
-                  placeholder="Search enquiries, contacts, events, payments..."
+                  placeholder="Search naturally: weddings in March over 100 guests..."
                 />
               </form>
 
               @if (isSearchOpen) {
                 <div class="search-menu">
+                  @if (searchIntent?.isNaturalLanguage) {
+                    <div class="search-intent">
+                      <strong>Understood: {{ searchIntent?.intentLabel || 'Natural language query' }}</strong>
+                      @if (searchIntent?.suggestedRoute) {
+                        <button type="button" class="inline-link" (click)="openSearchIntentRoute()">Open filtered view</button>
+                      }
+                    </div>
+                  }
+
                   @if (searchQuery.trim().length < 3 && recentSearches.length > 0) {
                     <div class="search-section-title">Recent searches</div>
                     @for (query of recentSearches; track query) {
@@ -237,6 +252,10 @@
               }
             </div>
 
+            <div class="assistant-wrap" (click)="$event.stopPropagation()">
+              <button class="icon-btn" (click)="toggleAssistant($event)" aria-label="AI Assistant">&#10024;</button>
+            </div>
+
             <div class="settings-wrap" (click)="$event.stopPropagation()">
               <button class="icon-btn" (click)="toggleSettings($event)" aria-label="Settings">&#9881;</button>
               @if (isSettingsOpen) {
@@ -249,6 +268,7 @@
                   <button type="button" (click)="openSettingsSection('terms')">Terms & Conditions</button>
                   <button type="button" (click)="openSettingsSection('proposal-templates')">Proposal Templates</button>
                   <button type="button" (click)="openSettingsSection('planning-milestones')">Planning Milestones</button>
+                  <button type="button" (click)="openSettingsSection('guest-profiles')">Guest Profiles</button>
                   <button type="button" (click)="openSettingsSection('report-configuration')">Report Configuration</button>
                   <button type="button" (click)="openSettingsSection('automation')">Automation</button>
                   <button type="button" (click)="openSettingsSection('email-templates')">Email Templates</button>
@@ -277,8 +297,141 @@
     </main>
   </section>
 
+  @if (isAssistantOpen && canUseAssistant) {
+    <aside class="assistant-panel" (click)="$event.stopPropagation()">
+      <header class="assistant-header">
+        <div>
+          <h3>AI Assistant</h3>
+          <p>Natural-language insights, summaries and drafting help.</p>
+        </div>
+        <button type="button" class="icon-btn" (click)="isAssistantOpen = false">&#10005;</button>
+      </header>
+
+      <div class="assistant-quick-actions">
+        <button type="button" (click)="loadDailyBriefing()">Daily Briefing</button>
+        <button type="button" (click)="loadMeetingPrep()">Meeting Prep</button>
+        <button type="button" [disabled]="!currentEnquiryIdFromUrl" (click)="loadCurrentEnquirySummary()">Enquiry Summary</button>
+      </div>
+
+      <div class="assistant-thread">
+        @for (message of assistantMessages; track message.id) {
+          <article class="assistant-message" [class.user]="message.role === 'user'">
+            <div class="meta">
+              <strong>{{ message.role === 'user' ? 'You' : 'Assistant' }}</strong>
+              @if (message.intent && message.role !== 'user') {
+                <em>{{ message.intent }}</em>
+              }
+              <span>{{ message.generatedAtUtc | date: 'dd/MM HH:mm' }}</span>
+            </div>
+            <p>{{ message.text }}</p>
+
+            @if (message.actions?.length) {
+              <div class="assistant-actions">
+                @for (action of message.actions || []; track action.key) {
+                  <button type="button" (click)="runAssistantAction(action)">{{ action.label }}</button>
+                }
+              </div>
+            }
+
+            @if (message.suggestions?.length) {
+              <div class="assistant-suggestions">
+                @for (suggestion of message.suggestions || []; track suggestion) {
+                  <button type="button" (click)="runAssistantSuggestion(suggestion)">{{ suggestion }}</button>
+                }
+              </div>
+            }
+          </article>
+        }
+
+        @if (assistantLoading) {
+          <p class="assistant-loading">Assistant is thinking...</p>
+        }
+
+        @if (assistantError) {
+          <p class="assistant-error">{{ assistantError }}</p>
+        }
+
+        @if (!assistantLoading && assistantMessages.length === 0 && !assistantError) {
+          <p class="assistant-empty">Ask: "What's my pipeline looking like this month?"</p>
+        }
+      </div>
+
+      <form class="assistant-input" (submit)="sendAssistantPrompt($event)">
+        <select [(ngModel)]="assistantTone" name="assistantTone">
+          <option value="friendly">Friendly</option>
+          <option value="formal">Formal</option>
+          <option value="urgent">Urgent</option>
+        </select>
+        <input
+          type="text"
+          [ngModel]="assistantPrompt"
+          (ngModelChange)="assistantPrompt = $event"
+          name="assistantPrompt"
+          placeholder="Ask about pipeline, follow-ups, revenue, or draft emails"
+        />
+        <button type="submit" [disabled]="assistantLoading || !assistantPrompt.trim()">Send</button>
+      </form>
+    </aside>
+  }
+
   @if (isDrawerOpen) {
     <div class="drawer-backdrop" (click)="closeDrawer()"></div>
+  }
+
+  @if (isCreateVenueOpen) {
+    <div class="create-venue-backdrop" (click)="closeCreateVenueModal()"></div>
+    <aside class="create-venue-modal" (click)="$event.stopPropagation()">
+      <div class="drawer-header">
+        <div>
+          <h2>Create New Venue</h2>
+          <p>This venue will be added to your group and available in the venue selector.</p>
+        </div>
+        <button class="icon-btn" type="button" (click)="closeCreateVenueModal()">&#10005;</button>
+      </div>
+
+      <form class="create-venue-form" [formGroup]="createVenueForm" (ngSubmit)="submitCreateVenue()">
+        @if (createVenueError) {
+          <p class="form-error">{{ createVenueError }}</p>
+        }
+
+        <label>
+          Venue name
+          <input type="text" formControlName="name" placeholder="e.g. Grand Country Manor" />
+        </label>
+
+        <label>
+          Time zone
+          <input type="text" formControlName="timeZone" placeholder="Europe/London" />
+        </label>
+
+        <label>
+          Currency code
+          <input type="text" formControlName="currencyCode" placeholder="GBP" maxlength="8" />
+        </label>
+
+        <label>
+          Locale
+          <input type="text" formControlName="locale" placeholder="en-GB" maxlength="12" />
+        </label>
+
+        <label>
+          Country code
+          <input type="text" formControlName="countryCode" placeholder="GB" maxlength="8" />
+        </label>
+
+        <label>
+          Enquiries email (optional)
+          <input type="email" formControlName="enquiriesEmail" placeholder="events@venue.co.uk" />
+        </label>
+
+        <div class="create-venue-actions">
+          <button type="button" class="btn-secondary" (click)="closeCreateVenueModal()">Cancel</button>
+          <button type="submit" class="btn-primary" [disabled]="isCreatingVenue">
+            {{ isCreatingVenue ? 'Creating...' : 'Create Venue' }}
+          </button>
+        </div>
+      </form>
+    </aside>
   }
 
   <aside class="drawer" [class.open]="isDrawerOpen">
@@ -325,14 +478,13 @@
             Possible duplicate: <strong>{{ duplicateMatch.contactName }}</strong> has an existing enquiry
             <strong>{{ duplicateMatch.reference }}</strong> for
             <strong>{{ duplicateMatch.eventName }}</strong> on
-            <strong>{{ duplicateMatch.eventStartUtc | date: 'dd/MM/yyyy' }}</strong>.
+            <strong>{{ duplicateMatch.eventStartUtc | date: 'dd/MM/yyyy' }}</strong>. View existing enquiry.
             @if ((duplicateCheck?.duplicateMatches?.length ?? 0) > 1) {
               <span> +{{ (duplicateCheck?.duplicateMatches?.length ?? 1) - 1 }} additional possible match(es).</span>
             }
           </p>
           <div class="advisory-actions">
-            <button type="button" class="inline-link" (click)="openExistingEnquiry(duplicateMatch.enquiryId)">View existing enquiry</button>
-            <button type="button" class="inline-link" (click)="proceedWithDuplicateAdvisory()">Proceed anyway</button>
+            <button type="button" class="inline-link" (click)="openDuplicateWarningModal()">Review duplicate options</button>
           </div>
         </section>
       }
@@ -371,7 +523,7 @@
       @if (hasDateConflictAdvisory && primarySameDateConflict; as sameDateConflict) {
         <section class="advisory-banner">
           <p>
-            Potential same-date conflict: <strong>{{ sameDateConflict.reference }}</strong> ({{ sameDateConflict.status }})
+            Potential double-booking: <strong>{{ sameDateConflict.reference }}</strong> ({{ sameDateConflict.status }})
             for <strong>{{ sameDateConflict.eventName }}</strong> on
             <strong>{{ sameDateConflict.eventStartUtc | date: 'dd/MM/yyyy' }}</strong>.
             @if ((duplicateCheck?.sameDateConflicts?.length ?? 0) > 1) {
@@ -379,8 +531,7 @@
             }
           </p>
           <div class="advisory-actions">
-            <button type="button" class="inline-link" (click)="openExistingEnquiry(sameDateConflict.enquiryId)">View existing enquiry</button>
-            <button type="button" class="inline-link" (click)="proceedWithDateConflictAdvisory()">Proceed anyway</button>
+            <button type="button" class="inline-link" (click)="openDuplicateWarningModal()">Review duplicate options</button>
           </div>
         </section>
       }
@@ -518,4 +669,65 @@
       </div>
     </form>
   </aside>
+
+  @if (showDuplicateWarningModal) {
+    <button type="button" class="duplicate-modal-backdrop" (click)="closeDuplicateWarningModal()" aria-label="Close duplicate warning"></button>
+    <aside class="duplicate-modal" (click)="$event.stopPropagation()">
+      <header class="duplicate-modal-header">
+        <div>
+          <h3>Possible duplicate detected</h3>
+          <p>Review existing enquiries before creating a new one.</p>
+        </div>
+        <button type="button" class="icon-btn" (click)="closeDuplicateWarningModal()">&#10005;</button>
+      </header>
+
+      <section class="duplicate-modal-body">
+        @if (duplicateModalMatches.length > 0) {
+          <h4>Matching contacts</h4>
+          <div class="duplicate-list">
+            @for (match of duplicateModalMatches; track match.enquiryId) {
+              <label>
+                <input
+                  type="radio"
+                  name="duplicateSelection"
+                  [value]="match.enquiryId"
+                  [checked]="selectedDuplicateEnquiryId === match.enquiryId"
+                  (change)="selectedDuplicateEnquiryId = match.enquiryId" />
+                <span>
+                  <strong>{{ match.reference }}</strong> · {{ match.contactName }} · {{ match.eventName }} · {{ match.eventStartUtc | date: 'dd/MM/yyyy' }}
+                  <em>{{ match.status }}</em>
+                </span>
+              </label>
+            }
+          </div>
+        }
+
+        @if (duplicateModalConflicts.length > 0) {
+          <h4>Same-date conflicts</h4>
+          <div class="duplicate-list">
+            @for (conflict of duplicateModalConflicts; track conflict.enquiryId) {
+              <label>
+                <input
+                  type="radio"
+                  name="duplicateSelection"
+                  [value]="conflict.enquiryId"
+                  [checked]="selectedDuplicateEnquiryId === conflict.enquiryId"
+                  (change)="selectedDuplicateEnquiryId = conflict.enquiryId" />
+                <span>
+                  <strong>{{ conflict.reference }}</strong> · {{ conflict.contactName }} · {{ conflict.eventName }} · {{ conflict.eventStartUtc | date: 'dd/MM/yyyy' }}
+                  <em>{{ conflict.status }}</em>
+                </span>
+              </label>
+            }
+          </div>
+        }
+      </section>
+
+      <footer class="duplicate-modal-actions">
+        <button type="button" class="ghost-btn" (click)="createEnquiryAnyway()">Create Anyway</button>
+        <button type="button" class="ghost-btn" (click)="viewDuplicateSelection()">View Existing</button>
+        <button type="button" class="primary-btn" (click)="openMergeFromDuplicateWarning()">Merge</button>
+      </footer>
+    </aside>
+  }
 </div>

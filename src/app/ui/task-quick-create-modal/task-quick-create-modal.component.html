@@ -1,0 +1,115 @@
+@if (isOpen) {
+  <div class="quick-task-backdrop" (click)="requestClose()"></div>
+
+  <section class="quick-task-modal" role="dialog" aria-modal="true" aria-label="Create task">
+    <header class="quick-task-header">
+      <div>
+        <h2>Add Task</h2>
+        <p>Create a new actionable task and link it to an enquiry.</p>
+      </div>
+      <button type="button" class="icon-btn" (click)="requestClose()" [disabled]="saving">×</button>
+    </header>
+
+    @if (loadError) {
+      <p class="message error">{{ loadError }}</p>
+    }
+
+    @if (saveError) {
+      <p class="message error">{{ saveError }}</p>
+    }
+
+    <form class="quick-task-form" [formGroup]="form" (ngSubmit)="submit()">
+      <label>
+        Enquiry
+        <select formControlName="enquiryId" [disabled]="loadingOptions || saving">
+          <option value="">Select enquiry</option>
+          @for (option of enquiries; track trackByEnquiry($index, option)) {
+            <option [value]="option.id">
+              {{ enquiryLabel(option) }}
+            </option>
+          }
+        </select>
+      </label>
+
+      <div class="meta-option-list">
+        @for (option of enquiries; track trackByEnquiry($index, option)) {
+          @if (form.get('enquiryId')?.value === option.id) {
+            <small>{{ enquiryMeta(option) }}</small>
+          }
+        }
+      </div>
+
+      <label>
+        Task title
+        <input
+          type="text"
+          formControlName="title"
+          maxlength="200"
+          placeholder="Follow up with client" />
+      </label>
+
+      <label>
+        Description
+        <textarea
+          rows="3"
+          formControlName="description"
+          maxlength="2000"
+          placeholder="Optional task details"></textarea>
+      </label>
+
+      <div class="grid">
+        <label>
+          Priority
+          <select formControlName="priority">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </label>
+
+        <label>
+          Category
+          <select formControlName="category">
+            <option value="follow_up">Follow Up</option>
+            <option value="site_visit">Site Visit</option>
+            <option value="document">Document</option>
+            <option value="payment">Payment</option>
+            <option value="catering">Catering</option>
+            <option value="setup">Setup</option>
+            <option value="communication">Communication</option>
+            <option value="internal">Internal</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+
+        <label>
+          Assignee
+          <select formControlName="assigneeId">
+            <option value="">Unassigned</option>
+            @for (user of users; track trackByUser($index, user)) {
+              <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+            }
+          </select>
+        </label>
+
+        <label>
+          Due date
+          <input type="date" formControlName="dueDate" />
+        </label>
+
+        <label>
+          Due time
+          <input type="time" formControlName="dueTime" />
+        </label>
+      </div>
+
+      <div class="actions">
+        <button type="button" class="ghost" (click)="requestClose()" [disabled]="saving">Cancel</button>
+        <button type="submit" class="primary" [disabled]="loadingOptions || saving || form.invalid">
+          {{ saving ? 'Creating...' : 'Create Task' }}
+        </button>
+      </div>
+    </form>
+  </section>
+}

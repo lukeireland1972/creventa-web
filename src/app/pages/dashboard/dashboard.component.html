@@ -16,10 +16,13 @@
         <h1>Dashboard</h1>
         <p>Live sales, conversion, payments, and action signals.</p>
       </div>
-      <div class="period-controls" role="group" aria-label="Period selector">
-        <button type="button" [class.active]="period === '7d'" (click)="setPeriod('7d')">7d</button>
-        <button type="button" [class.active]="period === '30d'" (click)="setPeriod('30d')">30d</button>
-        <button type="button" [class.active]="period === '90d'" (click)="setPeriod('90d')">90d</button>
+      <div class="header-actions">
+        <button type="button" class="add-task-btn" (click)="openAddTask()">+ Add Task</button>
+        <div class="period-controls" role="group" aria-label="Period selector">
+          <button type="button" [class.active]="period === '7d'" (click)="setPeriod('7d')">7d</button>
+          <button type="button" [class.active]="period === '30d'" (click)="setPeriod('30d')">30d</button>
+          <button type="button" [class.active]="period === '90d'" (click)="setPeriod('90d')">90d</button>
+        </div>
       </div>
     </header>
 
@@ -80,6 +83,33 @@
             <span>{{ model.pipeline.confirmed.currencyCode }} {{ model.pipeline.confirmed.value | number: '1.0-0' }}</span>
           </button>
         </div>
+      </article>
+
+      <article class="widget">
+        <header>
+          <h2>AI Pricing Insights</h2>
+          <small>Top 5 opportunities</small>
+        </header>
+
+        @if (aiPricingLoading) {
+          <p class="chart-empty">Analysing demand and pricing signals...</p>
+        } @else if (aiPricingInsights.length > 0) {
+          <ul class="ai-insight-list">
+            @for (insight of aiPricingInsights; track insight.spaceId + insight.eventDate + insight.eventType) {
+              <li>
+                <button type="button" class="row-action-btn" (click)="openPricingInsight(insight)">
+                  <span>{{ insight.spaceName }} · {{ insight.eventDate | date: 'dd/MM/yyyy' }}</span>
+                  <small>
+                    {{ insight.eventType }} · {{ insight.demandIntensity }} demand ·
+                    {{ insight.currencyCode }} {{ insight.suggestedPrice | number: '1.0-0' }}
+                  </small>
+                </button>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="chart-empty">{{ aiPricingMessage || 'Gathering data...' }}</p>
+        }
       </article>
 
       <article class="widget widget-wide chart-widget">
@@ -193,26 +223,122 @@
             </button>
           </li>
         </ul>
+
+        <div class="action-priority">
+          <h3>AI Priority Queue</h3>
+          <ul class="priority-list">
+            @for (item of model.actionRequired.priorityEnquiries; track item.enquiryId) {
+              <li>
+                <button type="button" class="row-action-btn priority-row" (click)="openPriorityEnquiry(item)">
+                  <div class="priority-main">
+                    <strong>{{ item.enquiryReference }}</strong>
+                    <span>{{ item.contactName }} · {{ item.reason }}</span>
+                  </div>
+                  <div class="priority-metrics">
+                    <span class="score-pill" [attr.data-band]="scoreBandToken(item.conversionScoreBand)">
+                      {{ item.conversionScore | number: '1.0-0' }}
+                    </span>
+                    <small [attr.data-direction]="trendToken(item.weeklyTrendDirection)">
+                      {{ trendLabel(item.weeklyTrendDirection) }} {{ trendDeltaLabel(item.weeklyTrendDelta) }}
+                    </small>
+                  </div>
+                </button>
+              </li>
+            }
+            @if (model.actionRequired.priorityEnquiries.length === 0) {
+              <li class="empty">No priority enquiries right now.</li>
+            }
+          </ul>
+        </div>
       </article>
 
       <article class="widget">
         <header>
           <h2>Tasks Due Today</h2>
+          <small>{{ model.taskSummary.dueTodayCount }}</small>
         </header>
 
         <ul class="simple-list">
           @for (task of model.tasksDueToday; track task.taskId) {
             <li>
-              <button type="button" class="row-action-btn" (click)="openTask(task)">
-              <span>{{ task.title }}</span>
-              <small>{{ task.enquiryReference }} · {{ task.priority }}</small>
-              </button>
+              <div class="task-row">
+                <label class="task-check">
+                  <input type="checkbox" (change)="completeTaskFromWidget(task)" />
+                </label>
+                <button type="button" class="row-action-btn" (click)="openTask(task)">
+                  <span>{{ task.title }}</span>
+                  <small>
+                    {{ task.enquiryReference }} · {{ task.priority }}
+                    @if (task.assigneeName) {
+                      · {{ task.assigneeName }}
+                    }
+                    @if (task.dueTime) {
+                      · {{ task.dueTime }}
+                    }
+                  </small>
+                </button>
+              </div>
             </li>
           }
           @if (model.tasksDueToday.length === 0) {
             <li class="empty">No tasks due.</li>
           }
         </ul>
+        <button type="button" class="widget-link" (click)="openTasks('today')">View All</button>
+      </article>
+
+      <article class="widget">
+        <header>
+          <h2>Overdue Tasks</h2>
+          <small>{{ model.taskSummary.overdueCount }}</small>
+        </header>
+
+        <ul class="simple-list">
+          @for (task of model.overdueTasks; track task.taskId) {
+            <li>
+              <div class="task-row">
+                <label class="task-check">
+                  <input type="checkbox" (change)="completeTaskFromWidget(task)" />
+                </label>
+                <button type="button" class="row-action-btn" (click)="openTask(task)">
+                  <span>{{ task.title }}</span>
+                  <small>{{ task.enquiryReference }} · {{ task.priority }}</small>
+                </button>
+              </div>
+            </li>
+          }
+          @if (model.overdueTasks.length === 0) {
+            <li class="empty">No overdue tasks.</li>
+          }
+        </ul>
+        <button type="button" class="widget-link" (click)="openTasks('overdue')">View All</button>
+      </article>
+
+      <article class="widget">
+        <header>
+          <h2>My Tasks</h2>
+          <small>{{ model.myTasks.length }}</small>
+        </header>
+
+        <ul class="simple-list">
+          @for (task of model.myTasks; track task.taskId) {
+            <li>
+              <div class="task-row">
+                <label class="task-check">
+                  <input type="checkbox" (change)="completeTaskFromWidget(task)" />
+                </label>
+                <button type="button" class="row-action-btn" (click)="openTask(task)">
+                  <span>{{ task.title }}</span>
+                  <small>{{ task.enquiryReference }} · {{ task.priority }}</small>
+                </button>
+              </div>
+            </li>
+          }
+          @if (model.myTasks.length === 0) {
+            <li class="empty">No assigned tasks.</li>
+          }
+        </ul>
+        <button type="button" class="widget-link" (click)="openTasks('my')">View All</button>
       </article>
 
       <article class="widget">
@@ -263,3 +389,10 @@
     </article>
   }
 </section>
+
+<app-task-quick-create-modal
+  [isOpen]="showAddTaskModal"
+  [defaultEnquiryId]="null"
+  (close)="closeAddTaskModal()"
+  (created)="onTaskQuickCreated($event)">
+</app-task-quick-create-modal>

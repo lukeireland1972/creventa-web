@@ -9,7 +9,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;300;400;500;600;700&display=swap" rel="stylesheet">
-  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
   <style>
     html, body {
       margin: 0;
@@ -43,5 +42,22 @@
       <div class="boot-loader-card">Loading CreventaFlow...</div>
     </div>
   </app-root>
+  <script>
+    window.setTimeout(() => {
+      const root = document.querySelector('app-root');
+      if (!root || root.hasAttribute('ng-version')) {
+        return;
+      }
+
+      root.innerHTML = `
+        <div class="boot-loader">
+          <div class="boot-loader-card">
+            <strong>Startup is taking longer than expected.</strong><br />
+            Hard refresh this page (Cmd+Shift+R), then confirm API is running on http://localhost:5080.
+          </div>
+        </div>
+      `;
+    }, 8000);
+  </script>
 </body>
 </html>

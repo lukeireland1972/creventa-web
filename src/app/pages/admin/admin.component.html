@@ -10,6 +10,18 @@
     <p class="page-error">{{ pageError }}</p>
   }
 
+  <nav class="admin-tabs" aria-label="Admin sections">
+    @for (tab of adminTabs; track tab.value) {
+      <button
+        type="button"
+        [class.active]="adminTab === tab.value"
+        (click)="setAdminTab(tab.value)">
+        {{ tab.label }}
+      </button>
+    }
+  </nav>
+
+  @if (adminTab === 'management') {
   <section class="admin-grid">
     <article class="panel">
       <div class="panel-header">
@@ -366,5 +378,241 @@
         </table>
       </div>
     </article>
+
+    <article class="panel dedupe-panel">
+      <div class="panel-header">
+        <div>
+          <h2>Duplicate Enquiry Candidates</h2>
+          <p>Background deduplication identifies likely duplicate enquiry pairs for review and merge.</p>
+        </div>
+      </div>
+
+      <div class="dedupe-actions">
+        <label class="field">
+          <span>Minimum confidence</span>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            [(ngModel)]="dedupeConfidenceMin"
+            [ngModelOptions]="{ standalone: true }" />
+        </label>
+        <button type="button" class="secondary" (click)="refreshDeduplicationReport()" [disabled]="dedupeLoading || !selectedVenueId">
+          {{ dedupeLoading ? 'Refreshing...' : 'Refresh' }}
+        </button>
+        <button type="button" class="primary" (click)="runDeduplicationScan()" [disabled]="dedupeRunning || !selectedVenueId">
+          {{ dedupeRunning ? 'Running...' : 'Run Scan Now' }}
+        </button>
+      </div>
+
+      @if (dedupeError) {
+        <p class="page-error">{{ dedupeError }}</p>
+      }
+
+      @if (dedupeReport) {
+        <p class="dedupe-summary">
+          Generated {{ dedupeReport.generatedAtUtc | date: 'dd/MM/yyyy HH:mm' }} ·
+          Showing {{ dedupeCandidates.length }} of {{ dedupeReport.candidates.length }} candidate pair(s)
+        </p>
+      }
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Primary</th>
+              <th>Secondary</th>
+              <th>Signals</th>
+              <th>Confidence</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (dedupeLoading) {
+              <tr>
+                <td colspan="5" class="empty-row">Loading duplicate candidates...</td>
+              </tr>
+            } @else {
+              @for (candidate of dedupeCandidates; track candidate.primaryEnquiryId + ':' + candidate.secondaryEnquiryId) {
+                <tr>
+                  <td>
+                    <div class="cell-main">{{ candidate.primaryReference }}</div>
+                    <div class="cell-sub">{{ candidate.primaryContactName }} · {{ candidate.primaryEventStartUtc | date: 'dd/MM/yyyy' }}</div>
+                  </td>
+                  <td>
+                    <div class="cell-main">{{ candidate.secondaryReference }}</div>
+                    <div class="cell-sub">{{ candidate.secondaryContactName }} · {{ candidate.secondaryEventStartUtc | date: 'dd/MM/yyyy' }}</div>
+                  </td>
+                  <td>
+                    <div class="dedupe-signal-list">
+                      @if (candidate.matchedOnEmail) { <span>Email</span> }
+                      @if (candidate.matchedOnPhone) { <span>Phone</span> }
+                      @if (candidate.matchedOnNameAndDate) { <span>Name + Date</span> }
+                    </div>
+                  </td>
+                  <td>{{ candidate.confidenceScore }}%</td>
+                  <td class="actions">
+                    <button type="button" class="secondary" (click)="openDedupeEnquiry(candidate.primaryEnquiryId)">View</button>
+                    <button type="button" (click)="mergeDedupeCandidate(candidate)">Merge</button>
+                  </td>
+                </tr>
+              }
+
+              @if (dedupeCandidates.length === 0) {
+                <tr>
+                  <td colspan="5" class="empty-row">No duplicate candidates found for the selected confidence threshold.</td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    </article>
   </section>
+  }
+
+  @if (adminTab === 'audit') {
+    <section class="audit-panel panel">
+      <div class="panel-header">
+        <div>
+          <h2>System Audit Log</h2>
+          <p>Immutable system-wide audit trail for compliance and operational visibility.</p>
+        </div>
+      </div>
+
+      <div class="audit-retention">
+        <label class="field">
+          <span>Retention (days)</span>
+          <input
+            type="number"
+            min="30"
+            max="3650"
+            [(ngModel)]="auditRetentionDays"
+            [ngModelOptions]="{ standalone: true }" />
+        </label>
+        <button type="button" class="primary" (click)="saveAuditRetentionSettings()" [disabled]="auditSavingRetention || !selectedVenueId">
+          {{ auditSavingRetention ? 'Saving...' : 'Save Retention' }}
+        </button>
+      </div>
+
+      <div class="audit-filters">
+        <label class="field">
+          <span>Search</span>
+          <input
+            type="text"
+            [(ngModel)]="auditFilter.search"
+            [ngModelOptions]="{ standalone: true }"
+            (keyup.enter)="onAuditFiltersChanged()"
+            placeholder="Action, details, IP, user..." />
+        </label>
+        <label class="field">
+          <span>Enquiry Ref</span>
+          <input
+            type="text"
+            [(ngModel)]="auditFilter.enquiryRef"
+            [ngModelOptions]="{ standalone: true }"
+            (keyup.enter)="onAuditFiltersChanged()"
+            placeholder="ENQ-2026-0001" />
+        </label>
+        <label class="field">
+          <span>User</span>
+          <select [(ngModel)]="auditFilter.userId" [ngModelOptions]="{ standalone: true }" (change)="onAuditFiltersChanged()">
+            <option value="">All users</option>
+            @for (user of auditUsers; track user.id) {
+              <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span>Action</span>
+          <select [(ngModel)]="auditFilter.actionType" [ngModelOptions]="{ standalone: true }" (change)="onAuditFiltersChanged()">
+            <option value="">All actions</option>
+            @for (value of auditActionTypes; track value) {
+              <option [value]="value">{{ value }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span>Entity Type</span>
+          <select [(ngModel)]="auditFilter.entityType" [ngModelOptions]="{ standalone: true }" (change)="onAuditFiltersChanged()">
+            <option value="">All entities</option>
+            @for (value of auditEntityTypes; track value) {
+              <option [value]="value">{{ value }}</option>
+            }
+          </select>
+        </label>
+        <label class="field">
+          <span>From</span>
+          <input type="date" [(ngModel)]="auditFilter.fromDate" [ngModelOptions]="{ standalone: true }" (change)="onAuditFiltersChanged()" />
+        </label>
+        <label class="field">
+          <span>To</span>
+          <input type="date" [(ngModel)]="auditFilter.toDate" [ngModelOptions]="{ standalone: true }" (change)="onAuditFiltersChanged()" />
+        </label>
+        <div class="audit-filter-actions">
+          <button type="button" class="secondary" (click)="onAuditFiltersChanged()" [disabled]="auditLoading">Apply</button>
+          <button type="button" class="secondary" (click)="exportAuditCsv()" [disabled]="auditExporting || auditLoading">
+            {{ auditExporting ? 'Exporting...' : 'Export CSV' }}
+          </button>
+        </div>
+      </div>
+
+      @if (auditError) {
+        <p class="page-error">{{ auditError }}</p>
+      }
+
+      <div class="audit-summary">Showing {{ auditRows.length }} of {{ auditTotalCount }} events</div>
+
+      <div class="table-wrap audit-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>User</th>
+              <th>Action</th>
+              <th>Entity Type</th>
+              <th>Entity ID / Ref</th>
+              <th>Details</th>
+              <th>IP Address</th>
+            </tr>
+          </thead>
+          <tbody>
+            @if (auditLoading) {
+              <tr>
+                <td colspan="7" class="empty-row">Loading audit log...</td>
+              </tr>
+            } @else {
+              @for (entry of auditRows; track entry.id) {
+                <tr>
+                  <td>{{ entry.createdAtUtc | date: 'dd/MM/yyyy HH:mm:ss' }}</td>
+                  <td>{{ entry.userName || 'System' }}</td>
+                  <td>
+                    <span class="audit-action" [attr.data-token]="actionBadge(entry.actionCategory)">
+                      {{ entry.actionType }}
+                    </span>
+                  </td>
+                  <td>{{ entry.entityType }}</td>
+                  <td>{{ entry.entityId }}@if (entry.enquiryReference) { · {{ entry.enquiryReference }} }</td>
+                  <td>{{ entry.details || '-' }}</td>
+                  <td>{{ entry.ipAddress || '-' }}</td>
+                </tr>
+              }
+              @if (!auditLoading && auditRows.length === 0) {
+                <tr>
+                  <td colspan="7" class="empty-row">No audit entries match the current filters.</td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+
+      <footer class="audit-pagination">
+        <button type="button" class="secondary" (click)="goToPreviousAuditPage()" [disabled]="auditLoading || auditPage <= 1">Previous</button>
+        <span>Page {{ auditPage }}</span>
+        <button type="button" class="secondary" (click)="goToNextAuditPage()" [disabled]="auditLoading || !auditHasMore">Next</button>
+      </footer>
+    </section>
+  }
 </section>

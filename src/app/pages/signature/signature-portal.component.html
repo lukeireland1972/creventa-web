@@ -1,0 +1,95 @@
+<div class="signature-shell">
+  @if (loading) {
+    <section class="state-card">
+      <h1>Loading signature request...</h1>
+      <p>Please wait while we fetch the proposal details.</p>
+    </section>
+  } @else if (errorMessage) {
+    <section class="state-card error">
+      <h1>Signature unavailable</h1>
+      <p>{{ errorMessage }}</p>
+    </section>
+  } @else if (model; as vm) {
+    <section class="card">
+      <header>
+        <h1>{{ vm.venueName }}</h1>
+        <p>{{ vm.proposalReference }} · {{ vm.proposalVersion }}</p>
+        <span class="status" [attr.data-status]="vm.status.toLowerCase()">{{ vm.status }}</span>
+      </header>
+
+      @if (successMessage) {
+        <p class="alert success">{{ successMessage }}</p>
+      }
+
+      <div class="summary">
+        <p><strong>Client:</strong> {{ vm.clientName }}</p>
+        <p><strong>Event:</strong> {{ vm.eventName || 'Event booking' }}</p>
+        <p><strong>Date:</strong> {{ vm.eventDateUtc | date: 'dd/MM/yyyy HH:mm' }}</p>
+        <p><strong>Total:</strong> {{ vm.totalAmount | number: '1.2-2' }} {{ vm.currencyCode }}</p>
+        <p><strong>Expires:</strong> {{ vm.expiresAtUtc | date: 'dd/MM/yyyy HH:mm' }}</p>
+      </div>
+
+      @if (vm.fieldMappings.length > 0) {
+        <div class="mapping">
+          <h2>Signature Mapping</h2>
+          <ul>
+            @for (mapping of vm.fieldMappings; track mapping.sectionKey + mapping.requirementType) {
+              <li>
+                <strong>{{ mapping.sectionKey }}</strong> · {{ mapping.requirementType }}
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      @if (vm.status.toLowerCase() === 'clientsigned') {
+        <p class="alert info">Client signature has been captured. Waiting for venue counter-signature.</p>
+      } @else if (vm.status.toLowerCase() === 'completed') {
+        <p class="alert info">This proposal has already been fully signed.</p>
+      } @else if (vm.status.toLowerCase() === 'expired') {
+        <p class="alert error">This signature link has expired.</p>
+      } @else {
+        <div class="form-grid">
+          <label>
+            <span>Full legal name</span>
+            <input type="text" [(ngModel)]="fullLegalName" />
+          </label>
+
+          <label>
+            <span>Company (optional)</span>
+            <input type="text" [(ngModel)]="companyName" />
+          </label>
+
+          <div class="mode-toggle">
+            <button type="button" [class.active]="signatureMode === 'typed'" (click)="useSignatureMode('typed')">Type signature</button>
+            <button type="button" [class.active]="signatureMode === 'drawn'" (click)="useSignatureMode('drawn')">Draw signature</button>
+          </div>
+
+          @if (signatureMode === 'typed') {
+            <label>
+              <span>Typed signature</span>
+              <input type="text" [(ngModel)]="typedSignature" placeholder="Type your signature" />
+            </label>
+          } @else {
+            <div class="drawn-signature-wrap">
+              <canvas
+                #signatureCanvas
+                width="520"
+                height="160"
+                (pointerdown)="onCanvasPointerDown($event)"
+                (pointermove)="onCanvasPointerMove($event)"
+                (pointerup)="onCanvasPointerUp($event)"
+                (pointerleave)="onCanvasPointerUp($event)"></canvas>
+              <button type="button" class="link" (click)="clearDrawnSignature()">Clear signature</button>
+            </div>
+          }
+
+          <button type="button" class="primary" (click)="onSign()" [disabled]="!canSubmit">
+            {{ submitting ? 'Submitting...' : 'Sign Proposal' }}
+          </button>
+        </div>
+      }
+    </section>
+  }
+</div>
+

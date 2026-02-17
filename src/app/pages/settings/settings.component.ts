@@ -3,17 +3,31 @@ import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { forkJoin } from 'rxjs';
 import {
+  AutomationActionDto,
+  AutomationConditionDto,
+  AutomationExecutionLogDto,
+  AutomationRuleDto,
   AutomationSettingsDto,
+  AutomationTriggerDto,
   CalendarAccountSettingDto,
+  ContactCustomFieldDefinitionDto,
   ApiService,
   BudgetByEventTypeDto,
   BudgetMonthDto,
+  LostReasonSettingDto,
   ReportScheduleDto,
+  ReportDefinitionDto,
+  ReportScheduleExecutionLogDto,
   PaymentScheduleTemplateSettingDto,
   PlanningMilestoneSettingDto,
+  ProposalPdfSettingsDto,
   ProposalTemplateSettingDto,
   ReportConfigurationSettingDto,
+  SustainabilityEmissionFactorDto,
+  SustainabilityEnergyRatingFactorDto,
+  SustainabilitySettingsDto,
   SpaceCapacityDto,
   SpaceCombinationDto,
   SpacePricingDto,
@@ -39,8 +53,11 @@ type SettingsSectionKey =
   | 'terms'
   | 'proposal-templates'
   | 'planning-milestones'
+  | 'sustainability'
+  | 'lost-reasons'
   | 'report-configuration'
   | 'automation'
+  | 'guest-profiles'
   | 'email-templates'
   | 'website-forms'
   | 'calendar-accounts'
@@ -114,6 +131,16 @@ export class SettingsComponent implements OnInit {
       description: 'Define planning progress checkpoints used on event cards and payment views.'
     },
     {
+      key: 'sustainability',
+      title: 'Sustainability & ESG',
+      description: 'Configure carbon factors, waste/diversion targets, and ESG weighting used for enquiry scorecards.'
+    },
+    {
+      key: 'lost-reasons',
+      title: 'Lost Reasons',
+      description: 'Manage reasons used when enquiries are moved to Lost for conversion reporting.'
+    },
+    {
       key: 'report-configuration',
       title: 'Report Configuration',
       description: 'Set pace/forecast conversion weights used by pipeline and pace reporting.'
@@ -121,7 +148,12 @@ export class SettingsComponent implements OnInit {
     {
       key: 'automation',
       title: 'Automation',
-      description: 'Control accepted-proposal status transitions and archive/follow-up automation defaults.'
+      description: 'Build and manage trigger-condition-action rules, defaults, and automation execution history.'
+    },
+    {
+      key: 'guest-profiles',
+      title: 'Guest Profiles',
+      description: 'Configure custom profile fields, tagging defaults, and personalisation metadata.'
     },
     {
       key: 'email-templates',
@@ -175,6 +207,83 @@ export class SettingsComponent implements OnInit {
   readonly pricingRateTypes = ['PerHour', 'HalfDay', 'FullDay', 'Evening', 'DelegateRate'];
   readonly dayOfWeekOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   readonly proposalAcceptedStatuses = ['Provisional', 'Confirmed'];
+  readonly enquiryStatuses = ['New', 'Tentative', 'OpenProposal', 'Provisional', 'Confirmed', 'Completed', 'Lost', 'Archived'];
+  readonly automationTriggerOptions = [
+    { value: 'EnquiryCreated', label: 'Enquiry created' },
+    { value: 'StatusChanged', label: 'Status changed to' },
+    { value: 'DaysSinceLastActivity', label: 'Days since last activity = N' },
+    { value: 'PaymentMilestoneOverdue', label: 'Payment milestone overdue' },
+    { value: 'ProposalSent', label: 'Proposal sent' },
+    { value: 'ProposalAccepted', label: 'Proposal accepted' },
+    { value: 'EventDateMinusDays', label: 'Event date minus N days' }
+  ];
+  readonly automationConditionTypeOptions = [
+    { value: 'EventType', label: 'Event type is' },
+    { value: 'Value', label: 'Value greater/less than' },
+    { value: 'Source', label: 'Source is' },
+    { value: 'AssignedTo', label: 'Assigned to' },
+    { value: 'Space', label: 'Space is' },
+    { value: 'Status', label: 'Status is' }
+  ];
+  readonly automationConditionOperatorOptions = [
+    { value: 'Equals', label: 'Equals' },
+    { value: 'GreaterThan', label: 'Greater than' },
+    { value: 'LessThan', label: 'Less than' }
+  ];
+  readonly automationActionOptions = [
+    { value: 'ChangeStatus', label: 'Change status' },
+    { value: 'SendEmailTemplate', label: 'Send email template' },
+    { value: 'CreateTask', label: 'Create task' },
+    { value: 'AddInternalNote', label: 'Add internal note' },
+    { value: 'SendNotification', label: 'Send notification' },
+    { value: 'ArchiveEnquiry', label: 'Archive enquiry' }
+  ];
+  readonly taskTemplateAutoApplyOptions = [
+    { value: 'none', label: 'None' },
+    { value: 'provisional', label: 'Provisional' },
+    { value: 'confirmed', label: 'Confirmed' }
+  ];
+  readonly taskTemplatePriorityOptions = ['low', 'medium', 'high', 'urgent'];
+  readonly taskTemplateCategoryOptions = [
+    'follow_up',
+    'site_visit',
+    'document',
+    'payment',
+    'catering',
+    'setup',
+    'communication',
+    'internal',
+    'other'
+  ];
+  readonly taskTemplateAssigneeRoleOptions = [
+    'owner',
+    'EventsCoordinator',
+    'SalesManager',
+    'VenueAdmin',
+    'Operations',
+    'Finance'
+  ];
+  readonly reportScheduleFrequencyOptions = ['daily', 'weekly', 'monthly'];
+  readonly reportScheduleFormatOptions: Array<'csv' | 'pdf' | 'both'> = ['csv', 'pdf', 'both'];
+  readonly reportScheduleReportKeys = [
+    'sales-performance',
+    'pipeline-conversion',
+    'revenue-forecast',
+    'source-analysis',
+    'lost-reason-analysis',
+    'sustainability',
+    'pace'
+  ];
+  readonly reportScheduleDayOptions = [
+    { value: 1, label: 'Monday' },
+    { value: 2, label: 'Tuesday' },
+    { value: 3, label: 'Wednesday' },
+    { value: 4, label: 'Thursday' },
+    { value: 5, label: 'Friday' },
+    { value: 6, label: 'Saturday' },
+    { value: 0, label: 'Sunday' }
+  ];
+  readonly sustainabilityEnergyRatings = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
   activeSectionKey: SettingsSectionKey = 'venue-profile';
   selectedVenueId: string | null = null;
@@ -186,8 +295,11 @@ export class SettingsComponent implements OnInit {
     terms: { loading: false, saving: false, error: '', success: '' },
     'proposal-templates': { loading: false, saving: false, error: '', success: '' },
     'planning-milestones': { loading: false, saving: false, error: '', success: '' },
+    sustainability: { loading: false, saving: false, error: '', success: '' },
+    'lost-reasons': { loading: false, saving: false, error: '', success: '' },
     'report-configuration': { loading: false, saving: false, error: '', success: '' },
     automation: { loading: false, saving: false, error: '', success: '' },
+    'guest-profiles': { loading: false, saving: false, error: '', success: '' },
     'email-templates': { loading: false, saving: false, error: '', success: '' },
     'website-forms': { loading: false, saving: false, error: '', success: '' },
     'calendar-accounts': { loading: false, saving: false, error: '', success: '' },
@@ -216,12 +328,24 @@ export class SettingsComponent implements OnInit {
   paymentScheduleTemplates: PaymentScheduleTemplateSettingDto[] = [];
   termsDocuments: TermsDocumentSettingDto[] = [];
   proposalTemplates: ProposalTemplateSettingDto[] = [];
+  proposalPdfSettings: ProposalPdfSettingsDto = { paperSize: 'A4' };
   planningMilestones: PlanningMilestoneSettingDto[] = [];
+  sustainabilityEmissionFactors: SustainabilityEmissionFactorDto[] = [];
+  sustainabilityEnergyRatingMultipliers: SustainabilityEnergyRatingFactorDto[] = [];
+  lostReasons: LostReasonSettingDto[] = [];
+  automationRules: AutomationRuleDto[] = [];
+  automationExecutionLog: AutomationExecutionLogDto[] = [];
+  editingAutomationRuleId: string | null = null;
+  guestProfileCustomFields: ContactCustomFieldDefinitionDto[] = [];
   emailTemplates: VenueEmailTemplateDto[] = [];
   websiteForms: WebsiteFormSettingDto[] = [];
   calendarAccounts: CalendarAccountSettingDto[] = [];
   taskTemplates: TaskTemplateDto[] = [];
   reportSchedules: ReportScheduleDto[] = [];
+  reportCatalog: ReportDefinitionDto[] = [];
+  scheduleExecutionLogs: ReportScheduleExecutionLogDto[] = [];
+  activeExecutionScheduleId: string | null = null;
+  runningScheduleId: string | null = null;
   emailAccounts: VenueEmailAccountDto[] = [];
   editingEmailAccountId: string | null = null;
   nylasStatus: NylasStatusDto | null = null;
@@ -326,10 +450,35 @@ export class SettingsComponent implements OnInit {
     isEnabled: [true]
   });
 
+  readonly sustainabilityForm = this.formBuilder.group({
+    travelKgCo2ePerGuestKm: [0.18, [Validators.required, Validators.min(0), Validators.max(10)]],
+    carbonTargetKgPerGuest: [12, [Validators.required, Validators.min(0.1), Validators.max(500)]],
+    wasteTargetKgPerGuest: [1.6, [Validators.required, Validators.min(0.01), Validators.max(500)]],
+    diversionTargetPercent: [60, [Validators.required, Validators.min(0), Validators.max(100)]],
+    localSourcingRadiusMiles: [50, [Validators.required, Validators.min(1), Validators.max(500)]],
+    carbonWeightPercent: [50, [Validators.required, Validators.min(0), Validators.max(100)]],
+    wasteWeightPercent: [30, [Validators.required, Validators.min(0), Validators.max(100)]],
+    sourcingWeightPercent: [20, [Validators.required, Validators.min(0), Validators.max(100)]],
+    includeInProposalByDefault: [false]
+  });
+
+  readonly lostReasonForm = this.formBuilder.group({
+    id: [''],
+    label: ['', Validators.required],
+    isActive: [true]
+  });
+
   readonly reportConfigurationForm = this.formBuilder.group({
-    provisionalWeightPercent: [80, [Validators.required, Validators.min(0), Validators.max(100)]],
-    tentativeWeightPercent: [50, [Validators.required, Validators.min(0), Validators.max(100)]],
-    openProposalWeightPercent: [30, [Validators.required, Validators.min(0), Validators.max(100)]]
+    provisionalWeightPercent: [50, [Validators.required, Validators.min(0), Validators.max(100)]],
+    tentativeWeightPercent: [20, [Validators.required, Validators.min(0), Validators.max(100)]],
+    openProposalWeightPercent: [30, [Validators.required, Validators.min(0), Validators.max(100)]],
+    responseTimeWeightPercent: [20, [Validators.required, Validators.min(0), Validators.max(100)]],
+    leadSourceWeightPercent: [15, [Validators.required, Validators.min(0), Validators.max(100)]],
+    eventTypeWeightPercent: [15, [Validators.required, Validators.min(0), Validators.max(100)]],
+    engagementWeightPercent: [20, [Validators.required, Validators.min(0), Validators.max(100)]],
+    budgetAlignmentWeightPercent: [10, [Validators.required, Validators.min(0), Validators.max(100)]],
+    leadTimeWeightPercent: [10, [Validators.required, Validators.min(0), Validators.max(100)]],
+    completenessWeightPercent: [10, [Validators.required, Validators.min(0), Validators.max(100)]]
   });
 
   readonly automationSettingsForm = this.formBuilder.group({
@@ -337,6 +486,18 @@ export class SettingsComponent implements OnInit {
     followUpInactiveDays: [3, [Validators.required, Validators.min(1), Validators.max(30)]],
     autoArchiveEnabled: [true],
     autoArchiveDays: [90, [Validators.required, Validators.min(7), Validators.max(3650)]]
+  });
+
+  readonly automationRuleForm = this.formBuilder.group({
+    id: [''],
+    name: ['', Validators.required],
+    description: [''],
+    isActive: [true],
+    triggerType: ['StatusChanged', Validators.required],
+    triggerStatus: ['Tentative'],
+    triggerDays: [null as number | null, [Validators.min(1), Validators.max(3650)]],
+    conditions: this.formBuilder.array([]),
+    actions: this.formBuilder.array([])
   });
 
   readonly emailAccountForm = this.formBuilder.group({
@@ -381,24 +542,27 @@ export class SettingsComponent implements OnInit {
     id: [''],
     name: ['', Validators.required],
     eventType: ['Wedding', Validators.required],
-    triggerStatus: ['Confirmed', Validators.required],
-    assignToEventManager: [true],
-    itemTitle: ['Follow up', Validators.required],
-    itemDescription: [''],
-    itemPriority: ['Medium', Validators.required],
-    itemDueDateRule: ['days-after-status-change', Validators.required],
-    itemDueOffsetDays: [1, [Validators.required, Validators.min(0)]]
+    description: [''],
+    isActive: [true],
+    autoApplyOnStatus: ['none', Validators.required],
+    taskItems: this.formBuilder.array([])
   });
 
   readonly reportScheduleForm = this.formBuilder.group({
     id: [''],
     name: ['', Validators.required],
-    reportKey: ['pipeline', Validators.required],
+    reportKeys: this.formBuilder.control<string[]>(['sales-performance'], { nonNullable: true, validators: [Validators.required] }),
     frequency: ['weekly', Validators.required],
+    dayOfWeek: [1 as number | null],
+    dayOfMonth: [null as number | null],
+    timeOfDay: ['09:00', Validators.required],
+    format: ['both' as 'csv' | 'pdf' | 'both', Validators.required],
     recipientsCsv: ['', Validators.required],
     isActive: [true],
     nextRunAtUtc: [''],
-    filtersJson: ['{}']
+    eventType: [''],
+    fromDate: [''],
+    toDate: ['']
   });
 
   private budgetForms = new Map<number, FormGroup>();
@@ -429,8 +593,56 @@ export class SettingsComponent implements OnInit {
     return this.combinationForm.get('capacityBySetup') as FormArray;
   }
 
+  get automationConditionControls(): FormArray {
+    return this.automationRuleForm.get('conditions') as FormArray;
+  }
+
+  get automationActionControls(): FormArray {
+    return this.automationRuleForm.get('actions') as FormArray;
+  }
+
+  get taskTemplateItemControls(): FormArray {
+    return this.taskTemplateForm.get('taskItems') as FormArray;
+  }
+
   get currentBudgetForm(): FormGroup | null {
     return this.getBudgetForm(this.selectedBudgetMonth);
+  }
+
+  get conversionScoringWeightTotal(): number {
+    const value = this.reportConfigurationForm.getRawValue();
+    const fields = [
+      value.responseTimeWeightPercent,
+      value.leadSourceWeightPercent,
+      value.eventTypeWeightPercent,
+      value.engagementWeightPercent,
+      value.budgetAlignmentWeightPercent,
+      value.leadTimeWeightPercent,
+      value.completenessWeightPercent
+    ];
+
+    return Number(
+      fields
+        .map((item) => Number(item ?? 0))
+        .reduce((sum, current) => sum + (Number.isFinite(current) ? current : 0), 0)
+      .toFixed(2)
+    );
+  }
+
+  get sustainabilityWeightTotal(): number {
+    const value = this.sustainabilityForm.getRawValue();
+    const fields = [
+      value.carbonWeightPercent,
+      value.wasteWeightPercent,
+      value.sourcingWeightPercent
+    ];
+
+    return Number(
+      fields
+        .map((item) => Number(item ?? 0))
+        .reduce((sum, current) => sum + (Number.isFinite(current) ? current : 0), 0)
+        .toFixed(2)
+    );
   }
 
   ngOnInit(): void {
@@ -442,6 +654,10 @@ export class SettingsComponent implements OnInit {
       }
       this.nylasPopup = null;
     });
+
+    this.startNewAutomationRule();
+    this.startNewTaskTemplate();
+    this.startNewReportSchedule();
 
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const section = params.get('section') as SettingsSectionKey | null;
@@ -463,6 +679,15 @@ export class SettingsComponent implements OnInit {
       this.selectedVenueId = nextVenueId;
       this.loadedSections.clear();
       this.resetSectionMessages();
+      this.automationRules = [];
+      this.automationExecutionLog = [];
+      this.reportSchedules = [];
+      this.reportCatalog = [];
+      this.scheduleExecutionLogs = [];
+      this.activeExecutionScheduleId = null;
+      this.runningScheduleId = null;
+      this.startNewAutomationRule();
+      this.startNewReportSchedule();
       this.ensureSectionLoaded(this.activeSectionKey);
     });
   }
@@ -1080,6 +1305,28 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  saveProposalPdfSettings(): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    this.setSectionSaving('proposal-templates', true);
+    this.api
+      .upsertProposalPdfSettings(this.selectedVenueId, this.proposalPdfSettings)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (settings) => {
+          this.proposalPdfSettings = settings;
+          this.setSectionSuccess('proposal-templates', 'Proposal PDF settings saved.');
+          this.setSectionSaving('proposal-templates', false);
+        },
+        error: (error) => {
+          this.setSectionError('proposal-templates', this.resolveError(error, 'Unable to save proposal PDF settings.'));
+          this.setSectionSaving('proposal-templates', false);
+        }
+      });
+  }
+
   deleteProposalTemplate(key: string): void {
     this.proposalTemplates = this.proposalTemplates.filter((item) => item.key !== key);
     this.persistProposalTemplates('Proposal template removed.');
@@ -1115,6 +1362,278 @@ export class SettingsComponent implements OnInit {
     this.persistPlanningMilestones('Planning milestone removed.');
   }
 
+  addSustainabilityEmissionFactor(): void {
+    const nextKeyBase = 'factor';
+    let counter = this.sustainabilityEmissionFactors.length + 1;
+    let nextKey = `${nextKeyBase}-${counter}`;
+    while (this.sustainabilityEmissionFactors.some((factor) => factor.key === nextKey)) {
+      counter += 1;
+      nextKey = `${nextKeyBase}-${counter}`;
+    }
+
+    this.sustainabilityEmissionFactors = [
+      ...this.sustainabilityEmissionFactors,
+      {
+        key: nextKey,
+        label: `Factor ${counter}`,
+        kgCo2ePerGuest: 0
+      }
+    ];
+  }
+
+  removeSustainabilityEmissionFactor(key: string): void {
+    this.sustainabilityEmissionFactors = this.sustainabilityEmissionFactors.filter((factor) => factor.key !== key);
+  }
+
+  saveSustainabilitySettings(): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    if (this.sustainabilityForm.invalid) {
+      this.sustainabilityForm.markAllAsTouched();
+      this.setSectionError('sustainability', 'Complete sustainability settings before saving.');
+      return;
+    }
+
+    const normalizedFactors = this.sustainabilityEmissionFactors
+      .map((factor) => ({
+        key: this.requiredText(factor.key).toLowerCase(),
+        label: this.requiredText(factor.label),
+        kgCo2ePerGuest: Number(factor.kgCo2ePerGuest ?? 0)
+      }))
+      .filter((factor) => !!factor.key && !!factor.label)
+      .filter((factor, index, all) => all.findIndex((candidate) => candidate.key === factor.key) === index);
+
+    if (normalizedFactors.length === 0) {
+      this.setSectionError('sustainability', 'Add at least one catering emission factor.');
+      return;
+    }
+
+    const ratingMap = new Map<string, number>();
+    for (const entry of this.sustainabilityEnergyRatingMultipliers) {
+      const rating = this.requiredText(entry.rating).toUpperCase();
+      if (!rating) {
+        continue;
+      }
+
+      ratingMap.set(rating, Number(entry.multiplier ?? 1));
+    }
+
+    const normalizedRatings: SustainabilityEnergyRatingFactorDto[] = ['A', 'B', 'C', 'D', 'E', 'F', 'G']
+      .map((rating) => ({
+        rating,
+        multiplier: Number(ratingMap.get(rating) ?? 1)
+      }));
+
+    const formValue = this.sustainabilityForm.getRawValue();
+    const weights = [
+      Number(formValue.carbonWeightPercent ?? 0),
+      Number(formValue.wasteWeightPercent ?? 0),
+      Number(formValue.sourcingWeightPercent ?? 0)
+    ];
+    const totalWeight = weights.reduce((sum, value) => sum + (Number.isFinite(value) ? value : 0), 0);
+    if (totalWeight <= 0) {
+      this.setSectionError('sustainability', 'At least one sustainability score weight must be above 0%.');
+      return;
+    }
+
+    const payload: SustainabilitySettingsDto = {
+      cateringEmissionFactors: normalizedFactors,
+      travelKgCo2ePerGuestKm: Number(formValue.travelKgCo2ePerGuestKm ?? 0.18),
+      energyRatingMultipliers: normalizedRatings,
+      carbonTargetKgPerGuest: Number(formValue.carbonTargetKgPerGuest ?? 12),
+      wasteTargetKgPerGuest: Number(formValue.wasteTargetKgPerGuest ?? 1.6),
+      diversionTargetPercent: Number(formValue.diversionTargetPercent ?? 60),
+      localSourcingRadiusMiles: Number(formValue.localSourcingRadiusMiles ?? 50),
+      carbonWeightPercent: Number(formValue.carbonWeightPercent ?? 50),
+      wasteWeightPercent: Number(formValue.wasteWeightPercent ?? 30),
+      sourcingWeightPercent: Number(formValue.sourcingWeightPercent ?? 20),
+      includeInProposalByDefault: Boolean(formValue.includeInProposalByDefault)
+    };
+
+    this.setSectionSaving('sustainability', true);
+    this.api
+      .upsertSustainabilitySettings(this.selectedVenueId, payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (settings) => {
+          this.sustainabilityEmissionFactors = [...settings.cateringEmissionFactors];
+          const ratingMap = new Map(
+            settings.energyRatingMultipliers.map((item) => [item.rating.toUpperCase(), item.multiplier])
+          );
+          this.sustainabilityEnergyRatingMultipliers = this.sustainabilityEnergyRatings.map((rating) => ({
+            rating,
+            multiplier: Number(ratingMap.get(rating) ?? 1)
+          }));
+          this.sustainabilityForm.patchValue({
+            travelKgCo2ePerGuestKm: settings.travelKgCo2ePerGuestKm,
+            carbonTargetKgPerGuest: settings.carbonTargetKgPerGuest,
+            wasteTargetKgPerGuest: settings.wasteTargetKgPerGuest,
+            diversionTargetPercent: settings.diversionTargetPercent,
+            localSourcingRadiusMiles: settings.localSourcingRadiusMiles,
+            carbonWeightPercent: settings.carbonWeightPercent,
+            wasteWeightPercent: settings.wasteWeightPercent,
+            sourcingWeightPercent: settings.sourcingWeightPercent,
+            includeInProposalByDefault: settings.includeInProposalByDefault
+          });
+          this.setSectionSuccess('sustainability', 'Sustainability settings saved.');
+          this.setSectionSaving('sustainability', false);
+        },
+        error: (error) => {
+          this.setSectionError('sustainability', this.resolveError(error, 'Unable to save sustainability settings.'));
+          this.setSectionSaving('sustainability', false);
+        }
+      });
+  }
+
+  saveLostReason(): void {
+    if (this.lostReasonForm.invalid || !this.selectedVenueId) {
+      this.lostReasonForm.markAllAsTouched();
+      this.setSectionError('lost-reasons', 'Enter a valid label before saving a lost reason.');
+      return;
+    }
+
+    const value = this.lostReasonForm.getRawValue();
+    const id = this.optionalText(value.id) ?? crypto.randomUUID();
+    const nextSortOrder = this.lostReasons.length + 1;
+    const reason: LostReasonSettingDto = {
+      id,
+      label: this.requiredText(value.label),
+      isActive: Boolean(value.isActive),
+      sortOrder: nextSortOrder
+    };
+
+    const nextReasons = [reason, ...this.lostReasons.filter((item) => item.id !== id)]
+      .map((item, index) => ({ ...item, sortOrder: index + 1 }));
+
+    this.persistLostReasons(nextReasons, 'Lost reason saved.');
+    this.lostReasonForm.reset({
+      id: '',
+      label: '',
+      isActive: true
+    });
+  }
+
+  editLostReason(reason: LostReasonSettingDto): void {
+    this.lostReasonForm.patchValue({
+      id: reason.id,
+      label: reason.label,
+      isActive: reason.isActive
+    });
+  }
+
+  deleteLostReason(id: string): void {
+    const nextReasons = this.lostReasons
+      .filter((item) => item.id !== id)
+      .map((item, index) => ({ ...item, sortOrder: index + 1 }));
+    this.persistLostReasons(nextReasons, 'Lost reason removed.');
+  }
+
+  moveLostReason(id: string, direction: -1 | 1): void {
+    const currentIndex = this.lostReasons.findIndex((item) => item.id === id);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const targetIndex = currentIndex + direction;
+    if (targetIndex < 0 || targetIndex >= this.lostReasons.length) {
+      return;
+    }
+
+    const reordered = [...this.lostReasons];
+    const [moved] = reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+    const normalized = reordered.map((item, index) => ({ ...item, sortOrder: index + 1 }));
+    this.persistLostReasons(normalized, 'Lost reasons reordered.');
+  }
+
+  addGuestProfileField(): void {
+    const nextSortOrder = this.guestProfileCustomFields.length + 1;
+    this.guestProfileCustomFields = [
+      ...this.guestProfileCustomFields,
+      {
+        id: crypto.randomUUID(),
+        key: '',
+        label: '',
+        type: 'text',
+        isRequired: false,
+        isActive: true,
+        sortOrder: nextSortOrder,
+        placeholder: null,
+        options: []
+      }
+    ];
+  }
+
+  removeGuestProfileField(id: string): void {
+    this.guestProfileCustomFields = this.guestProfileCustomFields
+      .filter((field) => field.id !== id)
+      .map((field, index) => ({ ...field, sortOrder: index + 1 }));
+  }
+
+  moveGuestProfileField(id: string, direction: -1 | 1): void {
+    const currentIndex = this.guestProfileCustomFields.findIndex((field) => field.id === id);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const targetIndex = currentIndex + direction;
+    if (targetIndex < 0 || targetIndex >= this.guestProfileCustomFields.length) {
+      return;
+    }
+
+    const reordered = [...this.guestProfileCustomFields];
+    const [moved] = reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, moved);
+    this.guestProfileCustomFields = reordered.map((field, index) => ({ ...field, sortOrder: index + 1 }));
+  }
+
+  saveGuestProfileFields(): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    const sanitized = this.guestProfileCustomFields
+      .map((field, index) => ({
+        id: field.id || crypto.randomUUID(),
+        key: this.requiredText(field.key).toLowerCase(),
+        label: this.requiredText(field.label),
+        type: (field.type || 'text').toLowerCase(),
+        isRequired: field.isRequired,
+        isActive: field.isActive,
+        sortOrder: index + 1,
+        placeholder: this.optionalText(field.placeholder),
+        options: field.options ?? []
+      }))
+      .filter((field) => field.key && field.label)
+      .filter((field, index, all) => all.findIndex((candidate) => candidate.key === field.key) === index);
+
+    this.setSectionSaving('guest-profiles', true);
+    this.api
+      .upsertContactCustomFields(this.selectedVenueId, { fields: sanitized })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (fields) => {
+          this.guestProfileCustomFields = [...fields].sort((left, right) => left.sortOrder - right.sortOrder);
+          this.setSectionSuccess('guest-profiles', 'Guest profile custom fields saved.');
+          this.setSectionSaving('guest-profiles', false);
+        },
+        error: (error) => {
+          this.setSectionError('guest-profiles', this.resolveError(error, 'Unable to save guest profile custom fields.'));
+          this.setSectionSaving('guest-profiles', false);
+        }
+      });
+  }
+
+  guestProfileOptionsText(field: ContactCustomFieldDefinitionDto): string {
+    return (field.options ?? []).join(', ');
+  }
+
+  setGuestProfileOptions(field: ContactCustomFieldDefinitionDto, value: string): void {
+    field.options = this.parseCsvList(value);
+  }
+
   saveReportConfiguration(): void {
     if (this.reportConfigurationForm.invalid || !this.selectedVenueId) {
       this.reportConfigurationForm.markAllAsTouched();
@@ -1124,9 +1643,16 @@ export class SettingsComponent implements OnInit {
 
     const value = this.reportConfigurationForm.getRawValue();
     const payload: ReportConfigurationSettingDto = {
-      provisionalWeightPercent: Number(value.provisionalWeightPercent ?? 80),
-      tentativeWeightPercent: Number(value.tentativeWeightPercent ?? 50),
-      openProposalWeightPercent: Number(value.openProposalWeightPercent ?? 30)
+      provisionalWeightPercent: Number(value.provisionalWeightPercent ?? 50),
+      tentativeWeightPercent: Number(value.tentativeWeightPercent ?? 20),
+      openProposalWeightPercent: Number(value.openProposalWeightPercent ?? 30),
+      responseTimeWeightPercent: Number(value.responseTimeWeightPercent ?? 20),
+      leadSourceWeightPercent: Number(value.leadSourceWeightPercent ?? 15),
+      eventTypeWeightPercent: Number(value.eventTypeWeightPercent ?? 15),
+      engagementWeightPercent: Number(value.engagementWeightPercent ?? 20),
+      budgetAlignmentWeightPercent: Number(value.budgetAlignmentWeightPercent ?? 10),
+      leadTimeWeightPercent: Number(value.leadTimeWeightPercent ?? 10),
+      completenessWeightPercent: Number(value.completenessWeightPercent ?? 10)
     };
 
     this.setSectionSaving('report-configuration', true);
@@ -1138,7 +1664,14 @@ export class SettingsComponent implements OnInit {
           this.reportConfigurationForm.patchValue({
             provisionalWeightPercent: response.provisionalWeightPercent,
             tentativeWeightPercent: response.tentativeWeightPercent,
-            openProposalWeightPercent: response.openProposalWeightPercent
+            openProposalWeightPercent: response.openProposalWeightPercent,
+            responseTimeWeightPercent: response.responseTimeWeightPercent,
+            leadSourceWeightPercent: response.leadSourceWeightPercent,
+            eventTypeWeightPercent: response.eventTypeWeightPercent,
+            engagementWeightPercent: response.engagementWeightPercent,
+            budgetAlignmentWeightPercent: response.budgetAlignmentWeightPercent,
+            leadTimeWeightPercent: response.leadTimeWeightPercent,
+            completenessWeightPercent: response.completenessWeightPercent
           });
           this.setSectionSuccess('report-configuration', 'Report configuration saved.');
           this.setSectionSaving('report-configuration', false);
@@ -1182,6 +1715,231 @@ export class SettingsComponent implements OnInit {
         },
         error: (error) => {
           this.setSectionError('automation', this.resolveError(error, 'Unable to save automation settings.'));
+          this.setSectionSaving('automation', false);
+        }
+      });
+  }
+
+  startNewAutomationRule(): void {
+    this.editingAutomationRuleId = null;
+    this.automationRuleForm.reset({
+      id: '',
+      name: '',
+      description: '',
+      isActive: true,
+      triggerType: 'StatusChanged',
+      triggerStatus: 'Tentative',
+      triggerDays: null
+    });
+    this.replaceFormArray(this.automationConditionControls, [this.createAutomationConditionGroup()]);
+    this.replaceFormArray(this.automationActionControls, [this.createAutomationActionGroup()]);
+  }
+
+  editAutomationRule(rule: AutomationRuleDto): void {
+    this.editingAutomationRuleId = rule.id;
+    this.automationRuleForm.patchValue({
+      id: rule.id,
+      name: rule.name,
+      description: rule.description ?? '',
+      isActive: rule.isActive,
+      triggerType: rule.trigger.type,
+      triggerStatus: rule.trigger.status ?? '',
+      triggerDays: rule.trigger.days ?? null
+    });
+    this.replaceFormArray(
+      this.automationConditionControls,
+      rule.conditions.length > 0 ? rule.conditions.map((condition) => this.createAutomationConditionGroup(condition)) : [this.createAutomationConditionGroup()]
+    );
+    this.replaceFormArray(
+      this.automationActionControls,
+      rule.actions.length > 0 ? rule.actions.map((action) => this.createAutomationActionGroup(action)) : [this.createAutomationActionGroup()]
+    );
+  }
+
+  addAutomationCondition(): void {
+    this.automationConditionControls.push(this.createAutomationConditionGroup());
+  }
+
+  removeAutomationCondition(index: number): void {
+    if (this.automationConditionControls.length <= 1) {
+      return;
+    }
+
+    this.automationConditionControls.removeAt(index);
+  }
+
+  addAutomationAction(): void {
+    this.automationActionControls.push(this.createAutomationActionGroup());
+  }
+
+  removeAutomationAction(index: number): void {
+    if (this.automationActionControls.length <= 1) {
+      return;
+    }
+
+    this.automationActionControls.removeAt(index);
+  }
+
+  onAutomationTriggerTypeChange(): void {
+    const triggerType = this.requiredText(this.automationRuleForm.get('triggerType')?.value);
+    if (triggerType === 'StatusChanged') {
+      this.automationRuleForm.patchValue({ triggerStatus: this.requiredText(this.automationRuleForm.get('triggerStatus')?.value) || 'Tentative' });
+    } else {
+      this.automationRuleForm.patchValue({ triggerStatus: '' });
+    }
+
+    if (triggerType === 'DaysSinceLastActivity') {
+      this.automationRuleForm.patchValue({ triggerDays: this.automationRuleForm.get('triggerDays')?.value ?? 3 });
+      return;
+    }
+
+    if (triggerType === 'EventDateMinusDays') {
+      this.automationRuleForm.patchValue({ triggerDays: this.automationRuleForm.get('triggerDays')?.value ?? 14 });
+      return;
+    }
+
+    this.automationRuleForm.patchValue({ triggerDays: null });
+  }
+
+  saveAutomationRule(): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    if (this.automationRuleForm.invalid) {
+      this.automationRuleForm.markAllAsTouched();
+      this.setSectionError('automation', 'Complete automation rule details before saving.');
+      return;
+    }
+
+    const value = this.automationRuleForm.getRawValue();
+    const nowIso = new Date().toISOString();
+    const existingRule = this.editingAutomationRuleId
+      ? this.automationRules.find((rule) => rule.id === this.editingAutomationRuleId) ?? null
+      : null;
+    const isEditing = Boolean(this.editingAutomationRuleId);
+    const nextSortOrder = existingRule?.sortOrder ?? this.automationRules.length + 1;
+
+    const nextRule: AutomationRuleDto = {
+      id: this.requiredText(value.id) || `rule-${Date.now()}-${Math.round(Math.random() * 1000)}`,
+      name: this.requiredText(value.name),
+      description: this.optionalText(value.description),
+      isActive: Boolean(value.isActive),
+      sortOrder: nextSortOrder,
+      trigger: {
+        type: this.requiredText(value.triggerType),
+        status: this.optionalText(value.triggerStatus),
+        days: value.triggerDays !== null && value.triggerDays !== undefined ? Number(value.triggerDays) : null
+      },
+      conditions: this.automationConditionControls.controls
+        .map((control) => {
+          const group = control as FormGroup;
+          const type = this.requiredText(group.get('type')?.value);
+          return {
+            type,
+            operator: this.optionalText(group.get('operator')?.value),
+            value: this.optionalText(group.get('value')?.value),
+            amount: group.get('amount')?.value === null ? null : Number(group.get('amount')?.value ?? 0)
+          } as AutomationConditionDto;
+        })
+        .filter((condition) => condition.type.length > 0),
+      actions: this.automationActionControls.controls
+        .map((control) => {
+          const group = control as FormGroup;
+          const type = this.requiredText(group.get('type')?.value);
+          return {
+            type,
+            targetStatus: this.optionalText(group.get('targetStatus')?.value),
+            templateKey: this.optionalText(group.get('templateKey')?.value),
+            assigneeUserId: this.optionalText(group.get('assigneeUserId')?.value),
+            taskTitle: this.optionalText(group.get('taskTitle')?.value),
+            taskDueOffsetDays: group.get('taskDueOffsetDays')?.value === null ? null : Number(group.get('taskDueOffsetDays')?.value ?? 0),
+            note: this.optionalText(group.get('note')?.value),
+            notificationUserId: this.optionalText(group.get('notificationUserId')?.value)
+          } as AutomationActionDto;
+        })
+        .filter((action) => action.type.length > 0),
+      createdAtUtc: existingRule?.createdAtUtc ?? nowIso,
+      updatedAtUtc: nowIso
+    };
+
+    if (nextRule.actions.length === 0) {
+      this.setSectionError('automation', 'Add at least one automation action.');
+      return;
+    }
+
+    const nextRules = this.automationRules
+      .filter((rule) => rule.id !== nextRule.id)
+      .concat(nextRule)
+      .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name))
+      .map((rule, index) => ({ ...rule, sortOrder: index + 1 }));
+
+    this.setSectionSaving('automation', true);
+    this.api
+      .upsertAutomationRules(this.selectedVenueId, nextRules)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (rules) => {
+          this.automationRules = [...rules].sort((left, right) => left.sortOrder - right.sortOrder);
+          this.startNewAutomationRule();
+          this.setSectionSuccess('automation', isEditing ? 'Automation rule updated.' : 'Automation rule created.');
+          this.setSectionSaving('automation', false);
+          this.loadAutomationExecutionLog();
+        },
+        error: (error) => {
+          this.setSectionError('automation', this.resolveError(error, 'Unable to save automation rule.'));
+          this.setSectionSaving('automation', false);
+        }
+      });
+  }
+
+  deleteAutomationRule(ruleId: string): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    const nextRules = this.automationRules.filter((rule) => rule.id !== ruleId).map((rule, index) => ({ ...rule, sortOrder: index + 1 }));
+    this.setSectionSaving('automation', true);
+    this.api
+      .upsertAutomationRules(this.selectedVenueId, nextRules)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (rules) => {
+          this.automationRules = [...rules].sort((left, right) => left.sortOrder - right.sortOrder);
+          if (this.editingAutomationRuleId === ruleId) {
+            this.startNewAutomationRule();
+          }
+          this.setSectionSuccess('automation', 'Automation rule removed.');
+          this.setSectionSaving('automation', false);
+          this.loadAutomationExecutionLog();
+        },
+        error: (error) => {
+          this.setSectionError('automation', this.resolveError(error, 'Unable to remove automation rule.'));
+          this.setSectionSaving('automation', false);
+        }
+      });
+  }
+
+  toggleAutomationRule(rule: AutomationRuleDto): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    this.setSectionSaving('automation', true);
+    this.api
+      .updateAutomationRuleState(this.selectedVenueId, rule.id, !rule.isActive)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (updatedRule) => {
+          this.automationRules = this.automationRules
+            .map((item) => (item.id === updatedRule.id ? updatedRule : item))
+            .sort((left, right) => left.sortOrder - right.sortOrder);
+          this.setSectionSuccess('automation', `${updatedRule.name} ${updatedRule.isActive ? 'activated' : 'deactivated'}.`);
+          this.setSectionSaving('automation', false);
+          this.loadAutomationExecutionLog();
+        },
+        error: (error) => {
+          this.setSectionError('automation', this.resolveError(error, 'Unable to update automation rule state.'));
           this.setSectionSaving('automation', false);
         }
       });
@@ -1422,7 +2180,7 @@ export class SettingsComponent implements OnInit {
   }
 
   saveTaskTemplate(): void {
-    if (!this.selectedVenueId || this.taskTemplateForm.invalid) {
+    if (!this.selectedVenueId || this.taskTemplateForm.invalid || this.taskTemplateItemControls.length === 0) {
       this.taskTemplateForm.markAllAsTouched();
       this.setSectionError('task-templates', 'Complete required task template fields before saving.');
       return;
@@ -1430,43 +2188,43 @@ export class SettingsComponent implements OnInit {
 
     const value = this.taskTemplateForm.getRawValue();
     const templateId = this.optionalText(value.id) ?? undefined;
+    const items = this.taskTemplateItemControls.controls.map((control, index) => {
+      const itemValue = control.getRawValue();
+      return {
+        title: this.requiredText(itemValue.title),
+        description: this.optionalText(itemValue.description),
+        category: this.requiredText(itemValue.category),
+        priority: this.requiredText(itemValue.priority),
+        defaultAssigneeRole: this.requiredText(itemValue.defaultAssigneeRole),
+        dueDateOffset: Number(itemValue.dueDateOffset ?? 0),
+        sortOrder: index + 1
+      };
+    });
+
     this.setSectionSaving('task-templates', true);
-    this.api
-      .upsertTaskTemplate(
-        this.selectedVenueId,
-        {
-          name: this.requiredText(value.name),
-          eventType: this.requiredText(value.eventType),
-          triggerStatus: this.requiredText(value.triggerStatus),
-          assignToEventManager: Boolean(value.assignToEventManager),
-          items: [
-            {
-              title: this.requiredText(value.itemTitle),
-              description: this.optionalText(value.itemDescription) ?? undefined,
-              priority: this.requiredText(value.itemPriority),
-              dueDateRule: this.requiredText(value.itemDueDateRule),
-              dueOffsetDays: Number(value.itemDueOffsetDays ?? 0)
-            }
-          ]
-        },
-        templateId)
+    const payload = {
+      name: this.requiredText(value.name),
+      eventType: this.requiredText(value.eventType),
+      description: this.optionalText(value.description),
+      isActive: Boolean(value.isActive),
+      autoApplyOnStatus: this.requiredText(value.autoApplyOnStatus),
+      tasks: items
+    };
+
+    const request$ = templateId
+      ? this.api.updateTaskTemplate(templateId, payload)
+      : this.api.createTaskTemplate({
+          venueId: this.selectedVenueId,
+          ...payload
+        });
+
+    request$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
           this.setSectionSuccess('task-templates', 'Task template saved.');
           this.setSectionSaving('task-templates', false);
-          this.taskTemplateForm.reset({
-            id: '',
-            name: '',
-            eventType: 'Wedding',
-            triggerStatus: 'Confirmed',
-            assignToEventManager: true,
-            itemTitle: 'Follow up',
-            itemDescription: '',
-            itemPriority: 'Medium',
-            itemDueDateRule: 'days-after-status-change',
-            itemDueOffsetDays: 1
-          });
+          this.startNewTaskTemplate();
           this.loadTaskTemplatesSection(true);
         },
         error: (error) => {
@@ -1477,19 +2235,49 @@ export class SettingsComponent implements OnInit {
   }
 
   editTaskTemplate(template: TaskTemplateDto): void {
-    const firstItem = template.items[0];
     this.taskTemplateForm.patchValue({
       id: template.id,
       name: template.name,
       eventType: template.eventType,
-      triggerStatus: template.triggerStatus,
-      assignToEventManager: template.assignToEventManager,
-      itemTitle: firstItem?.title ?? '',
-      itemDescription: firstItem?.description ?? '',
-      itemPriority: firstItem?.priority ?? 'Medium',
-      itemDueDateRule: firstItem?.dueDateRule ?? 'days-after-status-change',
-      itemDueOffsetDays: firstItem?.dueOffsetDays ?? 0
+      description: template.description ?? '',
+      isActive: template.isActive,
+      autoApplyOnStatus: template.autoApplyOnStatus
     });
+
+    const templateItems: Array<{
+      title: string;
+      description?: string | null;
+      category: string;
+      priority: string;
+      defaultAssigneeRole: string;
+      dueDateOffset: number;
+      sortOrder: number;
+    }> = template.tasks.length > 0
+      ? template.tasks
+      : [{
+          title: '',
+          description: '',
+          category: 'other',
+          priority: 'medium',
+          defaultAssigneeRole: 'owner',
+          dueDateOffset: 0,
+          sortOrder: 1
+        }];
+
+    this.replaceFormArray(
+      this.taskTemplateItemControls,
+      templateItems.map((item, index) =>
+        this.createTaskTemplateItemGroup({
+          title: item.title,
+          description: item.description ?? '',
+          category: item.category,
+          priority: item.priority,
+          defaultAssigneeRole: item.defaultAssigneeRole,
+          dueDateOffset: item.dueDateOffset,
+          sortOrder: item.sortOrder || index + 1
+        })
+      )
+    );
   }
 
   deleteTaskTemplate(templateId: string): void {
@@ -1510,6 +2298,58 @@ export class SettingsComponent implements OnInit {
       });
   }
 
+  duplicateTaskTemplate(templateId: string): void {
+    this.setSectionSaving('task-templates', true);
+    this.api
+      .duplicateTaskTemplate(templateId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.setSectionSuccess('task-templates', 'Task template duplicated.');
+          this.setSectionSaving('task-templates', false);
+          this.loadTaskTemplatesSection(true);
+        },
+        error: (error) => {
+          this.setSectionError('task-templates', this.resolveError(error, 'Unable to duplicate task template.'));
+          this.setSectionSaving('task-templates', false);
+        }
+      });
+  }
+
+  startNewTaskTemplate(): void {
+    this.taskTemplateForm.reset({
+      id: '',
+      name: '',
+      eventType: 'Wedding',
+      description: '',
+      isActive: true,
+      autoApplyOnStatus: 'none'
+    });
+    this.replaceFormArray(this.taskTemplateItemControls, [this.createTaskTemplateItemGroup()]);
+  }
+
+  addTaskTemplateItem(): void {
+    this.taskTemplateItemControls.push(this.createTaskTemplateItemGroup());
+  }
+
+  removeTaskTemplateItem(index: number): void {
+    if (this.taskTemplateItemControls.length <= 1) {
+      return;
+    }
+    this.taskTemplateItemControls.removeAt(index);
+  }
+
+  moveTaskTemplateItem(index: number, direction: -1 | 1): void {
+    const targetIndex = index + direction;
+    if (targetIndex < 0 || targetIndex >= this.taskTemplateItemControls.length) {
+      return;
+    }
+
+    const control = this.taskTemplateItemControls.at(index);
+    this.taskTemplateItemControls.removeAt(index);
+    this.taskTemplateItemControls.insert(targetIndex, control);
+  }
+
   saveReportSchedule(): void {
     if (!this.selectedVenueId || this.reportScheduleForm.invalid) {
       this.reportScheduleForm.markAllAsTouched();
@@ -1518,6 +2358,18 @@ export class SettingsComponent implements OnInit {
     }
 
     const value = this.reportScheduleForm.getRawValue();
+    const selectedReportKeys = value.reportKeys ?? [];
+    const recipients = this.parseCsvList(value.recipientsCsv);
+    if (selectedReportKeys.length === 0) {
+      this.setSectionError('report-schedules', 'Select at least one report type.');
+      return;
+    }
+
+    if (recipients.length === 0) {
+      this.setSectionError('report-schedules', 'Add at least one recipient email.');
+      return;
+    }
+
     const scheduleId = this.optionalText(value.id) ?? undefined;
     this.setSectionSaving('report-schedules', true);
     this.api
@@ -1525,12 +2377,18 @@ export class SettingsComponent implements OnInit {
         this.selectedVenueId,
         {
           name: this.requiredText(value.name),
-          reportKey: this.requiredText(value.reportKey),
+          reportKeys: selectedReportKeys,
           frequency: this.requiredText(value.frequency),
-          recipients: this.parseCsvList(value.recipientsCsv),
+          dayOfWeek: value.dayOfWeek ?? undefined,
+          dayOfMonth: value.dayOfMonth ?? undefined,
+          timeOfDay: this.requiredText(value.timeOfDay),
+          format: value.format ?? 'both',
+          recipients,
           isActive: Boolean(value.isActive),
           nextRunAtUtc: this.optionalText(value.nextRunAtUtc) ?? undefined,
-          filtersJson: this.optionalText(value.filtersJson) ?? '{}'
+          eventType: this.optionalText(value.eventType) ?? undefined,
+          fromDate: this.optionalText(value.fromDate) ?? undefined,
+          toDate: this.optionalText(value.toDate) ?? undefined
         },
         scheduleId)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -1538,16 +2396,7 @@ export class SettingsComponent implements OnInit {
         next: () => {
           this.setSectionSuccess('report-schedules', 'Report schedule saved.');
           this.setSectionSaving('report-schedules', false);
-          this.reportScheduleForm.reset({
-            id: '',
-            name: '',
-            reportKey: 'pipeline',
-            frequency: 'weekly',
-            recipientsCsv: '',
-            isActive: true,
-            nextRunAtUtc: '',
-            filtersJson: '{}'
-          });
+          this.startNewReportSchedule();
           this.loadReportSchedulesSection(true);
         },
         error: (error) => {
@@ -1561,13 +2410,21 @@ export class SettingsComponent implements OnInit {
     this.reportScheduleForm.patchValue({
       id: schedule.id,
       name: schedule.name,
-      reportKey: schedule.reportKey,
+      reportKeys: [...schedule.reportKeys],
       frequency: schedule.frequency,
+      dayOfWeek: schedule.dayOfWeek ?? 1,
+      dayOfMonth: schedule.dayOfMonth ?? null,
+      timeOfDay: schedule.timeOfDay ?? '09:00',
+      format: schedule.format ?? 'both',
       recipientsCsv: schedule.recipients.join(','),
       isActive: schedule.isActive,
       nextRunAtUtc: schedule.nextRunAtUtc ?? '',
-      filtersJson: '{}'
+      eventType: schedule.eventType ?? '',
+      fromDate: schedule.fromDate ?? '',
+      toDate: schedule.toDate ?? ''
     });
+    this.activeExecutionScheduleId = schedule.id;
+    this.loadReportScheduleExecutionLogs(schedule.id);
   }
 
   deleteReportScheduleItem(scheduleId: string): void {
@@ -1579,11 +2436,98 @@ export class SettingsComponent implements OnInit {
         next: () => {
           this.setSectionSuccess('report-schedules', 'Report schedule removed.');
           this.setSectionSaving('report-schedules', false);
+          if (this.activeExecutionScheduleId === scheduleId) {
+            this.activeExecutionScheduleId = null;
+            this.scheduleExecutionLogs = [];
+          }
           this.loadReportSchedulesSection(true);
         },
         error: (error) => {
           this.setSectionError('report-schedules', this.resolveError(error, 'Unable to remove report schedule.'));
           this.setSectionSaving('report-schedules', false);
+        }
+      });
+  }
+
+  startNewReportSchedule(): void {
+    this.activeExecutionScheduleId = null;
+    this.scheduleExecutionLogs = [];
+    this.reportScheduleForm.reset({
+      id: '',
+      name: '',
+      reportKeys: ['sales-performance'],
+      frequency: 'weekly',
+      dayOfWeek: 1,
+      dayOfMonth: null,
+      timeOfDay: '09:00',
+      format: 'both',
+      recipientsCsv: '',
+      isActive: true,
+      nextRunAtUtc: '',
+      eventType: '',
+      fromDate: '',
+      toDate: ''
+    });
+  }
+
+  toggleReportKey(reportKey: string, event: Event): void {
+    const target = event.target as HTMLInputElement;
+    const next = [...(this.reportScheduleForm.get('reportKeys')?.value ?? [])];
+    if (target.checked) {
+      if (!next.includes(reportKey)) {
+        next.push(reportKey);
+      }
+    } else {
+      const index = next.indexOf(reportKey);
+      if (index >= 0) {
+        next.splice(index, 1);
+      }
+    }
+
+    this.reportScheduleForm.get('reportKeys')?.setValue(next);
+  }
+
+  isReportSelected(reportKey: string): boolean {
+    const selected = this.reportScheduleForm.get('reportKeys')?.value ?? [];
+    return selected.includes(reportKey);
+  }
+
+  sendReportScheduleNow(scheduleId: string): void {
+    this.runningScheduleId = scheduleId;
+    this.api
+      .sendReportScheduleNow(scheduleId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          const message = result.isSuccess ? 'Report schedule sent successfully.' : `Report schedule failed: ${result.message}`;
+          if (result.isSuccess) {
+            this.setSectionSuccess('report-schedules', message);
+          } else {
+            this.setSectionError('report-schedules', message);
+          }
+
+          this.runningScheduleId = null;
+          this.loadReportSchedulesSection(true);
+          this.loadReportScheduleExecutionLogs(scheduleId);
+        },
+        error: (error) => {
+          this.runningScheduleId = null;
+          this.setSectionError('report-schedules', this.resolveError(error, 'Unable to run report schedule now.'));
+        }
+      });
+  }
+
+  loadReportScheduleExecutionLogs(scheduleId: string): void {
+    this.activeExecutionScheduleId = scheduleId;
+    this.api
+      .getReportScheduleExecutions(scheduleId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.scheduleExecutionLogs = response.items;
+        },
+        error: () => {
+          this.scheduleExecutionLogs = [];
         }
       });
   }
@@ -1755,6 +2699,32 @@ export class SettingsComponent implements OnInit {
     return date.toLocaleString('en-GB', { month: 'short' });
   }
 
+  getReportDisplayName(reportKey: string): string {
+    return this.reportCatalog.find((report) => report.key === reportKey)?.name ?? reportKey;
+  }
+
+  getScheduleFrequencyLabel(schedule: ReportScheduleDto): string {
+    const time = schedule.timeOfDay || '09:00';
+    if (schedule.frequency === 'daily') {
+      return `Daily at ${time} UTC`;
+    }
+
+    if (schedule.frequency === 'weekly') {
+      return `Weekly on ${this.getDayLabel(schedule.dayOfWeek)} at ${time} UTC`;
+    }
+
+    if (schedule.frequency === 'monthly') {
+      return `Monthly on day ${schedule.dayOfMonth ?? 1} at ${time} UTC`;
+    }
+
+    return `${schedule.frequency} at ${time} UTC`;
+  }
+
+  getDayLabel(day?: number | null): string {
+    const found = this.reportScheduleDayOptions.find((item) => item.value === day);
+    return found?.label ?? 'Monday';
+  }
+
   private ensureSectionLoaded(section: SettingsSectionKey): void {
     if (!this.selectedVenueId) {
       return;
@@ -1789,11 +2759,20 @@ export class SettingsComponent implements OnInit {
       case 'planning-milestones':
         this.loadPlanningMilestonesSection();
         break;
+      case 'sustainability':
+        this.loadSustainabilitySection();
+        break;
+      case 'lost-reasons':
+        this.loadLostReasonsSection();
+        break;
       case 'report-configuration':
         this.loadReportConfigurationSection();
         break;
       case 'automation':
         this.loadAutomationSection();
+        break;
+      case 'guest-profiles':
+        this.loadGuestProfilesSection();
         break;
       case 'email-templates':
         this.loadEmailTemplatesSection();
@@ -2030,16 +3009,20 @@ export class SettingsComponent implements OnInit {
     }
 
     this.setSectionLoading('proposal-templates', true);
-    this.api
-      .getVenueProposalTemplates(this.selectedVenueId)
+    forkJoin({
+      templates: this.api.getVenueProposalTemplates(this.selectedVenueId),
+      pdfSettings: this.api.getProposalPdfSettings(this.selectedVenueId)
+    })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (templates) => {
+        next: ({ templates, pdfSettings }) => {
           this.proposalTemplates = templates;
+          this.proposalPdfSettings = pdfSettings;
           this.setSectionLoading('proposal-templates', false);
         },
         error: (error) => {
           this.proposalTemplates = [];
+          this.proposalPdfSettings = { paperSize: 'A4' };
           this.setSectionError('proposal-templates', this.resolveError(error, 'Unable to load proposal templates.'));
           this.setSectionLoading('proposal-templates', false);
         }
@@ -2072,6 +3055,77 @@ export class SettingsComponent implements OnInit {
       });
   }
 
+  private loadSustainabilitySection(force = false): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    if (!force && this.loadedSections.has('sustainability')) {
+      return;
+    }
+
+    this.setSectionLoading('sustainability', true);
+    this.api
+      .getSustainabilitySettings(this.selectedVenueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (settings) => {
+          this.sustainabilityEmissionFactors = [...settings.cateringEmissionFactors];
+          const ratingMap = new Map(
+            settings.energyRatingMultipliers.map((item) => [item.rating.toUpperCase(), item.multiplier])
+          );
+          this.sustainabilityEnergyRatingMultipliers = this.sustainabilityEnergyRatings.map((rating) => ({
+            rating,
+            multiplier: Number(ratingMap.get(rating) ?? 1)
+          }));
+          this.sustainabilityForm.patchValue({
+            travelKgCo2ePerGuestKm: settings.travelKgCo2ePerGuestKm,
+            carbonTargetKgPerGuest: settings.carbonTargetKgPerGuest,
+            wasteTargetKgPerGuest: settings.wasteTargetKgPerGuest,
+            diversionTargetPercent: settings.diversionTargetPercent,
+            localSourcingRadiusMiles: settings.localSourcingRadiusMiles,
+            carbonWeightPercent: settings.carbonWeightPercent,
+            wasteWeightPercent: settings.wasteWeightPercent,
+            sourcingWeightPercent: settings.sourcingWeightPercent,
+            includeInProposalByDefault: settings.includeInProposalByDefault
+          });
+          this.setSectionLoading('sustainability', false);
+        },
+        error: (error) => {
+          this.sustainabilityEmissionFactors = [];
+          this.sustainabilityEnergyRatingMultipliers = [];
+          this.setSectionError('sustainability', this.resolveError(error, 'Unable to load sustainability settings.'));
+          this.setSectionLoading('sustainability', false);
+        }
+      });
+  }
+
+  private loadLostReasonsSection(force = false): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    if (!force && this.loadedSections.has('lost-reasons')) {
+      return;
+    }
+
+    this.setSectionLoading('lost-reasons', true);
+    this.api
+      .getLostReasons(this.selectedVenueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (reasons) => {
+          this.lostReasons = [...reasons].sort((left, right) => left.sortOrder - right.sortOrder);
+          this.setSectionLoading('lost-reasons', false);
+        },
+        error: (error) => {
+          this.lostReasons = [];
+          this.setSectionError('lost-reasons', this.resolveError(error, 'Unable to load lost reasons.'));
+          this.setSectionLoading('lost-reasons', false);
+        }
+      });
+  }
+
   private loadReportConfigurationSection(force = false): void {
     if (!this.selectedVenueId) {
       return;
@@ -2090,7 +3144,14 @@ export class SettingsComponent implements OnInit {
           this.reportConfigurationForm.patchValue({
             provisionalWeightPercent: config.provisionalWeightPercent,
             tentativeWeightPercent: config.tentativeWeightPercent,
-            openProposalWeightPercent: config.openProposalWeightPercent
+            openProposalWeightPercent: config.openProposalWeightPercent,
+            responseTimeWeightPercent: config.responseTimeWeightPercent,
+            leadSourceWeightPercent: config.leadSourceWeightPercent,
+            eventTypeWeightPercent: config.eventTypeWeightPercent,
+            engagementWeightPercent: config.engagementWeightPercent,
+            budgetAlignmentWeightPercent: config.budgetAlignmentWeightPercent,
+            leadTimeWeightPercent: config.leadTimeWeightPercent,
+            completenessWeightPercent: config.completenessWeightPercent
           });
           this.setSectionLoading('report-configuration', false);
         },
@@ -2111,22 +3172,75 @@ export class SettingsComponent implements OnInit {
     }
 
     this.setSectionLoading('automation', true);
-    this.api
-      .getAutomationSettings(this.selectedVenueId)
+    forkJoin({
+      settings: this.api.getAutomationSettings(this.selectedVenueId),
+      rules: this.api.getAutomationRules(this.selectedVenueId),
+      executionLog: this.api.getAutomationExecutionLog(this.selectedVenueId)
+    })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (config) => {
+        next: ({ settings, rules, executionLog }) => {
           this.automationSettingsForm.patchValue({
-            proposalAcceptedTargetStatus: config.proposalAcceptedTargetStatus,
-            followUpInactiveDays: config.followUpInactiveDays,
-            autoArchiveEnabled: config.autoArchiveEnabled,
-            autoArchiveDays: config.autoArchiveDays
+            proposalAcceptedTargetStatus: settings.proposalAcceptedTargetStatus,
+            followUpInactiveDays: settings.followUpInactiveDays,
+            autoArchiveEnabled: settings.autoArchiveEnabled,
+            autoArchiveDays: settings.autoArchiveDays
           });
+          this.automationRules = [...rules].sort((left, right) => left.sortOrder - right.sortOrder);
+          this.automationExecutionLog = [...executionLog].sort((left, right) => right.timestampUtc.localeCompare(left.timestampUtc));
+          this.startNewAutomationRule();
           this.setSectionLoading('automation', false);
         },
         error: (error) => {
+          this.automationRules = [];
+          this.automationExecutionLog = [];
+          this.startNewAutomationRule();
           this.setSectionError('automation', this.resolveError(error, 'Unable to load automation settings.'));
           this.setSectionLoading('automation', false);
+        }
+      });
+  }
+
+  private loadAutomationExecutionLog(): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    this.api
+      .getAutomationExecutionLog(this.selectedVenueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (rows) => {
+          this.automationExecutionLog = [...rows].sort((left, right) => right.timestampUtc.localeCompare(left.timestampUtc));
+        },
+        error: () => {
+          this.automationExecutionLog = [];
+        }
+      });
+  }
+
+  private loadGuestProfilesSection(force = false): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    if (!force && this.loadedSections.has('guest-profiles')) {
+      return;
+    }
+
+    this.setSectionLoading('guest-profiles', true);
+    this.api
+      .getContactCustomFields(this.selectedVenueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (fields) => {
+          this.guestProfileCustomFields = [...fields].sort((left, right) => left.sortOrder - right.sortOrder);
+          this.setSectionLoading('guest-profiles', false);
+        },
+        error: (error) => {
+          this.guestProfileCustomFields = [];
+          this.setSectionError('guest-profiles', this.resolveError(error, 'Unable to load guest profile fields.'));
+          this.setSectionLoading('guest-profiles', false);
         }
       });
   }
@@ -2225,11 +3339,15 @@ export class SettingsComponent implements OnInit {
       .subscribe({
         next: (response) => {
           this.taskTemplates = response.templates;
+          if (!this.taskTemplateForm.get('id')?.value) {
+            this.startNewTaskTemplate();
+          }
           this.setSectionLoading('task-templates', false);
         },
         error: (error) => {
           this.taskTemplates = [];
           this.setSectionError('task-templates', this.resolveError(error, 'Unable to load task templates.'));
+          this.startNewTaskTemplate();
           this.setSectionLoading('task-templates', false);
         }
       });
@@ -2245,16 +3363,23 @@ export class SettingsComponent implements OnInit {
     }
 
     this.setSectionLoading('report-schedules', true);
-    this.api
-      .getReportSchedules(this.selectedVenueId)
+    forkJoin({
+      schedules: this.api.getReportSchedules(this.selectedVenueId),
+      catalog: this.api.getReportsCatalog()
+    })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
-          this.reportSchedules = response.items;
+          this.reportSchedules = response.schedules.items;
+          this.reportCatalog = response.catalog.reports.filter((report) => this.reportScheduleReportKeys.includes(report.key));
+          if (!this.reportScheduleForm.get('id')?.value) {
+            this.startNewReportSchedule();
+          }
           this.setSectionLoading('report-schedules', false);
         },
         error: (error) => {
           this.reportSchedules = [];
+          this.reportCatalog = [];
           this.setSectionError('report-schedules', this.resolveError(error, 'Unable to load report schedules.'));
           this.setSectionLoading('report-schedules', false);
         }
@@ -2442,6 +3567,48 @@ export class SettingsComponent implements OnInit {
     });
   }
 
+  private createAutomationConditionGroup(condition?: Partial<AutomationConditionDto>): FormGroup {
+    return this.formBuilder.group({
+      type: [condition?.type ?? 'EventType', Validators.required],
+      operator: [condition?.operator ?? 'Equals'],
+      value: [condition?.value ?? ''],
+      amount: [condition?.amount ?? null]
+    });
+  }
+
+  private createAutomationActionGroup(action?: Partial<AutomationActionDto>): FormGroup {
+    return this.formBuilder.group({
+      type: [action?.type ?? 'CreateTask', Validators.required],
+      targetStatus: [action?.targetStatus ?? ''],
+      templateKey: [action?.templateKey ?? ''],
+      assigneeUserId: [action?.assigneeUserId ?? ''],
+      taskTitle: [action?.taskTitle ?? 'Follow up'],
+      taskDueOffsetDays: [action?.taskDueOffsetDays ?? 1, [Validators.min(0), Validators.max(3650)]],
+      note: [action?.note ?? ''],
+      notificationUserId: [action?.notificationUserId ?? '']
+    });
+  }
+
+  private createTaskTemplateItemGroup(item?: {
+    title?: string;
+    description?: string;
+    category?: string;
+    priority?: string;
+    defaultAssigneeRole?: string;
+    dueDateOffset?: number;
+    sortOrder?: number;
+  }): FormGroup {
+    return this.formBuilder.group({
+      title: [item?.title ?? '', Validators.required],
+      description: [item?.description ?? ''],
+      category: [item?.category ?? 'other', Validators.required],
+      priority: [item?.priority ?? 'medium', Validators.required],
+      defaultAssigneeRole: [item?.defaultAssigneeRole ?? 'owner', Validators.required],
+      dueDateOffset: [item?.dueDateOffset ?? 0, [Validators.required, Validators.min(-3650), Validators.max(3650)]],
+      sortOrder: [item?.sortOrder ?? 1, [Validators.required, Validators.min(1)]]
+    });
+  }
+
   private replaceFormArray(target: FormArray, next: FormGroup[]): void {
     while (target.length > 0) {
       target.removeAt(0);
@@ -2536,6 +3703,28 @@ export class SettingsComponent implements OnInit {
         error: (error) => {
           this.setSectionError('planning-milestones', this.resolveError(error, 'Unable to save planning milestones.'));
           this.setSectionSaving('planning-milestones', false);
+        }
+      });
+  }
+
+  private persistLostReasons(nextReasons: LostReasonSettingDto[], successMessage: string): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    this.setSectionSaving('lost-reasons', true);
+    this.api
+      .upsertLostReasons(this.selectedVenueId, nextReasons)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (reasons) => {
+          this.lostReasons = [...reasons].sort((left, right) => left.sortOrder - right.sortOrder);
+          this.setSectionSuccess('lost-reasons', successMessage);
+          this.setSectionSaving('lost-reasons', false);
+        },
+        error: (error) => {
+          this.setSectionError('lost-reasons', this.resolveError(error, 'Unable to save lost reasons.'));
+          this.setSectionSaving('lost-reasons', false);
         }
       });
   }

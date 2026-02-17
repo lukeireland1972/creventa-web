@@ -1,17 +1,25 @@
 import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { of, switchMap } from 'rxjs';
 import {
+  ActivityFeedEntryDto,
   ApiService,
+  AuditRetentionSettingsDto,
+  ActivityFeedResponse,
+  EnquiryDeduplicationCandidateDto,
+  EnquiryDeduplicationReportResponse,
   UpdateUserProfileRequest,
+  UpdateAuditRetentionSettingsRequest,
   UpdateVenueProfileRequest,
   UserSummaryDto,
   VenueProfileDto,
   VenueSummaryDto
 } from '../../services/api.service';
 import { AuthService } from '../../services/auth.service';
+import { ActivityRealtimeService } from '../../services/activity-realtime.service';
 
 type HoldAutoReleaseMode = 'NotifyOnly' | 'AutoReleaseNotifyOperator' | 'AutoReleaseNotifyBoth';
 
@@ -34,10 +42,20 @@ interface EditUserFormModel {
   confirmPassword: string;
 }
 
+interface AuditFilterModel {
+  search: string;
+  enquiryRef: string;
+  userId: string;
+  actionType: string;
+  entityType: string;
+  fromDate: string;
+  toDate: string;
+}
+
 @Component({
   selector: 'app-admin',
   standalone: true,
-  imports: [FormsModule],
+  imports: [DatePipe, FormsModule],
   templateUrl: './admin.component.html',
   styleUrl: './admin.component.scss'
 })
@@ -46,6 +64,7 @@ export class AdminComponent implements OnInit {
   private auth = inject(AuthService);
   private router = inject(Router);
   private destroyRef = inject(DestroyRef);
+  private activityRealtime = inject(ActivityRealtimeService);
 
   readonly roleOptions = [
     'GroupAdmin',
@@ -63,10 +82,38 @@ export class AdminComponent implements OnInit {
     'AutoReleaseNotifyBoth'
   ];
 
+  readonly adminTabs = [
+    { value: 'management', label: 'Management' },
+    { value: 'audit', label: 'Audit Log' }
+  ] as const;
+
   venues: VenueSummaryDto[] = [];
   selectedVenueId: string | null = null;
   venueDraft: UpdateVenueProfileRequest | null = null;
   users: UserSummaryDto[] = [];
+  adminTab: 'management' | 'audit' = 'management';
+
+  auditRows: ActivityFeedEntryDto[] = [];
+  auditFilter: AuditFilterModel = this.createDefaultAuditFilter();
+  auditLoading = false;
+  auditError = '';
+  auditPage = 1;
+  readonly auditPageSize = 50;
+  auditTotalCount = 0;
+  auditHasMore = false;
+  auditUsers: UserSummaryDto[] = [];
+  auditActionTypes: string[] = [];
+  auditEntityTypes: string[] = [];
+  auditExporting = false;
+  auditRetentionDays = 365;
+  auditSavingRetention = false;
+  dedupeReport: EnquiryDeduplicationReportResponse | null = null;
+  dedupeLoading = false;
+  dedupeRunning = false;
+  dedupeError = '';
+  dedupeConfidenceMin = 35;
+  private auditRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private realtimeSubscribed = false;
 
   loadingVenues = false;
   loadingVenueProfile = false;
@@ -90,6 +137,7 @@ export class AdminComponent implements OnInit {
       return;
     }
 
+    this.ensureRealtimeSubscription();
     this.loadVenues();
   }
 
@@ -107,6 +155,33 @@ export class AdminComponent implements OnInit {
 
     this.loadVenueProfile();
     this.loadUsers();
+    this.loadAuditUsers();
+    this.loadAuditRetentionSettings();
+    this.loadDeduplicationReport(true);
+    const tenantId = this.auth.session?.tenantId;
+    if (tenantId) {
+      void this.activityRealtime.ensureConnected(tenantId, venueId);
+    }
+    if (this.adminTab === 'audit') {
+      this.loadAuditLogs(true);
+    }
+  }
+
+  setAdminTab(tab: 'management' | 'audit'): void {
+    if (this.adminTab === tab) {
+      return;
+    }
+
+    this.adminTab = tab;
+    if (tab === 'audit') {
+      this.loadAuditUsers();
+      this.loadAuditRetentionSettings();
+      const tenantId = this.auth.session?.tenantId;
+      if (tenantId) {
+        void this.activityRealtime.ensureConnected(tenantId, this.selectedVenueId);
+      }
+      this.loadAuditLogs(true);
+    }
   }
 
   saveVenue(): void {
@@ -336,6 +411,291 @@ export class AdminComponent implements OnInit {
     return user.venueRoles.find((role) => role.venueId === venueId)?.role ?? 'N/A';
   }
 
+  get dedupeCandidates(): EnquiryDeduplicationCandidateDto[] {
+    const candidates = this.dedupeReport?.candidates ?? [];
+    const threshold = Number.isFinite(this.dedupeConfidenceMin) ? this.dedupeConfidenceMin : 0;
+    return candidates
+      .filter((candidate) => candidate.confidenceScore >= threshold)
+      .sort((left, right) => right.confidenceScore - left.confidenceScore);
+  }
+
+  onAuditFiltersChanged(): void {
+    if (this.adminTab !== 'audit') {
+      return;
+    }
+
+    this.loadAuditLogs(true);
+  }
+
+  refreshDeduplicationReport(): void {
+    this.loadDeduplicationReport(false);
+  }
+
+  runDeduplicationScan(): void {
+    const venueId = this.selectedVenueId;
+    if (!venueId || this.dedupeRunning) {
+      return;
+    }
+
+    this.dedupeRunning = true;
+    this.dedupeError = '';
+    this.api.runEnquiryDedupeReport(venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (report) => {
+          this.dedupeRunning = false;
+          this.dedupeReport = report;
+          this.userMessage = `Deduplication scan complete. ${report.candidates.length} candidate pair(s) found.`;
+        },
+        error: (error) => {
+          this.dedupeRunning = false;
+          this.dedupeError = this.resolveError(error, 'Unable to run deduplication scan.');
+        }
+      });
+  }
+
+  openDedupeEnquiry(enquiryId: string): void {
+    this.router.navigate(['/enquiries'], {
+      queryParams: {
+        enquiry: enquiryId,
+        statusTab: 'all'
+      }
+    });
+  }
+
+  mergeDedupeCandidate(candidate: EnquiryDeduplicationCandidateDto): void {
+    this.router.navigate(['/enquiries'], {
+      queryParams: {
+        statusTab: 'all',
+        mergeA: candidate.primaryEnquiryId,
+        mergeB: candidate.secondaryEnquiryId
+      }
+    });
+  }
+
+  goToPreviousAuditPage(): void {
+    if (this.auditPage <= 1 || this.auditLoading) {
+      return;
+    }
+
+    this.auditPage -= 1;
+    this.loadAuditLogs(false);
+  }
+
+  goToNextAuditPage(): void {
+    if (!this.auditHasMore || this.auditLoading) {
+      return;
+    }
+
+    this.auditPage += 1;
+    this.loadAuditLogs(false);
+  }
+
+  exportAuditCsv(): void {
+    this.auditExporting = true;
+    this.auditError = '';
+    this.api.exportAuditLogsCsv({
+      search: this.auditFilter.search || undefined,
+      enquiryRef: this.auditFilter.enquiryRef || undefined,
+      userId: this.auditFilter.userId || undefined,
+      actionType: this.auditFilter.actionType || undefined,
+      entityType: this.auditFilter.entityType || undefined,
+      fromDate: this.auditFilter.fromDate || undefined,
+      toDate: this.auditFilter.toDate || undefined
+    })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          this.auditExporting = false;
+          const url = window.URL.createObjectURL(blob);
+          const anchor = document.createElement('a');
+          anchor.href = url;
+          anchor.download = `audit-log-${new Date().toISOString().slice(0, 10)}.csv`;
+          anchor.click();
+          window.URL.revokeObjectURL(url);
+        },
+        error: (error) => {
+          this.auditExporting = false;
+          this.auditError = this.resolveError(error, 'Unable to export audit log.');
+        }
+      });
+  }
+
+  saveAuditRetentionSettings(): void {
+    const venueId = this.selectedVenueId;
+    if (!venueId || this.auditSavingRetention) {
+      return;
+    }
+
+    const payload: UpdateAuditRetentionSettingsRequest = {
+      venueId,
+      retentionDays: this.auditRetentionDays
+    };
+
+    this.auditSavingRetention = true;
+    this.auditError = '';
+    this.api.updateAuditRetentionSettings(payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (settings: AuditRetentionSettingsDto) => {
+          this.auditSavingRetention = false;
+          this.auditRetentionDays = settings.retentionDays;
+          this.userMessage = `Audit retention updated to ${settings.retentionDays} days.`;
+        },
+        error: (error) => {
+          this.auditSavingRetention = false;
+          this.auditError = this.resolveError(error, 'Unable to update audit retention.');
+        }
+      });
+  }
+
+  actionBadge(value: string): string {
+    return (value || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-');
+  }
+
+  private loadAuditLogs(resetPage: boolean): void {
+    if (resetPage) {
+      this.auditPage = 1;
+    }
+
+    this.auditLoading = true;
+    this.auditError = '';
+
+    this.api.getAuditLogs({
+      search: this.auditFilter.search || undefined,
+      enquiryRef: this.auditFilter.enquiryRef || undefined,
+      userId: this.auditFilter.userId || undefined,
+      actionType: this.auditFilter.actionType || undefined,
+      entityType: this.auditFilter.entityType || undefined,
+      fromDate: this.auditFilter.fromDate || undefined,
+      toDate: this.auditFilter.toDate || undefined,
+      page: this.auditPage,
+      pageSize: this.auditPageSize
+    })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response: ActivityFeedResponse) => {
+          this.auditLoading = false;
+          this.auditRows = response.items;
+          this.auditTotalCount = response.totalCount;
+          this.auditHasMore = response.hasMore;
+          this.auditActionTypes = this.collectDistinct(response.items.map((item) => item.actionType));
+          this.auditEntityTypes = this.collectDistinct(response.items.map((item) => item.entityType));
+        },
+        error: (error) => {
+          this.auditLoading = false;
+          this.auditRows = [];
+          this.auditTotalCount = 0;
+          this.auditHasMore = false;
+          this.auditError = this.resolveError(error, 'Unable to load audit log.');
+        }
+      });
+  }
+
+  private loadAuditUsers(): void {
+    this.api.getUsers()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (users) => {
+          this.auditUsers = users
+            .filter((user) => user.isActive)
+            .sort((left, right) =>
+              `${left.firstName} ${left.lastName}`.localeCompare(`${right.firstName} ${right.lastName}`, undefined, {
+                sensitivity: 'base'
+              }));
+        },
+        error: () => {
+          this.auditUsers = [];
+        }
+      });
+  }
+
+  private loadAuditRetentionSettings(): void {
+    const venueId = this.selectedVenueId;
+    if (!venueId) {
+      this.auditRetentionDays = 365;
+      return;
+    }
+
+    this.api.getAuditRetentionSettings(venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (settings: AuditRetentionSettingsDto) => {
+          this.auditRetentionDays = settings.retentionDays;
+        },
+        error: () => {
+          this.auditRetentionDays = 365;
+        }
+      });
+  }
+
+  private loadDeduplicationReport(forceRefresh: boolean): void {
+    const venueId = this.selectedVenueId;
+    if (!venueId) {
+      this.dedupeReport = null;
+      this.dedupeError = '';
+      return;
+    }
+
+    this.dedupeLoading = true;
+    this.dedupeError = '';
+    this.api.getEnquiryDedupeReport(venueId, forceRefresh)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (report) => {
+          this.dedupeLoading = false;
+          this.dedupeReport = report;
+        },
+        error: (error) => {
+          this.dedupeLoading = false;
+          this.dedupeReport = null;
+          this.dedupeError = this.resolveError(error, 'Unable to load deduplication report.');
+        }
+      });
+  }
+
+  private ensureRealtimeSubscription(): void {
+    if (this.realtimeSubscribed) {
+      return;
+    }
+
+    this.realtimeSubscribed = true;
+    this.activityRealtime.events$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.scheduleAuditRefresh();
+      });
+  }
+
+  private scheduleAuditRefresh(): void {
+    if (this.adminTab !== 'audit') {
+      return;
+    }
+
+    const tenantId = this.auth.session?.tenantId;
+    if (!tenantId) {
+      return;
+    }
+
+    void this.activityRealtime.ensureConnected(tenantId, this.selectedVenueId);
+
+    if (this.auditRefreshTimer) {
+      clearTimeout(this.auditRefreshTimer);
+    }
+
+    this.auditRefreshTimer = setTimeout(() => {
+      this.loadAuditLogs(false);
+    }, 500);
+  }
+
+  private collectDistinct(values: (string | null | undefined)[]): string[] {
+    return Array.from(new Set(values.filter((value): value is string => !!value && value.trim().length > 0)))
+      .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+  }
+
   private loadVenues(): void {
     this.loadingVenues = true;
     this.pageError = '';
@@ -364,6 +724,11 @@ export class AdminComponent implements OnInit {
           }
 
           this.onVenueSelectionChanged(initialVenueId);
+
+          const tenantId = this.auth.session?.tenantId;
+          if (tenantId) {
+            void this.activityRealtime.ensureConnected(tenantId, initialVenueId);
+          }
         },
         error: (error) => {
           this.loadingVenues = false;
@@ -468,6 +833,18 @@ export class AdminComponent implements OnInit {
       phoneNumberE164: '',
       role: 'EventsCoordinator',
       requiresTotp: false
+    };
+  }
+
+  private createDefaultAuditFilter(): AuditFilterModel {
+    return {
+      search: '',
+      enquiryRef: '',
+      userId: '',
+      actionType: '',
+      entityType: '',
+      fromDate: '',
+      toDate: ''
     };
   }
 

@@ -1,12 +1,23 @@
 import { Component, DestroyRef, HostListener, OnInit, inject } from '@angular/core';
 import { DatePipe, NgClass } from '@angular/common';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { distinctUntilChanged, forkJoin, map } from 'rxjs';
-import { ApiService, DiaryEventDto, DiaryResponse, MoveDiaryEventRequest } from '../../services/api.service';
+import {
+  AiDemandHeatmapCellDto,
+  ApiService,
+  DiaryEventDto,
+  DiaryMoveConflictDto,
+  DiaryResponse,
+  MoveDiaryEventRequest,
+  SpaceCombinationDto,
+  SpaceSummaryDto
+} from '../../services/api.service';
 import { AuthService } from '../../services/auth.service';
+import { QuickTaskCreatedEvent, TaskQuickCreateModalComponent } from '../../ui/task-quick-create-modal/task-quick-create-modal.component';
 
 type DiaryView = 'month' | 'timeline' | 'week' | 'day';
+type WeekLayout = 'merged' | 'space';
 type ResizeEdge = 'start' | 'end';
 type ResizeView = 'week' | 'day';
 
@@ -33,10 +44,58 @@ interface TimelineMonthRow {
   cells: TimelineCell[];
 }
 
+type SpaceFilterOptionType = 'space' | 'combination';
+
+interface SpaceFilterOption {
+  key: string;
+  label: string;
+  type: SpaceFilterOptionType;
+  spaceIds: string[];
+}
+
+interface RoomTimelineBar {
+  key: string;
+  event: DiaryEventDto;
+  lane: number;
+  leftPercent: number;
+  widthPercent: number;
+}
+
+interface RoomTimelineRow {
+  spaceId: string;
+  spaceName: string;
+  laneCount: number;
+  bars: RoomTimelineBar[];
+}
+
 interface WeekDayColumn {
   isoDate: string;
   label: string;
   subLabel: string;
+  events: DiaryEventDto[];
+}
+
+interface WeekSpaceDayLane {
+  isoDate: string;
+  events: DiaryEventDto[];
+}
+
+interface WeekSpaceRow {
+  spaceId: string;
+  spaceName: string;
+  days: WeekSpaceDayLane[];
+}
+
+interface DaySpaceColumn {
+  spaceId: string;
+  spaceName: string;
+  events: DiaryEventDto[];
+}
+
+interface DiaryEventGroup {
+  key: string;
+  nested: boolean;
+  parentLabel: string;
   events: DiaryEventDto[];
 }
 
@@ -48,6 +107,24 @@ interface PendingMove {
   newEndUtc: string;
   targetSpaceId: string;
   actionLabel: string;
+  checkingConflicts: boolean;
+  conflicts: DiaryMoveConflictDto[];
+  conflictCheckMessage: string;
+}
+
+interface MoveUndoState {
+  eventType: 'Enquiry' | 'Appointment' | 'VenueEvent';
+  eventId: string;
+  eventLabel: string;
+  oldStartUtc: string;
+  oldEndUtc: string;
+  oldSpaceId: string;
+  newStartUtc: string;
+  newEndUtc: string;
+  newSpaceId: string;
+  expiresAt: number;
+  secondsRemaining: number;
+  undoing: boolean;
 }
 
 interface ResizeState {
@@ -63,15 +140,16 @@ interface ResizeState {
 
 @Component({
   selector: 'app-event-diary',
-  imports: [NgClass, DatePipe],
+  imports: [NgClass, DatePipe, TaskQuickCreateModalComponent],
   templateUrl: './event-diary.component.html',
   styleUrl: './event-diary.component.scss'
 })
 export class EventDiaryComponent implements OnInit {
   private static readonly timelineColumnAnchor = 6;
   private static readonly timelineColumnCount = 37;
+  private static readonly timelineMonthWindow = 12;
 
-  private readonly dayStartHour = 9;
+  private readonly dayStartHour = 6;
   private readonly dayEndHour = 23;
   private readonly minuteStep = 15;
 
@@ -79,6 +157,7 @@ export class EventDiaryComponent implements OnInit {
   private auth = inject(AuthService);
   private destroyRef = inject(DestroyRef);
   private router = inject(Router);
+  private route = inject(ActivatedRoute);
   private readonly unassignedSpaceId = '00000000-0000-0000-0000-000000000000';
 
   readonly weekdayLabels = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -95,19 +174,41 @@ export class EventDiaryComponent implements OnInit {
   diary: DiaryResponse | null = null;
   cells: MonthCell[] = [];
   timelineRows: TimelineMonthRow[] = [];
+  roomTimelineRows: RoomTimelineRow[] = [];
   weekColumns: WeekDayColumn[] = [];
+  weekSpaceRows: WeekSpaceRow[] = [];
   dayEvents: DiaryEventDto[] = [];
+  daySpaceColumns: DaySpaceColumn[] = [];
+  showDemandHeatmap = false;
+  demandHeatmapLoading = false;
+  demandHeatmapMessage = '';
+  private demandHeatmapByDate = new Map<string, AiDemandHeatmapCellDto>();
+  timelineLayout: 'standard' | 'room' = 'standard';
+  weekLayout: WeekLayout = 'merged';
+  showSpaceFilterDropdown = false;
+  spaceFilterOptions: SpaceFilterOption[] = [];
+  selectedSpaceFilterKeys: string[] = [];
+  loadingSpaceFilters = false;
+  spaceFilterError = '';
   hoveredEventKey: string | null = null;
   draggingEvent: DiaryEventDto | null = null;
   loadError = '';
+  exportState: 'xlsx' | 'pdf' | null = null;
+  showAddTaskModal = false;
   selectedView: DiaryView = 'month';
   pendingMove: PendingMove | null = null;
   applyingMove = false;
+  moveUndoState: MoveUndoState | null = null;
 
   private monthCursor = this.getUtcMonthStart(new Date());
+  private activeSpaceFilterMap = new Map<string, SpaceFilterOption>();
   private refreshIntervalHandle: number | null = null;
   private resizeState: ResizeState | null = null;
   private resizePreview: { eventKey: string; startUtc: string; endUtc: string } | null = null;
+  private moveUndoIntervalHandle: number | null = null;
+  private pendingConflictCheckSequence = 0;
+  private demandHeatmapRequestSequence = 0;
+  private diaryLoadSequence = 0;
 
   get venueId(): string | null {
     return this.auth.selectedVenueId;
@@ -129,6 +230,34 @@ export class EventDiaryComponent implements OnInit {
     return this.monthLabel;
   }
 
+  get spaceFilterSummaryLabel(): string {
+    if (this.selectedSpaceFilterKeys.length === 0) {
+      return 'All Spaces';
+    }
+
+    const selectedLabels = this.selectedSpaceFilterKeys
+      .map((key) => this.activeSpaceFilterMap.get(key)?.label)
+      .filter((label): label is string => !!label);
+
+    if (selectedLabels.length === 0) {
+      return 'All Spaces';
+    }
+
+    if (selectedLabels.length <= 2) {
+      return selectedLabels.join(', ');
+    }
+
+    return `${selectedLabels.slice(0, 2).join(', ')} +${selectedLabels.length - 2}`;
+  }
+
+  get standaloneSpaceFilterOptions(): SpaceFilterOption[] {
+    return this.spaceFilterOptions.filter((option) => option.type === 'space');
+  }
+
+  get combinationSpaceFilterOptions(): SpaceFilterOption[] {
+    return this.spaceFilterOptions.filter((option) => option.type === 'combination');
+  }
+
   get monthLabel(): string {
     return new Intl.DateTimeFormat('en-GB', {
       month: 'long',
@@ -145,6 +274,10 @@ export class EventDiaryComponent implements OnInit {
       year: 'numeric',
       timeZone: 'UTC'
     }).format(this.monthCursor);
+  }
+
+  get currentDayIso(): string {
+    return this.toIsoDateUtc(this.monthCursor);
   }
 
   get weekRangeLabel(): string {
@@ -164,7 +297,7 @@ export class EventDiaryComponent implements OnInit {
 
   get timelineRangeLabel(): string {
     const end = new Date(this.monthCursor);
-    end.setUTCMonth(end.getUTCMonth() + 5);
+    end.setUTCMonth(end.getUTCMonth() + EventDiaryComponent.timelineMonthWindow - 1);
 
     const formatter = new Intl.DateTimeFormat('en-GB', {
       month: 'short',
@@ -187,16 +320,37 @@ export class EventDiaryComponent implements OnInit {
     return !!this.pendingMove;
   }
 
+  get canConfirmPendingMove(): boolean {
+    if (!this.pendingMove) {
+      return false;
+    }
+
+    return !this.pendingMove.checkingConflicts && this.pendingMove.conflicts.length === 0 && !this.applyingMove;
+  }
+
   ngOnInit(): void {
+    this.restoreStateFromQueryParams();
+
     this.auth.session$
       .pipe(
         map((session) => session?.venueId ?? null),
         distinctUntilChanged(),
         takeUntilDestroyed(this.destroyRef)
       )
-      .subscribe(() => {
+      .subscribe((venueId) => {
+        if (venueId) {
+          this.loadSpaceFilterOptions(venueId);
+        } else {
+          this.spaceFilterOptions = [];
+          this.activeSpaceFilterMap.clear();
+        }
+
         this.loadDiary();
       });
+
+    if (this.venueId) {
+      this.loadSpaceFilterOptions(this.venueId);
+    }
 
     this.loadDiary();
     this.refreshIntervalHandle = window.setInterval(() => this.loadDiary(), 30000);
@@ -205,6 +359,8 @@ export class EventDiaryComponent implements OnInit {
         clearInterval(this.refreshIntervalHandle);
         this.refreshIntervalHandle = null;
       }
+
+      this.clearMoveUndoState();
     });
   }
 
@@ -220,6 +376,18 @@ export class EventDiaryComponent implements OnInit {
     }
   }
 
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(event: Event): void {
+    if (!this.showSpaceFilterDropdown) {
+      return;
+    }
+
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.space-filter')) {
+      this.showSpaceFilterDropdown = false;
+    }
+  }
+
   @HostListener('document:mousemove', ['$event'])
   onDocumentMouseMove(event: MouseEvent): void {
     if (!this.resizeState) {
@@ -227,7 +395,7 @@ export class EventDiaryComponent implements OnInit {
     }
 
     const state = this.resizeState;
-    const deltaPixels = state.view === 'week' ? event.clientY - state.originClient : event.clientX - state.originClient;
+    const deltaPixels = event.clientY - state.originClient;
     const deltaMinutes = this.roundMinutesToStep(deltaPixels / state.pixelsPerMinute);
 
     const dayBounds = this.getDayWindowBounds(state.dayIso);
@@ -299,6 +467,7 @@ export class EventDiaryComponent implements OnInit {
       this.monthCursor = this.getUtcMonthStart(next);
     }
 
+    this.syncQueryParams();
     this.loadDiary();
   }
 
@@ -313,6 +482,7 @@ export class EventDiaryComponent implements OnInit {
       this.monthCursor = this.getUtcMonthStart(today);
     }
 
+    this.syncQueryParams();
     this.loadDiary();
   }
 
@@ -320,6 +490,57 @@ export class EventDiaryComponent implements OnInit {
     this.router.navigate(['/enquiries'], {
       queryParams: { statusTab: 'new-unanswered' }
     });
+  }
+
+  openAddTask(): void {
+    this.showAddTaskModal = true;
+  }
+
+  closeAddTaskModal(): void {
+    this.showAddTaskModal = false;
+  }
+
+  onTaskQuickCreated(event: QuickTaskCreatedEvent): void {
+    this.showAddTaskModal = false;
+  }
+
+  exportDiary(format: 'xlsx' | 'pdf'): void {
+    const venueId = this.venueId;
+    if (!venueId || this.exportState) {
+      return;
+    }
+
+    this.exportState = format;
+    this.api
+      .exportDiary({
+        venueId,
+        view: this.selectedView,
+        format,
+        startDate: this.toIsoDateUtc(this.monthCursor),
+        spaceIds: this.getEffectiveSpaceFilterIds()
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          const timestamp = this.toIsoDateUtc(new Date());
+          const fileName = `event-diary-${this.selectedView}-${timestamp}.${format}`;
+          const url = URL.createObjectURL(blob);
+          const anchor = document.createElement('a');
+          anchor.href = url;
+          anchor.download = fileName;
+          anchor.click();
+          URL.revokeObjectURL(url);
+          this.exportState = null;
+        },
+        error: () => {
+          this.loadError = 'Unable to export diary right now.';
+          this.exportState = null;
+        }
+      });
+  }
+
+  isExporting(format: 'xlsx' | 'pdf'): boolean {
+    return this.exportState === format;
   }
 
   switchView(view: DiaryView): void {
@@ -337,25 +558,136 @@ export class EventDiaryComponent implements OnInit {
       this.monthCursor = this.getUtcMonthStart(this.monthCursor);
     }
 
+    this.syncQueryParams();
     this.loadDiary();
+  }
+
+  toggleDemandHeatmap(): void {
+    this.showDemandHeatmap = !this.showDemandHeatmap;
+    this.syncQueryParams();
+    if (!this.showDemandHeatmap) {
+      this.demandHeatmapByDate.clear();
+      this.demandHeatmapMessage = '';
+      this.demandHeatmapLoading = false;
+      return;
+    }
+
+    this.loadDiary();
+  }
+
+  heatmapClassForDate(dateIso: string | null): string {
+    if (!this.showDemandHeatmap || !dateIso) {
+      return '';
+    }
+
+    const intensity = (this.demandHeatmapByDate.get(dateIso)?.intensity ?? '').toLowerCase();
+    if (!intensity) {
+      return '';
+    }
+
+    return `heatmap-${intensity}`;
+  }
+
+  heatmapLabelForDate(dateIso: string | null): string | null {
+    if (!this.showDemandHeatmap || !dateIso) {
+      return null;
+    }
+
+    const cell = this.demandHeatmapByDate.get(dateIso);
+    if (!cell || cell.enquiryCount <= 0) {
+      return null;
+    }
+
+    return cell.intensity;
+  }
+
+  toggleSpaceFilterDropdown(): void {
+    this.showSpaceFilterDropdown = !this.showSpaceFilterDropdown;
+  }
+
+  selectAllSpaces(): void {
+    this.selectedSpaceFilterKeys = [];
+    this.showSpaceFilterDropdown = false;
+    this.syncQueryParams();
+    this.loadDiary();
+  }
+
+  isSpaceFilterSelected(filterKey: string): boolean {
+    return this.selectedSpaceFilterKeys.includes(filterKey);
+  }
+
+  toggleSpaceFilter(filterKey: string): void {
+    if (!this.activeSpaceFilterMap.has(filterKey)) {
+      return;
+    }
+
+    const selected = new Set(this.selectedSpaceFilterKeys);
+    if (selected.has(filterKey)) {
+      selected.delete(filterKey);
+    } else {
+      selected.add(filterKey);
+    }
+
+    this.selectedSpaceFilterKeys = Array.from(selected);
+    this.syncQueryParams();
+    this.loadDiary();
+  }
+
+  setTimelineLayout(layout: 'standard' | 'room'): void {
+    if (this.timelineLayout === layout) {
+      return;
+    }
+
+    this.timelineLayout = layout;
+    this.syncQueryParams();
+  }
+
+  setWeekLayout(layout: WeekLayout): void {
+    if (this.weekLayout === layout) {
+      return;
+    }
+
+    this.weekLayout = layout;
+    this.syncQueryParams();
+  }
+
+  roomRowHeightPx(row: RoomTimelineRow): number {
+    return Math.max(34, row.laneCount * 28 + 8);
+  }
+
+  roomBarTopPx(bar: RoomTimelineBar): number {
+    return 4 + bar.lane * 28;
+  }
+
+  timelineColumnPercent(index: number): number {
+    return (index / EventDiaryComponent.timelineColumnCount) * 100;
   }
 
   loadDiary(): void {
     const venueId = this.venueId;
     if (!venueId) {
+      this.diaryLoadSequence += 1;
       this.diary = null;
       this.cells = [];
       this.timelineRows = [];
+      this.roomTimelineRows = [];
       this.weekColumns = [];
+      this.weekSpaceRows = [];
       this.dayEvents = [];
+      this.daySpaceColumns = [];
+      this.demandHeatmapByDate.clear();
+      this.demandHeatmapMessage = '';
+      this.demandHeatmapLoading = false;
       this.loadError = '';
       return;
     }
 
+    this.pendingConflictCheckSequence += 1;
     this.pendingMove = null;
+    const requestSequence = ++this.diaryLoadSequence;
 
     if (this.selectedView === 'timeline') {
-      this.loadTimelineDiary(venueId);
+      this.loadTimelineDiary(venueId, requestSequence);
       return;
     }
 
@@ -363,45 +695,70 @@ export class EventDiaryComponent implements OnInit {
       .getDiary({
         venueId,
         view: this.selectedView,
-        startDate: this.toIsoDateUtc(this.monthCursor)
+        startDate: this.toIsoDateUtc(this.monthCursor),
+        spaceIds: this.getEffectiveSpaceFilterIds()
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
+          if (requestSequence !== this.diaryLoadSequence) {
+            return;
+          }
+
           this.diary = response;
           this.loadError = '';
           this.cells = [];
           this.timelineRows = [];
+          this.roomTimelineRows = [];
           this.weekColumns = [];
+          this.weekSpaceRows = [];
           this.dayEvents = [];
+          this.daySpaceColumns = [];
 
           if (this.selectedView === 'month') {
             this.monthCursor = this.getUtcMonthStart(this.parseIsoDateUtc(response.windowStart));
             this.cells = this.buildMonthCells(response.events);
+            this.loadDemandHeatmapForWindow(venueId, this.toIsoDateUtc(this.cells[0]?.date ?? this.monthCursor), this.toIsoDateUtc(this.cells[this.cells.length - 1]?.date ?? this.monthCursor));
             return;
           }
 
           if (this.selectedView === 'week') {
             this.monthCursor = this.getWeekStart(this.parseIsoDateUtc(response.windowStart));
             this.weekColumns = this.buildWeekColumns(this.parseIsoDateUtc(response.windowStart), response.events);
+            this.weekSpaceRows = this.buildWeekSpaceRows(this.weekColumns, response.spaces);
+            if (this.weekColumns.length > 0) {
+              this.loadDemandHeatmapForWindow(venueId, this.weekColumns[0].isoDate, this.weekColumns[this.weekColumns.length - 1].isoDate);
+            } else {
+              this.loadDemandHeatmapForWindow(venueId, this.toIsoDateUtc(this.monthCursor), this.toIsoDateUtc(this.monthCursor));
+            }
             return;
           }
 
           this.monthCursor = this.getUtcDayStart(this.parseIsoDateUtc(response.windowStart));
           this.dayEvents = this.buildDayEvents(response.events);
+          this.daySpaceColumns = this.buildDaySpaceColumns(this.dayEvents, response.spaces);
+          this.loadDemandHeatmapForWindow(venueId, this.currentDayIso, this.currentDayIso);
         },
         error: () => {
+          if (requestSequence !== this.diaryLoadSequence) {
+            return;
+          }
+
           this.loadError = 'Unable to load diary data right now.';
         }
       });
   }
 
-  eventsForDisplay(cell: { events: DiaryEventDto[] }): DiaryEventDto[] {
-    return cell.events.slice(0, 3);
+  eventGroupsForDisplay(cell: { events: DiaryEventDto[] }): DiaryEventGroup[] {
+    return this.groupEventsForCell(cell.events).slice(0, 3);
   }
 
-  hiddenEventsCount(cell: { events: DiaryEventDto[] }): number {
-    return Math.max(cell.events.length - 3, 0);
+  hiddenEventGroupsCount(cell: { events: DiaryEventDto[] }): number {
+    return Math.max(this.groupEventsForCell(cell.events).length - 3, 0);
+  }
+
+  eventGroupCount(cell: { events: DiaryEventDto[] }): number {
+    return this.groupEventsForCell(cell.events).length;
   }
 
   eventKey(event: DiaryEventDto): string {
@@ -409,7 +766,7 @@ export class EventDiaryComponent implements OnInit {
   }
 
   canDrag(event: DiaryEventDto): boolean {
-    return event.spaceId !== this.unassignedSpaceId;
+    return !!event;
   }
 
   onDragStart(event: DiaryEventDto, browserEvent?: DragEvent): void {
@@ -460,39 +817,74 @@ export class EventDiaryComponent implements OnInit {
     }
 
     dragEvent.preventDefault();
-
-    const source = this.draggingEvent;
-    const rect = container.getBoundingClientRect();
-    const y = Math.max(0, Math.min(rect.height, dragEvent.clientY - rect.top));
-    const minuteOffset = this.roundMinutesToStep((y / rect.height) * this.totalWindowMinutes);
-
-    const originalStart = new Date(source.startUtc);
-    const originalEnd = new Date(source.endUtc);
-    const durationMinutes = Math.max(this.minuteStep, (originalEnd.getTime() - originalStart.getTime()) / 60000);
-
-    const moved = this.buildMovedRange(dayIso, minuteOffset, durationMinutes);
-    this.queueMove(source, moved.start, moved.end, source.spaceId, 'Move event to new time');
+    this.queueMoveFromVerticalDrop(this.draggingEvent, dayIso, this.draggingEvent.spaceId, dragEvent, container, 'Move event to new time');
     this.draggingEvent = null;
   }
 
-  onDropDayTrack(dragEvent: DragEvent, track: HTMLElement): void {
+  onDropWeekSpaceColumn(dayIso: string, targetSpaceId: string, dragEvent: DragEvent, container: HTMLElement): void {
+    if (!this.draggingEvent) {
+      return;
+    }
+
+    dragEvent.preventDefault();
+    this.queueMoveFromVerticalDrop(this.draggingEvent, dayIso, targetSpaceId, dragEvent, container, 'Move event to new time/space');
+    this.draggingEvent = null;
+  }
+
+  onDropDaySpaceColumn(dayIso: string, targetSpaceId: string, dragEvent: DragEvent, container: HTMLElement): void {
+    if (!this.draggingEvent) {
+      return;
+    }
+
+    dragEvent.preventDefault();
+    this.queueMoveFromVerticalDrop(this.draggingEvent, dayIso, targetSpaceId, dragEvent, container, 'Move event to new time/space');
+    this.draggingEvent = null;
+  }
+
+  onDropRoomTrack(row: RoomTimelineRow, dragEvent: DragEvent, track: HTMLElement): void {
     if (!this.draggingEvent) {
       return;
     }
 
     dragEvent.preventDefault();
 
-    const source = this.draggingEvent;
     const rect = track.getBoundingClientRect();
-    const x = Math.max(0, Math.min(rect.width, dragEvent.clientX - rect.left));
-    const minuteOffset = this.roundMinutesToStep((x / rect.width) * this.totalWindowMinutes);
+    if (rect.width <= 0) {
+      this.draggingEvent = null;
+      return;
+    }
 
+    const x = Math.max(0, Math.min(rect.width, dragEvent.clientX - rect.left));
+    const normalized = x / rect.width;
+    const timelineColumn = Math.min(
+      EventDiaryComponent.timelineColumnCount - 1,
+      Math.max(0, Math.floor(normalized * EventDiaryComponent.timelineColumnCount))
+    );
+
+    const firstMondayDay = this.getFirstMondayDay(this.monthCursor);
+    const dayOfMonth = firstMondayDay + (timelineColumn - EventDiaryComponent.timelineColumnAnchor);
+    const year = this.monthCursor.getUTCFullYear();
+    const month = this.monthCursor.getUTCMonth();
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+    if (dayOfMonth < 1 || dayOfMonth > daysInMonth) {
+      this.draggingEvent = null;
+      return;
+    }
+
+    const source = this.draggingEvent;
+    const targetDayIso = this.toIsoDateUtc(new Date(Date.UTC(year, month, dayOfMonth)));
     const originalStart = new Date(source.startUtc);
     const originalEnd = new Date(source.endUtc);
     const durationMinutes = Math.max(this.minuteStep, (originalEnd.getTime() - originalStart.getTime()) / 60000);
 
-    const moved = this.buildMovedRange(this.toIsoDateUtc(this.monthCursor), minuteOffset, durationMinutes);
-    this.queueMove(source, moved.start, moved.end, source.spaceId, 'Move event to new time');
+    const moved = this.buildMovedRange(
+      targetDayIso,
+      this.utcMinutesOfDay(originalStart) - this.dayStartHour * 60,
+      durationMinutes
+    );
+
+    this.queueMove(source, moved.start, moved.end, row.spaceId, 'Move event in room timeline');
     this.draggingEvent = null;
   }
 
@@ -510,7 +902,7 @@ export class EventDiaryComponent implements OnInit {
       return;
     }
 
-    const sizePixels = view === 'week' ? container.getBoundingClientRect().height : container.getBoundingClientRect().width;
+    const sizePixels = container.getBoundingClientRect().height;
     if (sizePixels <= 0) {
       return;
     }
@@ -520,7 +912,7 @@ export class EventDiaryComponent implements OnInit {
       edge,
       view,
       dayIso: event.startUtc.slice(0, 10),
-      originClient: view === 'week' ? mouseEvent.clientY : mouseEvent.clientX,
+      originClient: mouseEvent.clientY,
       pixelsPerMinute: sizePixels / this.totalWindowMinutes,
       originalStartUtc: new Date(event.startUtc),
       originalEndUtc: new Date(event.endUtc)
@@ -533,19 +925,54 @@ export class EventDiaryComponent implements OnInit {
     };
   }
 
+  private queueMoveFromVerticalDrop(
+    source: DiaryEventDto,
+    dayIso: string,
+    targetSpaceId: string,
+    dragEvent: DragEvent,
+    container: HTMLElement,
+    actionLabel: string
+  ): void {
+    const rect = container.getBoundingClientRect();
+    if (rect.height <= 0) {
+      return;
+    }
+
+    const y = Math.max(0, Math.min(rect.height, dragEvent.clientY - rect.top));
+    const minuteOffset = this.roundMinutesToStep((y / rect.height) * this.totalWindowMinutes);
+
+    const originalStart = new Date(source.startUtc);
+    const originalEnd = new Date(source.endUtc);
+    const durationMinutes = Math.max(this.minuteStep, (originalEnd.getTime() - originalStart.getTime()) / 60000);
+
+    const moved = this.buildMovedRange(dayIso, minuteOffset, durationMinutes);
+    this.queueMove(source, moved.start, moved.end, targetSpaceId, actionLabel);
+  }
+
   confirmPendingMove(): void {
     if (!this.pendingMove || this.applyingMove) {
       return;
     }
 
+    if (this.pendingMove.checkingConflicts) {
+      return;
+    }
+
+    if (this.pendingMove.conflicts.length > 0) {
+      this.loadError = 'Resolve the scheduling conflict before confirming this move.';
+      return;
+    }
+
+    const move = this.pendingMove;
+
     this.applyingMove = true;
 
     const moveRequest: MoveDiaryEventRequest = {
-      eventType: this.pendingMove.event.eventType,
-      eventId: this.pendingMove.event.id,
-      targetSpaceId: this.pendingMove.targetSpaceId,
-      newStartUtc: this.pendingMove.newStartUtc,
-      newEndUtc: this.pendingMove.newEndUtc
+      eventType: move.event.eventType,
+      eventId: move.event.id,
+      targetSpaceId: move.targetSpaceId,
+      newStartUtc: move.newStartUtc,
+      newEndUtc: move.newEndUtc
     };
 
     this.api
@@ -553,16 +980,17 @@ export class EventDiaryComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
+          this.startMoveUndoWindow(move);
           this.applyingMove = false;
           this.pendingMove = null;
           this.loadDiary();
         },
         error: (error) => {
           this.applyingMove = false;
-          const conflictMessage =
-            typeof error?.error?.message === 'string'
-              ? error.error.message
-              : 'Unable to move the event because it conflicts with another booking.';
+          const conflictMessage = this.getMoveErrorMessage(
+            error,
+            'Unable to move the event because it conflicts with another booking.'
+          );
           this.loadError = conflictMessage;
           this.pendingMove = null;
         }
@@ -570,6 +998,7 @@ export class EventDiaryComponent implements OnInit {
   }
 
   cancelPendingMove(): void {
+    this.pendingConflictCheckSequence += 1;
     this.pendingMove = null;
   }
 
@@ -585,12 +1014,20 @@ export class EventDiaryComponent implements OnInit {
   }
 
   eventDisplayLabel(event: DiaryEventDto): string {
+    if (event.isSubEvent && event.subEventName) {
+      return event.subEventName;
+    }
+
     const visualType = event.visualType || this.resolveLegacyVisualType(event);
     if (visualType === 'provisional') {
       return `${event.label} (P)`;
     }
 
     return event.label;
+  }
+
+  parentEventLabel(event: DiaryEventDto): string {
+    return event.parentEventLabel || event.label;
   }
 
   formatHour(hour: number): string {
@@ -612,15 +1049,15 @@ export class EventDiaryComponent implements OnInit {
     return Math.max(value, 2);
   }
 
-  dayEventLeftPercent(event: DiaryEventDto): number {
+  dayEventTopPercent(event: DiaryEventDto): number {
     const range = this.getRenderMinutesRange(event);
     return (range.startMinutes / this.totalWindowMinutes) * 100;
   }
 
-  dayEventWidthPercent(event: DiaryEventDto): number {
+  dayEventHeightPercent(event: DiaryEventDto): number {
     const range = this.getRenderMinutesRange(event);
     const value = (range.durationMinutes / this.totalWindowMinutes) * 100;
-    return Math.max(value, 3);
+    return Math.max(value, 2);
   }
 
   private queueMove(
@@ -648,15 +1085,149 @@ export class EventDiaryComponent implements OnInit {
       return;
     }
 
-    this.pendingMove = {
+    const pendingMove: PendingMove = {
       event,
       oldStartUtc: oldStart.toISOString(),
       oldEndUtc: oldEnd.toISOString(),
       newStartUtc: normalizedStart.toISOString(),
       newEndUtc: normalizedEnd.toISOString(),
       targetSpaceId,
-      actionLabel
+      actionLabel,
+      checkingConflicts: true,
+      conflicts: [],
+      conflictCheckMessage: 'Checking availability...'
     };
+
+    this.pendingMove = pendingMove;
+    this.checkPendingMoveConflicts(pendingMove);
+  }
+
+  undoLastMove(): void {
+    if (!this.moveUndoState || this.moveUndoState.undoing) {
+      return;
+    }
+
+    const undoState = this.moveUndoState;
+    this.moveUndoState = { ...undoState, undoing: true };
+
+    const rollbackRequest: MoveDiaryEventRequest = {
+      eventType: undoState.eventType,
+      eventId: undoState.eventId,
+      targetSpaceId: undoState.oldSpaceId,
+      newStartUtc: undoState.oldStartUtc,
+      newEndUtc: undoState.oldEndUtc
+    };
+
+    this.api
+      .moveDiaryEvent(rollbackRequest)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.clearMoveUndoState();
+          this.loadDiary();
+        },
+        error: (error) => {
+          const errorMessage = this.getMoveErrorMessage(
+            error,
+            'Unable to undo the move because the original slot is no longer available.'
+          );
+          this.loadError = errorMessage;
+          this.moveUndoState = { ...undoState, undoing: false };
+        }
+      });
+  }
+
+  private checkPendingMoveConflicts(pendingMove: PendingMove): void {
+    const sequence = ++this.pendingConflictCheckSequence;
+
+    const request: MoveDiaryEventRequest = {
+      eventType: pendingMove.event.eventType,
+      eventId: pendingMove.event.id,
+      targetSpaceId: pendingMove.targetSpaceId,
+      newStartUtc: pendingMove.newStartUtc,
+      newEndUtc: pendingMove.newEndUtc
+    };
+
+    this.api
+      .checkDiaryMoveConflicts(request)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          if (!this.pendingMove || sequence !== this.pendingConflictCheckSequence) {
+            return;
+          }
+
+          this.pendingMove = {
+            ...this.pendingMove,
+            checkingConflicts: false,
+            conflicts: response.conflicts ?? [],
+            conflictCheckMessage: response.message || (response.hasConflicts ? 'Move would create a conflict.' : 'No conflicts detected.')
+          };
+        },
+        error: () => {
+          if (!this.pendingMove || sequence !== this.pendingConflictCheckSequence) {
+            return;
+          }
+
+          this.pendingMove = {
+            ...this.pendingMove,
+            checkingConflicts: false,
+            conflicts: [],
+            conflictCheckMessage: 'Conflict check unavailable. You can still try to move the event.'
+          };
+        }
+      });
+  }
+
+  private startMoveUndoWindow(move: PendingMove): void {
+    this.clearMoveUndoState();
+
+    this.moveUndoState = {
+      eventType: move.event.eventType,
+      eventId: move.event.id,
+      eventLabel: move.event.label,
+      oldStartUtc: move.oldStartUtc,
+      oldEndUtc: move.oldEndUtc,
+      oldSpaceId: move.event.spaceId,
+      newStartUtc: move.newStartUtc,
+      newEndUtc: move.newEndUtc,
+      newSpaceId: move.targetSpaceId,
+      expiresAt: Date.now() + 10000,
+      secondsRemaining: 10,
+      undoing: false
+    };
+
+    this.moveUndoIntervalHandle = window.setInterval(() => this.tickMoveUndoTimer(), 250);
+  }
+
+  private tickMoveUndoTimer(): void {
+    if (!this.moveUndoState) {
+      this.clearMoveUndoState();
+      return;
+    }
+
+    const remainingMs = this.moveUndoState.expiresAt - Date.now();
+    if (remainingMs <= 0) {
+      this.clearMoveUndoState();
+      return;
+    }
+
+    const secondsRemaining = Math.max(1, Math.ceil(remainingMs / 1000));
+    if (secondsRemaining !== this.moveUndoState.secondsRemaining) {
+      this.moveUndoState = {
+        ...this.moveUndoState,
+        secondsRemaining
+      };
+    }
+  }
+
+  private clearMoveUndoState(): void {
+    if (this.moveUndoIntervalHandle) {
+      clearInterval(this.moveUndoIntervalHandle);
+      this.moveUndoIntervalHandle = null;
+    }
+
+    this.moveUndoState = null;
   }
 
   private buildMonthCells(events: DiaryEventDto[]): MonthCell[] {
@@ -688,8 +1259,8 @@ export class EventDiaryComponent implements OnInit {
     return cells;
   }
 
-  private loadTimelineDiary(venueId: string): void {
-    const monthStarts = Array.from({ length: 6 }, (_, offset) => {
+  private loadTimelineDiary(venueId: string, requestSequence: number): void {
+    const monthStarts = Array.from({ length: EventDiaryComponent.timelineMonthWindow }, (_, offset) => {
       const month = new Date(this.monthCursor);
       month.setUTCMonth(month.getUTCMonth() + offset);
       return this.getUtcMonthStart(month);
@@ -699,7 +1270,8 @@ export class EventDiaryComponent implements OnInit {
       this.api.getDiary({
         venueId,
         view: 'month',
-        startDate: this.toIsoDateUtc(start)
+        startDate: this.toIsoDateUtc(start),
+        spaceIds: this.getEffectiveSpaceFilterIds()
       })
     );
 
@@ -707,18 +1279,278 @@ export class EventDiaryComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (responses) => {
+          if (requestSequence !== this.diaryLoadSequence) {
+            return;
+          }
+
           const allEvents = responses.flatMap((response) => response.events);
           this.diary = responses[0] ?? null;
           this.cells = [];
           this.weekColumns = [];
+          this.weekSpaceRows = [];
           this.dayEvents = [];
+          this.daySpaceColumns = [];
           this.timelineRows = this.buildTimelineRows(monthStarts, allEvents);
+          this.roomTimelineRows = this.buildRoomTimelineRows(this.monthCursor, allEvents, this.diary?.spaces ?? []);
           this.loadError = '';
+          const timelineFrom = this.toIsoDateUtc(monthStarts[0]);
+          const lastTimelineMonth = monthStarts[monthStarts.length - 1];
+          const timelineTo = this.toIsoDateUtc(new Date(Date.UTC(
+            lastTimelineMonth.getUTCFullYear(),
+            lastTimelineMonth.getUTCMonth() + 1,
+            0
+          )));
+          this.loadDemandHeatmapForWindow(venueId, timelineFrom, timelineTo);
         },
         error: () => {
+          if (requestSequence !== this.diaryLoadSequence) {
+            return;
+          }
+
           this.loadError = 'Unable to load diary data right now.';
         }
       });
+  }
+
+  private getMoveErrorMessage(error: unknown, fallback: string): string {
+    const payload = error as { error?: unknown; message?: string } | null | undefined;
+    const apiError = payload?.error;
+
+    if (typeof apiError === 'string' && apiError.trim().length > 0) {
+      return apiError;
+    }
+
+    if (
+      apiError &&
+      typeof apiError === 'object' &&
+      'message' in apiError &&
+      typeof (apiError as { message?: string }).message === 'string' &&
+      (apiError as { message?: string }).message!.trim().length > 0
+    ) {
+      return (apiError as { message: string }).message;
+    }
+
+    if (typeof payload?.message === 'string' && payload.message.trim().length > 0) {
+      return payload.message;
+    }
+
+    return fallback;
+  }
+
+  private loadSpaceFilterOptions(venueId: string): void {
+    this.loadingSpaceFilters = true;
+    this.spaceFilterError = '';
+
+    forkJoin({
+      spaces: this.api.getVenueSpaces(venueId),
+      combinations: this.api.getSpaceCombinations(venueId)
+    })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: ({ spaces, combinations }) => {
+          const options = this.buildSpaceFilterOptions(spaces, combinations);
+          this.spaceFilterOptions = options;
+          this.activeSpaceFilterMap = new Map(options.map((option) => [option.key, option]));
+          this.selectedSpaceFilterKeys = this.selectedSpaceFilterKeys.filter((key) => this.activeSpaceFilterMap.has(key));
+          this.loadingSpaceFilters = false;
+          this.syncQueryParams();
+          this.loadDiary();
+        },
+        error: () => {
+          this.loadingSpaceFilters = false;
+          this.spaceFilterOptions = [];
+          this.activeSpaceFilterMap.clear();
+          this.spaceFilterError = 'Unable to load spaces right now.';
+        }
+      });
+  }
+
+  private loadDemandHeatmapForWindow(venueId: string, fromDate: string, toDate: string): void {
+    if (!this.showDemandHeatmap) {
+      this.demandHeatmapByDate.clear();
+      this.demandHeatmapMessage = '';
+      this.demandHeatmapLoading = false;
+      return;
+    }
+
+    const sequence = ++this.demandHeatmapRequestSequence;
+    this.demandHeatmapLoading = true;
+    this.demandHeatmapMessage = '';
+
+    this.api
+      .getAiDemandHeatmap({
+        venueId,
+        fromDate,
+        toDate,
+        spaceIds: this.getEffectiveSpaceFilterIds()
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          if (sequence !== this.demandHeatmapRequestSequence) {
+            return;
+          }
+
+          this.demandHeatmapByDate = new Map((response.cells ?? []).map((cell) => [cell.date, cell]));
+          this.demandHeatmapLoading = false;
+          this.demandHeatmapMessage =
+            response.hasSufficientData
+              ? ''
+              : response.message || 'Gathering data...';
+        },
+        error: () => {
+          if (sequence !== this.demandHeatmapRequestSequence) {
+            return;
+          }
+
+          this.demandHeatmapByDate.clear();
+          this.demandHeatmapLoading = false;
+          this.demandHeatmapMessage = 'Heatmap data is temporarily unavailable.';
+        }
+      });
+  }
+
+  private buildSpaceFilterOptions(spaces: SpaceSummaryDto[], combinations: SpaceCombinationDto[]): SpaceFilterOption[] {
+    const activeSpaces = spaces
+      .filter((space) => space.isActive)
+      .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
+
+    const activeSpaceIdSet = new Set(activeSpaces.map((space) => space.id));
+    const options: SpaceFilterOption[] = [];
+
+    options.push(
+      ...activeSpaces.map((space) => ({
+        key: `space:${space.id}`,
+        label: space.name,
+        type: 'space' as const,
+        spaceIds: [space.id]
+      }))
+    );
+
+    const combinationOptions: SpaceFilterOption[] = [];
+    for (const combination of combinations) {
+      const constituentSpaceIds = Array.from(new Set(combination.spaceIds.filter((spaceId) => activeSpaceIdSet.has(spaceId))));
+      if (constituentSpaceIds.length === 0) {
+        continue;
+      }
+
+      combinationOptions.push({
+        key: `combo:${combination.id}`,
+        label: combination.name,
+        type: 'combination',
+        spaceIds: constituentSpaceIds
+      });
+    }
+
+    combinationOptions.sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }));
+
+    options.push(...combinationOptions);
+    return options;
+  }
+
+  private getEffectiveSpaceFilterIds(): string[] | undefined {
+    if (this.selectedSpaceFilterKeys.length === 0) {
+      return undefined;
+    }
+
+    const ids = new Set<string>();
+    for (const key of this.selectedSpaceFilterKeys) {
+      const option = this.activeSpaceFilterMap.get(key);
+      if (!option) {
+        continue;
+      }
+
+      option.spaceIds.forEach((spaceId) => ids.add(spaceId));
+    }
+
+    return ids.size > 0 ? Array.from(ids) : undefined;
+  }
+
+  private restoreStateFromQueryParams(): void {
+    const query = this.route.snapshot.queryParamMap;
+
+    const viewParam = (query.get('view') || '').trim().toLowerCase();
+    if (viewParam === 'month' || viewParam === 'timeline' || viewParam === 'week' || viewParam === 'day') {
+      this.selectedView = viewParam;
+    }
+
+    const startDateParam = query.get('startDate');
+    if (startDateParam) {
+      const parsed = this.parseIsoDateParam(startDateParam);
+      if (parsed) {
+        if (this.selectedView === 'week') {
+          this.monthCursor = this.getWeekStart(parsed);
+        } else if (this.selectedView === 'day') {
+          this.monthCursor = this.getUtcDayStart(parsed);
+        } else {
+          this.monthCursor = this.getUtcMonthStart(parsed);
+        }
+      }
+    }
+
+    const spacesParam = query.get('spaces');
+    this.selectedSpaceFilterKeys = this.parseSpaceFilterQuery(spacesParam);
+
+    const timelineLayoutParam = (query.get('timelineLayout') || '').trim().toLowerCase();
+    if (timelineLayoutParam === 'room') {
+      this.timelineLayout = 'room';
+    }
+
+    const weekLayoutParam = (query.get('weekLayout') || '').trim().toLowerCase();
+    if (weekLayoutParam === 'space') {
+      this.weekLayout = 'space';
+    }
+
+    const heatmapParam = (query.get('heatmap') || '').trim();
+    if (heatmapParam === '1' || heatmapParam.toLowerCase() === 'true') {
+      this.showDemandHeatmap = true;
+    }
+  }
+
+  private parseSpaceFilterQuery(value: string | null): string[] {
+    if (!value) {
+      return [];
+    }
+
+    return value
+      .split(',')
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0)
+      .map((token) => {
+        const normalized = decodeURIComponent(token);
+        if (normalized.startsWith('space:') || normalized.startsWith('combo:')) {
+          return normalized;
+        }
+
+        return `space:${normalized}`;
+      });
+  }
+
+  private parseIsoDateParam(value: string): Date | null {
+    const trimmed = value.trim();
+    const pattern = /^\d{4}-\d{2}-\d{2}$/;
+    if (!pattern.test(trimmed)) {
+      return null;
+    }
+
+    const parsed = this.parseIsoDateUtc(trimmed);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  private syncQueryParams(): void {
+    this.router.navigate([], {
+      relativeTo: this.route,
+      replaceUrl: true,
+      queryParams: {
+        view: this.selectedView,
+        startDate: this.toIsoDateUtc(this.monthCursor),
+        spaces: this.selectedSpaceFilterKeys.length > 0 ? this.selectedSpaceFilterKeys.join(',') : null,
+        timelineLayout: this.timelineLayout === 'room' ? 'room' : null,
+        weekLayout: this.weekLayout === 'space' ? 'space' : null,
+        heatmap: this.showDemandHeatmap ? '1' : null
+      },
+      queryParamsHandling: 'merge'
+    });
   }
 
   private buildTimelineRows(monthStarts: Date[], events: DiaryEventDto[]): TimelineMonthRow[] {
@@ -769,6 +1601,78 @@ export class EventDiaryComponent implements OnInit {
     });
   }
 
+  private buildRoomTimelineRows(monthStartCursor: Date, events: DiaryEventDto[], spaces: DiaryResponse['spaces']): RoomTimelineRow[] {
+    const monthStart = this.getUtcMonthStart(monthStartCursor);
+    const daysInMonth = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0)).getUTCDate();
+    const firstMondayDay = this.getFirstMondayDay(monthStart);
+    const monthEndExclusive = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 1));
+
+    const rows = spaces
+      .filter((space) => space.spaceId !== this.unassignedSpaceId)
+      .map((space) => {
+        const rowEvents = events
+          .filter((event) => event.spaceId === space.spaceId)
+          .filter((event) => {
+            const eventStart = new Date(event.startUtc);
+            const eventEnd = new Date(event.endUtc);
+            return eventStart < monthEndExclusive && eventEnd > monthStart;
+          })
+          .sort((left, right) => new Date(left.startUtc).getTime() - new Date(right.startUtc).getTime());
+
+        const laneEndColumns: number[] = [];
+        const bars: RoomTimelineBar[] = [];
+
+        for (const event of rowEvents) {
+          const eventStart = new Date(event.startUtc);
+          const eventEnd = new Date(event.endUtc);
+
+          const startDay = eventStart < monthStart ? 1 : eventStart.getUTCDate();
+          const effectiveEnd = eventEnd <= monthStart ? monthStart : eventEnd;
+          const rawEndDay = eventEnd >= monthEndExclusive ? daysInMonth : effectiveEnd.getUTCDate();
+          const endDay = Math.max(startDay, rawEndDay);
+
+          const startColumn = EventDiaryComponent.timelineColumnAnchor + (startDay - firstMondayDay);
+          const endColumn = EventDiaryComponent.timelineColumnAnchor + (endDay - firstMondayDay);
+
+          if (endColumn < 0 || startColumn > EventDiaryComponent.timelineColumnCount - 1) {
+            continue;
+          }
+
+          const clippedStartColumn = Math.max(0, startColumn);
+          const clippedEndColumn = Math.min(EventDiaryComponent.timelineColumnCount - 1, endColumn);
+          if (clippedEndColumn < clippedStartColumn) {
+            continue;
+          }
+
+          let lane = laneEndColumns.findIndex((lastEndColumn) => clippedStartColumn > lastEndColumn);
+          if (lane < 0) {
+            lane = laneEndColumns.length;
+            laneEndColumns.push(clippedEndColumn);
+          } else {
+            laneEndColumns[lane] = clippedEndColumn;
+          }
+
+          bars.push({
+            key: `${event.id}-${space.spaceId}-${event.startUtc}`,
+            event,
+            lane,
+            leftPercent: (clippedStartColumn / EventDiaryComponent.timelineColumnCount) * 100,
+            widthPercent: Math.max(((clippedEndColumn - clippedStartColumn + 1) / EventDiaryComponent.timelineColumnCount) * 100, 2)
+          });
+        }
+
+        return {
+          spaceId: space.spaceId,
+          spaceName: space.spaceName,
+          laneCount: Math.max(laneEndColumns.length, 1),
+          bars
+        };
+      })
+      .sort((left, right) => left.spaceName.localeCompare(right.spaceName, undefined, { sensitivity: 'base' }));
+
+    return rows;
+  }
+
   private buildWeekColumns(windowStart: Date, events: DiaryEventDto[]): WeekDayColumn[] {
     const eventsByDate = this.groupEventsByDate(events);
 
@@ -786,10 +1690,101 @@ export class EventDiaryComponent implements OnInit {
     });
   }
 
+  private buildWeekSpaceRows(weekColumns: WeekDayColumn[], spaces: DiaryResponse['spaces']): WeekSpaceRow[] {
+    const sortedSpaces = this.getSortedDiarySpaces(spaces, weekColumns.flatMap((day) => day.events));
+
+    return sortedSpaces.map((space) => ({
+      spaceId: space.spaceId,
+      spaceName: space.spaceName,
+      days: weekColumns.map((day) => ({
+        isoDate: day.isoDate,
+        events: day.events.filter((event) => event.spaceId === space.spaceId)
+      }))
+    }));
+  }
+
   private buildDayEvents(events: DiaryEventDto[]): DiaryEventDto[] {
     return events
       .slice()
       .sort((left, right) => new Date(left.startUtc).getTime() - new Date(right.startUtc).getTime());
+  }
+
+  private buildDaySpaceColumns(events: DiaryEventDto[], spaces: DiaryResponse['spaces']): DaySpaceColumn[] {
+    const sortedSpaces = this.getSortedDiarySpaces(spaces, events);
+
+    return sortedSpaces.map((space) => ({
+      spaceId: space.spaceId,
+      spaceName: space.spaceName,
+      events: events
+        .filter((event) => event.spaceId === space.spaceId)
+        .sort((left, right) => new Date(left.startUtc).getTime() - new Date(right.startUtc).getTime())
+    }));
+  }
+
+  private getSortedDiarySpaces(
+    spaces: DiaryResponse['spaces'],
+    events: DiaryEventDto[]
+  ): Array<{ spaceId: string; spaceName: string }> {
+    const mappedSpaces = spaces.map((space) => ({ spaceId: space.spaceId, spaceName: space.spaceName }));
+    const known = new Set(mappedSpaces.map((space) => space.spaceId));
+
+    for (const event of events) {
+      if (known.has(event.spaceId)) {
+        continue;
+      }
+
+      known.add(event.spaceId);
+      mappedSpaces.push({
+        spaceId: event.spaceId,
+        spaceName: event.spaceName || 'Unassigned'
+      });
+    }
+
+    return mappedSpaces
+      .filter((space) => space.spaceId !== this.unassignedSpaceId || events.some((event) => event.spaceId === this.unassignedSpaceId))
+      .sort((left, right) => left.spaceName.localeCompare(right.spaceName, undefined, { sensitivity: 'base' }));
+  }
+
+  private groupEventsForCell(events: DiaryEventDto[]): DiaryEventGroup[] {
+    const sorted = events
+      .slice()
+      .sort((left, right) => new Date(left.startUtc).getTime() - new Date(right.startUtc).getTime());
+
+    const groups: DiaryEventGroup[] = [];
+    const nestedLookup = new Map<string, DiaryEventGroup>();
+
+    for (const event of sorted) {
+      if (event.eventType === 'Enquiry' && event.isSubEvent && event.enquiryId) {
+        const nestedKey = `nested-${event.enquiryId}`;
+        let group = nestedLookup.get(nestedKey);
+        if (!group) {
+          group = {
+            key: nestedKey,
+            nested: true,
+            parentLabel: this.parentEventLabel(event),
+            events: []
+          };
+          nestedLookup.set(nestedKey, group);
+          groups.push(group);
+        }
+
+        group.events.push(event);
+        continue;
+      }
+
+      groups.push({
+        key: `single-${this.eventKey(event)}`,
+        nested: false,
+        parentLabel: this.eventDisplayLabel(event),
+        events: [event]
+      });
+    }
+
+    groups.forEach((group) => {
+      group.events.sort((left, right) => new Date(left.startUtc).getTime() - new Date(right.startUtc).getTime());
+    });
+
+    return groups;
   }
 
   private groupEventsByDate(events: DiaryEventDto[]): Map<string, DiaryEventDto[]> {

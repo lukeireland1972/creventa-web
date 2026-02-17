@@ -33,6 +33,66 @@
           }
         </div>
 
+        <button
+          type="button"
+          class="heatmap-toggle"
+          [class.active]="showDemandHeatmap"
+          (click)="toggleDemandHeatmap()">
+          Demand Heatmap
+        </button>
+
+        <div class="space-filter" (click)="$event.stopPropagation()">
+          <label>Filter by Space</label>
+          <button type="button" class="space-filter-trigger" (click)="toggleSpaceFilterDropdown()">
+            <span>{{ spaceFilterSummaryLabel }}</span>
+            <small>{{ selectedSpaceFilterKeys.length === 0 ? 'All Spaces' : selectedSpaceFilterKeys.length + ' selected' }}</small>
+          </button>
+
+          @if (showSpaceFilterDropdown) {
+            <div class="space-filter-menu">
+              <label class="space-filter-item all-spaces">
+                <input
+                  type="checkbox"
+                  [checked]="selectedSpaceFilterKeys.length === 0"
+                  (change)="selectAllSpaces()" />
+                <span>All Spaces</span>
+              </label>
+
+              @if (spaceFilterOptions.length === 0) {
+                <p class="space-filter-empty">{{ loadingSpaceFilters ? 'Loading spaces...' : (spaceFilterError || 'No spaces available.') }}</p>
+              } @else {
+                <div class="space-filter-group">
+                  <h4>Spaces</h4>
+                  @for (option of standaloneSpaceFilterOptions; track option.key) {
+                    <label class="space-filter-item">
+                      <input
+                        type="checkbox"
+                        [checked]="isSpaceFilterSelected(option.key)"
+                        (change)="toggleSpaceFilter(option.key)" />
+                      <span>{{ option.label }}</span>
+                    </label>
+                  }
+                </div>
+
+                @if (combinationSpaceFilterOptions.length > 0) {
+                  <div class="space-filter-group">
+                    <h4>Space Combinations</h4>
+                    @for (option of combinationSpaceFilterOptions; track option.key) {
+                      <label class="space-filter-item">
+                        <input
+                          type="checkbox"
+                          [checked]="isSpaceFilterSelected(option.key)"
+                          (change)="toggleSpaceFilter(option.key)" />
+                        <span>{{ option.label }}</span>
+                      </label>
+                    }
+                  </div>
+                }
+              }
+            </div>
+          }
+        </div>
+
         <div class="legend-inline">
           <span><i class="legend-chip status-confirmed"></i> Confirmed</span>
           <span><i class="legend-chip status-provisional"></i> Provisional</span>
@@ -41,9 +101,22 @@
           <span><i class="legend-chip status-appointment"></i> Appointment</span>
           <span><i class="legend-chip status-venue-event"></i> Venue Event</span>
         </div>
+        <div class="export-actions">
+          <button type="button" class="export-btn" [disabled]="!!exportState" (click)="exportDiary('xlsx')">
+            {{ isExporting('xlsx') ? 'Exporting Excel...' : 'Download Excel' }}
+          </button>
+          <button type="button" class="export-btn" [disabled]="!!exportState" (click)="exportDiary('pdf')">
+            {{ isExporting('pdf') ? 'Exporting PDF...' : 'Download PDF' }}
+          </button>
+        </div>
+        <button type="button" class="add-task-btn" (click)="openAddTask()">+ Add Task</button>
         <button type="button" class="add-event-btn" (click)="addEvent()">+ Add Event</button>
       </div>
     </div>
+
+    @if (showDemandHeatmap && demandHeatmapMessage) {
+      <p class="heatmap-message">{{ demandHeatmapMessage }}</p>
+    }
 
     @if (selectedView === 'month') {
       <div class="calendar-grid-wrap">
@@ -58,47 +131,89 @@
             <article
               class="day-cell"
               [class.outside-month]="!cell.inCurrentMonth"
+              [ngClass]="heatmapClassForDate(cell.key)"
               (dragover)="$event.preventDefault()"
               (drop)="onDropDay(cell.key)">
               <header class="day-header">
                 <span class="day-number">{{ cell.dayNumber }}</span>
-                @if (cell.events.length > 0) {
-                  <span class="event-count">{{ cell.events.length }} {{ cell.events.length === 1 ? 'event' : 'events' }}</span>
+                @if (eventGroupCount(cell) > 0) {
+                  <span class="event-count">{{ eventGroupCount(cell) }} {{ eventGroupCount(cell) === 1 ? 'event' : 'events' }}</span>
+                }
+                @if (showDemandHeatmap && heatmapLabelForDate(cell.key); as label) {
+                  <span class="heatmap-chip">{{ label }}</span>
                 }
               </header>
 
               <div class="event-list">
-                @for (event of eventsForDisplay(cell); track eventKey(event)) {
-                  <div class="event-chip-wrap">
-                    <button
-                      type="button"
-                      class="event-chip"
-                      [ngClass]="eventChipClass(event)"
-                      [attr.draggable]="canDrag(event)"
-                      (dragstart)="onDragStart(event, $event)"
-                      (dragend)="onDragEnd()"
-                      (mouseenter)="hoveredEventKey = eventKey(event)"
-                      (mouseleave)="hoveredEventKey = null"
-                      (click)="openDetails(event)">
-                      {{ eventDisplayLabel(event) }}
-                    </button>
+                @for (group of eventGroupsForDisplay(cell); track group.key) {
+                  @if (group.nested) {
+                    <article class="event-group nested">
+                      <button type="button" class="event-group-parent" (click)="openDetails(group.events[0])">
+                        {{ group.parentLabel }}
+                      </button>
+                      <div class="event-group-children">
+                        @for (event of group.events; track eventKey(event)) {
+                          <div class="event-chip-wrap">
+                            <button
+                              type="button"
+                              class="event-chip sub-event-child"
+                              [ngClass]="eventChipClass(event)"
+                              [attr.draggable]="canDrag(event)"
+                              (dragstart)="onDragStart(event, $event)"
+                              (dragend)="onDragEnd()"
+                              (mouseenter)="hoveredEventKey = eventKey(event)"
+                              (mouseleave)="hoveredEventKey = null"
+                              (click)="openDetails(event)">
+                              {{ eventDisplayLabel(event) }}
+                            </button>
 
-                    @if (hoveredEventKey === eventKey(event)) {
-                      <div class="event-popover">
-                        <strong>{{ event.label }}</strong>
-                        <span><b>Covers:</b> {{ event.covers || '-' }}</span>
-                        <span><b>Timing:</b> {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
-                        <span><b>Event style:</b> {{ event.eventStyle || '-' }}</span>
-                        <span><b>Status:</b> {{ event.statusKey || event.enquiryStatus || event.eventType }}</span>
-                        <span><b>Space:</b> {{ event.spaceName }}</span>
-                        <span><b>Event manager:</b> {{ event.eventManagerName || '-' }}</span>
+                            @if (hoveredEventKey === eventKey(event)) {
+                              <div class="event-popover">
+                                <strong>{{ parentEventLabel(event) }} · {{ eventDisplayLabel(event) }}</strong>
+                                <span><b>Covers:</b> {{ event.covers || '-' }}</span>
+                                <span><b>Timing:</b> {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
+                                <span><b>Event style:</b> {{ event.eventStyle || '-' }}</span>
+                                <span><b>Status:</b> {{ event.statusKey || event.enquiryStatus || event.eventType }}</span>
+                                <span><b>Space:</b> {{ event.spaceName }}</span>
+                                <span><b>Event manager:</b> {{ event.eventManagerName || '-' }}</span>
+                              </div>
+                            }
+                          </div>
+                        }
                       </div>
-                    }
-                  </div>
+                    </article>
+                  } @else {
+                    <div class="event-chip-wrap">
+                      <button
+                        type="button"
+                        class="event-chip"
+                        [ngClass]="eventChipClass(group.events[0])"
+                        [attr.draggable]="canDrag(group.events[0])"
+                        (dragstart)="onDragStart(group.events[0], $event)"
+                        (dragend)="onDragEnd()"
+                        (mouseenter)="hoveredEventKey = eventKey(group.events[0])"
+                        (mouseleave)="hoveredEventKey = null"
+                        (click)="openDetails(group.events[0])">
+                        {{ eventDisplayLabel(group.events[0]) }}
+                      </button>
+
+                      @if (hoveredEventKey === eventKey(group.events[0])) {
+                        <div class="event-popover">
+                          <strong>{{ group.events[0].label }}</strong>
+                          <span><b>Covers:</b> {{ group.events[0].covers || '-' }}</span>
+                          <span><b>Timing:</b> {{ group.events[0].startUtc | date: 'HH:mm' }}-{{ group.events[0].endUtc | date: 'HH:mm' }}</span>
+                          <span><b>Event style:</b> {{ group.events[0].eventStyle || '-' }}</span>
+                          <span><b>Status:</b> {{ group.events[0].statusKey || group.events[0].enquiryStatus || group.events[0].eventType }}</span>
+                          <span><b>Space:</b> {{ group.events[0].spaceName }}</span>
+                          <span><b>Event manager:</b> {{ group.events[0].eventManagerName || '-' }}</span>
+                        </div>
+                      }
+                    </div>
+                  }
                 }
 
-                @if (hiddenEventsCount(cell) > 0) {
-                  <span class="more-events">+{{ hiddenEventsCount(cell) }} more</span>
+                @if (hiddenEventGroupsCount(cell) > 0) {
+                  <span class="more-events">+{{ hiddenEventGroupsCount(cell) }} more</span>
                 }
               </div>
             </article>
@@ -108,108 +223,329 @@
     } @else if (selectedView === 'timeline') {
       <div class="timeline-wrap">
         <p class="timeline-hint">
-          Timeline view: six months shown down the left, aligned by the first Monday of each month.
+          Timeline view: next 12 months shown down the left, aligned by the first Monday of each month.
         </p>
 
-        <div class="timeline-table">
-          <div class="timeline-header-row">
-            <div class="timeline-month-col">Month</div>
-            @for (label of timelineHeaderLabels; track $index) {
-              <div class="timeline-day-col">{{ label }}</div>
-            }
-          </div>
+        <div class="timeline-layout-toggle">
+          <button type="button" [class.active]="timelineLayout === 'standard'" (click)="setTimelineLayout('standard')">Standard</button>
+          <button type="button" [class.active]="timelineLayout === 'room'" (click)="setTimelineLayout('room')">Room View</button>
+        </div>
 
-          @for (row of timelineRows; track row.monthKey) {
-            <div class="timeline-row">
-              <div class="timeline-month-cell">
-                <strong>{{ row.monthLabel }}</strong>
-                <small>1st Mon: {{ row.firstMondayDay }}</small>
-              </div>
-
-              @for (cell of row.cells; track cell.key) {
-                <article
-                  class="timeline-cell"
-                  [class.empty]="!cell.isoDate"
-                  [class.first-monday]="cell.isFirstMonday"
-                  (dragover)="$event.preventDefault()"
-                  (drop)="onDropTimelineCell(cell)">
-                  @if (cell.dayNumber) {
-                    <span class="timeline-day-number">{{ cell.dayNumber }}</span>
-                  }
-
-                  <div class="timeline-events">
-                    @for (event of eventsForDisplay(cell); track eventKey(event)) {
-                      <div class="event-chip-wrap">
-                        <button
-                          type="button"
-                          class="event-chip"
-                          [ngClass]="eventChipClass(event)"
-                          [attr.draggable]="canDrag(event)"
-                          (dragstart)="onDragStart(event, $event)"
-                          (dragend)="onDragEnd()"
-                          (mouseenter)="hoveredEventKey = eventKey(event)"
-                          (mouseleave)="hoveredEventKey = null"
-                          (click)="openDetails(event)">
-                          {{ eventDisplayLabel(event) }}
-                        </button>
-
-                        @if (hoveredEventKey === eventKey(event)) {
-                          <div class="event-popover">
-                            <strong>{{ event.label }}</strong>
-                            <span><b>Covers:</b> {{ event.covers || '-' }}</span>
-                            <span><b>Timing:</b> {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
-                            <span><b>Event style:</b> {{ event.eventStyle || '-' }}</span>
-                            <span><b>Status:</b> {{ event.statusKey || event.enquiryStatus || event.eventType }}</span>
-                            <span><b>Space:</b> {{ event.spaceName }}</span>
-                            <span><b>Event manager:</b> {{ event.eventManagerName || '-' }}</span>
-                          </div>
-                        }
-                      </div>
-                    }
-
-                    @if (hiddenEventsCount(cell) > 0) {
-                      <span class="more-events">+{{ hiddenEventsCount(cell) }} more</span>
-                    }
-                  </div>
-                </article>
+        @if (timelineLayout === 'standard') {
+          <div class="timeline-table">
+            <div class="timeline-header-row">
+              <div class="timeline-month-col">Month</div>
+              @for (label of timelineHeaderLabels; track $index) {
+                <div class="timeline-day-col">{{ label }}</div>
               }
             </div>
-          }
-        </div>
+
+            @for (row of timelineRows; track row.monthKey) {
+              <div class="timeline-row">
+                <div class="timeline-month-cell">
+                  <strong>{{ row.monthLabel }}</strong>
+                  <small>1st Mon: {{ row.firstMondayDay }}</small>
+                </div>
+
+                @for (cell of row.cells; track cell.key) {
+                  <article
+                    class="timeline-cell"
+                    [class.empty]="!cell.isoDate"
+                    [class.first-monday]="cell.isFirstMonday"
+                    [ngClass]="heatmapClassForDate(cell.isoDate)"
+                    (dragover)="$event.preventDefault()"
+                    (drop)="onDropTimelineCell(cell)">
+                    @if (cell.dayNumber) {
+                      <span class="timeline-day-number">{{ cell.dayNumber }}</span>
+                      @if (showDemandHeatmap && heatmapLabelForDate(cell.isoDate); as label) {
+                        <span class="heatmap-chip">{{ label }}</span>
+                      }
+                    }
+
+                    <div class="timeline-events">
+                      @for (group of eventGroupsForDisplay(cell); track group.key) {
+                        @if (group.nested) {
+                          <article class="event-group nested compact">
+                            <button type="button" class="event-group-parent" (click)="openDetails(group.events[0])">
+                              {{ group.parentLabel }}
+                            </button>
+                            <div class="event-group-children">
+                              @for (event of group.events; track eventKey(event)) {
+                                <div class="event-chip-wrap">
+                                  <button
+                                    type="button"
+                                    class="event-chip sub-event-child"
+                                    [ngClass]="eventChipClass(event)"
+                                    [attr.draggable]="canDrag(event)"
+                                    (dragstart)="onDragStart(event, $event)"
+                                    (dragend)="onDragEnd()"
+                                    (mouseenter)="hoveredEventKey = eventKey(event)"
+                                    (mouseleave)="hoveredEventKey = null"
+                                    (click)="openDetails(event)">
+                                    {{ eventDisplayLabel(event) }}
+                                  </button>
+
+                                  @if (hoveredEventKey === eventKey(event)) {
+                                    <div class="event-popover">
+                                      <strong>{{ parentEventLabel(event) }} · {{ eventDisplayLabel(event) }}</strong>
+                                      <span><b>Covers:</b> {{ event.covers || '-' }}</span>
+                                      <span><b>Timing:</b> {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
+                                      <span><b>Event style:</b> {{ event.eventStyle || '-' }}</span>
+                                      <span><b>Status:</b> {{ event.statusKey || event.enquiryStatus || event.eventType }}</span>
+                                      <span><b>Space:</b> {{ event.spaceName }}</span>
+                                      <span><b>Event manager:</b> {{ event.eventManagerName || '-' }}</span>
+                                    </div>
+                                  }
+                                </div>
+                              }
+                            </div>
+                          </article>
+                        } @else {
+                          <div class="event-chip-wrap">
+                            <button
+                              type="button"
+                              class="event-chip"
+                              [ngClass]="eventChipClass(group.events[0])"
+                              [attr.draggable]="canDrag(group.events[0])"
+                              (dragstart)="onDragStart(group.events[0], $event)"
+                              (dragend)="onDragEnd()"
+                              (mouseenter)="hoveredEventKey = eventKey(group.events[0])"
+                              (mouseleave)="hoveredEventKey = null"
+                              (click)="openDetails(group.events[0])">
+                              {{ eventDisplayLabel(group.events[0]) }}
+                            </button>
+
+                            @if (hoveredEventKey === eventKey(group.events[0])) {
+                              <div class="event-popover">
+                                <strong>{{ group.events[0].label }}</strong>
+                                <span><b>Covers:</b> {{ group.events[0].covers || '-' }}</span>
+                                <span><b>Timing:</b> {{ group.events[0].startUtc | date: 'HH:mm' }}-{{ group.events[0].endUtc | date: 'HH:mm' }}</span>
+                                <span><b>Event style:</b> {{ group.events[0].eventStyle || '-' }}</span>
+                                <span><b>Status:</b> {{ group.events[0].statusKey || group.events[0].enquiryStatus || group.events[0].eventType }}</span>
+                                <span><b>Space:</b> {{ group.events[0].spaceName }}</span>
+                                <span><b>Event manager:</b> {{ group.events[0].eventManagerName || '-' }}</span>
+                              </div>
+                            }
+                          </div>
+                        }
+                      }
+
+                      @if (hiddenEventGroupsCount(cell) > 0) {
+                        <span class="more-events">+{{ hiddenEventGroupsCount(cell) }} more</span>
+                      }
+                    </div>
+                  </article>
+                }
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="room-timeline-table">
+            <div class="room-timeline-header">
+              <div class="room-space-col">Space</div>
+              @for (label of timelineHeaderLabels; track $index) {
+                <div class="room-day-col">{{ label }}</div>
+              }
+            </div>
+
+            @for (row of roomTimelineRows; track row.spaceId) {
+              <div class="room-timeline-row">
+                <div class="room-space-cell">{{ row.spaceName }}</div>
+                <div
+                  class="room-track"
+                  [style.height.px]="roomRowHeightPx(row)"
+                  #roomTrack
+                  (dragover)="$event.preventDefault()"
+                  (drop)="onDropRoomTrack(row, $event, roomTrack)">
+                  @for (label of timelineHeaderLabels; track $index) {
+                    <span class="room-grid-line" [style.left.%]="timelineColumnPercent($index)"></span>
+                  }
+                  @for (bar of row.bars; track bar.key) {
+                    <button
+                      type="button"
+                      class="room-event-bar"
+                      [ngClass]="eventChipClass(bar.event)"
+                      [style.left.%]="bar.leftPercent"
+                      [style.width.%]="bar.widthPercent"
+                      [style.top.px]="roomBarTopPx(bar)"
+                      [attr.draggable]="canDrag(bar.event)"
+                      (dragstart)="onDragStart(bar.event, $event)"
+                      (dragend)="onDragEnd()"
+                      (click)="openDetails(bar.event)">
+                      {{ eventDisplayLabel(bar.event) }}
+                    </button>
+                  }
+                  @if (row.bars.length === 0) {
+                    <small class="room-empty">No events</small>
+                  }
+                </div>
+              </div>
+            }
+
+            @if (roomTimelineRows.length === 0) {
+              <p class="room-empty-state">No spaces available for the selected filter.</p>
+            }
+          </div>
+        }
       </div>
     } @else if (selectedView === 'week') {
       <div class="week-wrap">
-        <div class="week-grid">
-          <aside class="week-time-axis">
-            <div class="week-time-head">Time</div>
+        <div class="week-layout-toggle">
+          <button type="button" [class.active]="weekLayout === 'merged'" (click)="setWeekLayout('merged')">Merged</button>
+          <button type="button" [class.active]="weekLayout === 'space'" (click)="setWeekLayout('space')">Space Lanes</button>
+        </div>
+
+        @if (weekLayout === 'merged') {
+          <div class="week-grid">
+            <aside class="week-time-axis">
+              <div class="week-time-head">Time</div>
+              @for (hour of timeAxisHours; track hour) {
+                <div class="week-time-cell">{{ formatHour(hour) }}</div>
+              }
+            </aside>
+
+            <div class="week-days-grid">
+              @for (day of weekColumns; track day.isoDate) {
+                <section class="week-day-column">
+                  <header class="week-day-header">
+                    <strong>{{ day.label }}</strong>
+                    <span>{{ day.subLabel }}</span>
+                  </header>
+
+                  <div
+                    class="week-day-body"
+                    [ngClass]="heatmapClassForDate(day.isoDate)"
+                    #weekColumn
+                    (dragover)="$event.preventDefault()"
+                    (drop)="onDropWeekColumn(day.isoDate, $event, weekColumn)">
+                    @for (hour of timeSlotHours; track hour) {
+                      <div class="week-hour-line" [style.top.%]="timeMarkerPercent(hour)"></div>
+                    }
+
+                    @for (event of day.events; track eventKey(event)) {
+                      <article
+                        class="week-event-block"
+                        [ngClass]="eventChipClass(event)"
+                        [style.top.%]="weekEventTopPercent(event)"
+                        [style.height.%]="weekEventHeightPercent(event)"
+                        [attr.draggable]="canDrag(event)"
+                        (dragstart)="onDragStart(event, $event)"
+                        (dragend)="onDragEnd()"
+                        (click)="openDetails(event)">
+                        <button
+                          type="button"
+                          class="resize-handle top"
+                          (mousedown)="onResizeHandleMouseDown($event, event, 'start', 'week', weekColumn)">
+                        </button>
+                        <div class="week-event-content">
+                          <strong>{{ eventDisplayLabel(event) }}</strong>
+                          <span>{{ event.startUtc | date: 'HH:mm' }} - {{ event.endUtc | date: 'HH:mm' }}</span>
+                          <span>{{ event.spaceName }}</span>
+                        </div>
+                        <button
+                          type="button"
+                          class="resize-handle bottom"
+                          (mousedown)="onResizeHandleMouseDown($event, event, 'end', 'week', weekColumn)">
+                        </button>
+                      </article>
+                    }
+                  </div>
+                </section>
+              }
+            </div>
+          </div>
+        } @else {
+          <div class="week-space-grid">
+            <div class="week-space-header-row">
+              <div class="week-space-header-cell">Space</div>
+              @for (day of weekColumns; track day.isoDate) {
+                <div class="week-space-header-cell day">
+                  <strong>{{ day.label }}</strong>
+                  <span>{{ day.subLabel }}</span>
+                </div>
+              }
+            </div>
+
+            @for (row of weekSpaceRows; track row.spaceId) {
+              <div class="week-space-row">
+                <div class="week-space-label">{{ row.spaceName }}</div>
+                @for (dayLane of row.days; track dayLane.isoDate) {
+                  <div
+                    class="week-space-day-body"
+                    [ngClass]="heatmapClassForDate(dayLane.isoDate)"
+                    #weekSpaceColumn
+                    (dragover)="$event.preventDefault()"
+                    (drop)="onDropWeekSpaceColumn(dayLane.isoDate, row.spaceId, $event, weekSpaceColumn)">
+                    @for (hour of timeSlotHours; track hour) {
+                      <div class="week-hour-line" [style.top.%]="timeMarkerPercent(hour)"></div>
+                    }
+
+                    @for (event of dayLane.events; track eventKey(event)) {
+                      <article
+                        class="week-event-block compact"
+                        [ngClass]="eventChipClass(event)"
+                        [style.top.%]="weekEventTopPercent(event)"
+                        [style.height.%]="weekEventHeightPercent(event)"
+                        [attr.draggable]="canDrag(event)"
+                        (dragstart)="onDragStart(event, $event)"
+                        (dragend)="onDragEnd()"
+                        (click)="openDetails(event)">
+                        <button
+                          type="button"
+                          class="resize-handle top"
+                          (mousedown)="onResizeHandleMouseDown($event, event, 'start', 'week', weekSpaceColumn)">
+                        </button>
+                        <div class="week-event-content">
+                          <strong>{{ eventDisplayLabel(event) }}</strong>
+                          <span>{{ event.startUtc | date: 'HH:mm' }} - {{ event.endUtc | date: 'HH:mm' }}</span>
+                        </div>
+                        <button
+                          type="button"
+                          class="resize-handle bottom"
+                          (mousedown)="onResizeHandleMouseDown($event, event, 'end', 'week', weekSpaceColumn)">
+                        </button>
+                      </article>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
+    } @else {
+      <div class="day-wrap">
+        <div class="day-grid">
+          <aside class="day-time-axis">
+            <div class="day-time-head">Time</div>
             @for (hour of timeAxisHours; track hour) {
-              <div class="week-time-cell">{{ formatHour(hour) }}</div>
+              <div class="day-time-cell">{{ formatHour(hour) }}</div>
             }
           </aside>
 
-          <div class="week-days-grid">
-            @for (day of weekColumns; track day.isoDate) {
-              <section class="week-day-column">
-                <header class="week-day-header">
-                  <strong>{{ day.label }}</strong>
-                  <span>{{ day.subLabel }}</span>
+          <div class="day-space-columns">
+            @for (column of daySpaceColumns; track column.spaceId) {
+              <section class="day-space-column">
+                <header class="day-space-header">
+                  <strong>{{ column.spaceName }}</strong>
                 </header>
 
                 <div
-                  class="week-day-body"
-                  #weekColumn
+                  class="day-space-body"
+                  [ngClass]="heatmapClassForDate(currentDayIso)"
+                  #daySpaceColumn
                   (dragover)="$event.preventDefault()"
-                  (drop)="onDropWeekColumn(day.isoDate, $event, weekColumn)">
+                  (drop)="onDropDaySpaceColumn(currentDayIso, column.spaceId, $event, daySpaceColumn)">
                   @for (hour of timeSlotHours; track hour) {
                     <div class="week-hour-line" [style.top.%]="timeMarkerPercent(hour)"></div>
                   }
 
-                  @for (event of day.events; track eventKey(event)) {
+                  @for (event of column.events; track eventKey(event)) {
                     <article
-                      class="week-event-block"
+                      class="day-event-bar"
                       [ngClass]="eventChipClass(event)"
-                      [style.top.%]="weekEventTopPercent(event)"
-                      [style.height.%]="weekEventHeightPercent(event)"
+                      [style.top.%]="dayEventTopPercent(event)"
+                      [style.height.%]="dayEventHeightPercent(event)"
                       [attr.draggable]="canDrag(event)"
                       (dragstart)="onDragStart(event, $event)"
                       (dragend)="onDragEnd()"
@@ -217,84 +553,33 @@
                       <button
                         type="button"
                         class="resize-handle top"
-                        (mousedown)="onResizeHandleMouseDown($event, event, 'start', 'week', weekColumn)">
+                        (mousedown)="onResizeHandleMouseDown($event, event, 'start', 'day', daySpaceColumn)">
                       </button>
-                      <div class="week-event-content">
+                      <div class="day-bar-content">
                         <strong>{{ eventDisplayLabel(event) }}</strong>
                         <span>{{ event.startUtc | date: 'HH:mm' }} - {{ event.endUtc | date: 'HH:mm' }}</span>
-                        <span>{{ event.spaceName }}</span>
+                        <span>{{ event.eventStyle || 'No style' }}</span>
                       </div>
                       <button
                         type="button"
                         class="resize-handle bottom"
-                        (mousedown)="onResizeHandleMouseDown($event, event, 'end', 'week', weekColumn)">
+                        (mousedown)="onResizeHandleMouseDown($event, event, 'end', 'day', daySpaceColumn)">
                       </button>
                     </article>
                   }
                 </div>
               </section>
             }
+
+            @if (daySpaceColumns.length === 0) {
+              <p class="day-empty">No spaces available for the selected filter.</p>
+            }
           </div>
         </div>
-      </div>
-    } @else {
-      <div class="day-wrap">
-        <div class="day-time-header">
-          @for (hour of timeAxisHours; track hour) {
-            <span>{{ formatHour(hour) }}</span>
-          }
-        </div>
 
-        <div class="day-events-stack">
-          @for (event of dayEvents; track eventKey(event)) {
-            <article class="day-event-row">
-              <div class="day-event-details">
-                <strong>{{ eventDisplayLabel(event) }}</strong>
-                <span>{{ event.spaceName }} · {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
-                <span>{{ event.eventStyle || 'No style' }} · {{ event.covers || '-' }} covers</span>
-              </div>
-
-              <div
-                class="day-event-track"
-                #dayTrack
-                (dragover)="$event.preventDefault()"
-                (drop)="onDropDayTrack($event, dayTrack)">
-                @for (slot of timeSlotHours; track slot) {
-                  <div class="day-slot-marker" [style.left.%]="timeMarkerPercent(slot)"></div>
-                }
-
-                <div
-                  class="day-event-bar"
-                  [ngClass]="eventChipClass(event)"
-                  [style.left.%]="dayEventLeftPercent(event)"
-                  [style.width.%]="dayEventWidthPercent(event)"
-                  [attr.draggable]="canDrag(event)"
-                  (dragstart)="onDragStart(event, $event)"
-                  (dragend)="onDragEnd()"
-                  (click)="openDetails(event)">
-                  <button
-                    type="button"
-                    class="resize-handle left"
-                    (mousedown)="onResizeHandleMouseDown($event, event, 'start', 'day', dayTrack)">
-                  </button>
-                  <div class="day-bar-content">
-                    <strong>{{ eventDisplayLabel(event) }}</strong>
-                    <span>{{ event.startUtc | date: 'HH:mm' }} - {{ event.endUtc | date: 'HH:mm' }}</span>
-                  </div>
-                  <button
-                    type="button"
-                    class="resize-handle right"
-                    (mousedown)="onResizeHandleMouseDown($event, event, 'end', 'day', dayTrack)">
-                  </button>
-                </div>
-              </div>
-            </article>
-          }
-
-          @if (dayEvents.length === 0) {
-            <p class="day-empty">No events scheduled for this day.</p>
-          }
-        </div>
+        @if (dayEvents.length === 0) {
+          <p class="day-empty">No events scheduled for this day.</p>
+        }
       </div>
     }
   </section>
@@ -319,12 +604,49 @@
         </div>
       </div>
 
+      @if (move.checkingConflicts) {
+        <p class="move-conflict-info checking">Checking for space conflicts...</p>
+      } @else if (move.conflicts.length === 0) {
+        <p class="move-conflict-info clear">{{ move.conflictCheckMessage }}</p>
+      } @else {
+        <div class="move-conflicts">
+          <p>{{ move.conflictCheckMessage }}</p>
+          <ul>
+            @for (conflict of move.conflicts; track conflict.id) {
+              <li>
+                <strong>{{ conflict.label }}</strong>
+                <span>{{ conflict.startUtc | date: 'dd/MM HH:mm' }} - {{ conflict.endUtc | date: 'dd/MM HH:mm' }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
       <div class="move-modal-actions">
         <button type="button" class="ghost" (click)="cancelPendingMove()" [disabled]="applyingMove">Cancel</button>
-        <button type="button" class="primary" (click)="confirmPendingMove()" [disabled]="applyingMove">
+        <button type="button" class="primary" (click)="confirmPendingMove()" [disabled]="!canConfirmPendingMove">
           {{ applyingMove ? 'Applying...' : 'Confirm Move' }}
         </button>
       </div>
     </section>
   }
+
+  @if (moveUndoState; as undo) {
+    <section class="move-undo-toast" role="status" aria-live="polite">
+      <div class="move-undo-text">
+        <strong>{{ undo.eventLabel }} moved.</strong>
+        <span>Undo available for {{ undo.secondsRemaining }}s.</span>
+      </div>
+      <button type="button" class="undo-btn" (click)="undoLastMove()" [disabled]="undo.undoing">
+        {{ undo.undoing ? 'Undoing...' : 'Undo' }}
+      </button>
+    </section>
+  }
 </section>
+
+<app-task-quick-create-modal
+  [isOpen]="showAddTaskModal"
+  [defaultEnquiryId]="null"
+  (close)="closeAddTaskModal()"
+  (created)="onTaskQuickCreated($event)">
+</app-task-quick-create-modal>

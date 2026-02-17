@@ -1,0 +1,284 @@
+.documents-panel {
+  display: grid;
+  gap: 1rem;
+}
+
+.documents-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.documents-filters {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.documents-filters label,
+.upload-controls label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.82rem;
+  color: #66758f;
+  font-weight: 600;
+}
+
+.documents-filters input,
+.documents-filters select,
+.upload-controls select {
+  border-radius: 10px;
+  border: 1px solid #d8deea;
+  background: #f8faff;
+  color: #1d2942;
+  padding: 0.45rem 0.7rem;
+  min-width: 180px;
+}
+
+.documents-toolbar-actions {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: end;
+}
+
+.documents-toolbar-actions small {
+  font-size: 0.72rem;
+  color: #7b89a6;
+}
+
+.upload-zone {
+  border: 1px dashed #c6d2e9;
+  border-radius: 14px;
+  background: #fbfdff;
+  padding: 0.9rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.upload-zone.drag-active {
+  border-color: #2f6cf6;
+  background: #eff5ff;
+}
+
+.upload-zone p {
+  margin: 0;
+  color: #3e4f72;
+}
+
+.upload-zone .hint {
+  color: #7f8faf;
+  font-size: 0.78rem;
+}
+
+.upload-zone .pending-file {
+  color: #1f4fa6;
+  font-weight: 600;
+}
+
+.upload-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.upload-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+button {
+  border: 1px solid #d6dceb;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #233150;
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 0.4rem 0.7rem;
+  cursor: pointer;
+}
+
+button.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+button.ghost {
+  background: #f7f9fd;
+}
+
+button.danger {
+  color: #b4232f;
+  border-color: #f2c4ca;
+  background: #fff6f7;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.progress-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.progress-track {
+  width: 220px;
+  height: 8px;
+  background: #e7ecf6;
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.progress-track span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #2563eb, #1d4ed8);
+  width: 0;
+}
+
+.documents-table,
+.version-history table {
+  width: 100%;
+  border-collapse: collapse;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #dbe2f1;
+}
+
+.documents-table thead,
+.version-history thead {
+  background: #eef2f8;
+}
+
+.documents-table th,
+.documents-table td,
+.version-history th,
+.version-history td {
+  text-align: left;
+  font-size: 0.8rem;
+  padding: 0.55rem 0.6rem;
+  border-top: 1px solid #edf1f8;
+  vertical-align: top;
+}
+
+.documents-table th,
+.version-history th {
+  border-top: none;
+  color: #61708d;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.72rem;
+}
+
+.documents-table .non-latest {
+  opacity: 0.85;
+}
+
+.document-category {
+  display: inline-flex;
+  padding: 0.12rem 0.5rem;
+  border-radius: 999px;
+  background: #ebf2ff;
+  color: #2557c5;
+  font-weight: 700;
+  font-size: 0.7rem;
+}
+
+.latest-badge {
+  display: inline-flex;
+  margin-left: 0.45rem;
+  border-radius: 999px;
+  background: #d9f7df;
+  color: #187a36;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.version-history {
+  background: #f9fbff;
+  border: 1px solid #dce4f3;
+  border-radius: 12px;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.version-history header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.version-history h3 {
+  margin: 0;
+  color: #223152;
+  font-size: 0.95rem;
+}
+
+.info,
+.success,
+.error,
+.empty {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 10px;
+  font-size: 0.84rem;
+}
+
+.info {
+  background: #f1f5ff;
+  border: 1px solid #ccd8fa;
+  color: #38508f;
+}
+
+.success {
+  background: #ecfdf1;
+  border: 1px solid #b7ebc5;
+  color: #1f6f3e;
+}
+
+.error {
+  background: #fff2f4;
+  border: 1px solid #f2bcc3;
+  color: #9d2635;
+}
+
+.empty {
+  background: #f5f8ff;
+  border: 1px solid #e1e8f7;
+  color: #61708d;
+}
+
+@media (max-width: 900px) {
+  .documents-toolbar,
+  .documents-filters,
+  .upload-controls {
+    display: grid;
+  }
+
+  .documents-toolbar-actions {
+    justify-items: start;
+  }
+
+  .progress-track {
+    width: 100%;
+  }
+}

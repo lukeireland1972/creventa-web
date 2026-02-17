@@ -1,0 +1,352 @@
+<section class="tasks-tab">
+  <header class="tasks-header">
+    <div class="progress-block">
+      <p>{{ summary().completed }} of {{ summary().total }} tasks completed</p>
+      <div class="progress-track">
+        <div class="progress-fill" [style.width.%]="summary().percent"></div>
+      </div>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="ghost" (click)="openTemplateModal()">Apply Template</button>
+      <button type="button" class="ghost" (click)="showFullForm.set(!showFullForm())">
+        {{ showFullForm() ? 'Hide Full Form' : 'Expand Add Form' }}
+      </button>
+    </div>
+  </header>
+
+  @if (errorMessage()) {
+    <p class="error">{{ errorMessage() }}</p>
+  }
+
+  <section class="filter-row">
+    <form [formGroup]="filtersForm" class="filters">
+      <label>
+        Status
+        <select formControlName="status">
+          <option value="">All</option>
+          <option value="todo">Todo</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+        </select>
+      </label>
+
+      <label>
+        Assignee
+        <select formControlName="assigneeScope">
+          <option value="all">All</option>
+          <option value="mine">Mine</option>
+          <option value="unassigned">Unassigned</option>
+          <option value="specific">Specific user</option>
+        </select>
+      </label>
+
+      @if (filtersForm.get('assigneeScope')?.value === 'specific') {
+        <label>
+          User
+          <select formControlName="assigneeId">
+            <option value="">Select user</option>
+            @for (user of users; track user.id) {
+              <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <label>
+        Category
+        <select formControlName="category">
+          <option value="">All</option>
+          <option value="follow_up">Follow Up</option>
+          <option value="site_visit">Site Visit</option>
+          <option value="document">Document</option>
+          <option value="payment">Payment</option>
+          <option value="catering">Catering</option>
+          <option value="setup">Setup</option>
+          <option value="communication">Communication</option>
+          <option value="internal">Internal</option>
+          <option value="other">Other</option>
+        </select>
+      </label>
+
+      <label>
+        Priority
+        <select formControlName="priority">
+          <option value="">All</option>
+          <option value="urgent">Urgent</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </label>
+
+      <label>
+        Sort
+        <select formControlName="sort">
+          <option value="manual">Manual</option>
+          <option value="due_date">Due Date</option>
+          <option value="priority">Priority</option>
+          <option value="status">Status</option>
+          <option value="category">Category</option>
+        </select>
+      </label>
+
+      <label>
+        Group
+        <select formControlName="groupBy">
+          <option value="none">None</option>
+          <option value="category">Category</option>
+          <option value="assignee">Assignee</option>
+          <option value="priority">Priority</option>
+        </select>
+      </label>
+    </form>
+  </section>
+
+  @if (loading()) {
+    <article class="state">Loading tasks...</article>
+  } @else {
+    <section class="task-list">
+      @for (group of groupedTasks(); track group.key) {
+        <article class="group">
+          @if (groupedTasks().length > 1) {
+            <header class="group-header">
+              <h4>{{ group.label }}</h4>
+              <small>{{ group.items.length }} tasks</small>
+            </header>
+          }
+          <ul>
+            @for (task of group.items; track task.id) {
+              <li
+                [attr.data-priority]="task.priority"
+                [class.completed]="task.status === 'completed'"
+                [class.overdue]="task.isOverdue"
+                (focusin)="trackTaskFocus(task.id)"
+                [attr.draggable]="(filtersForm.get('sort')?.value || 'manual') === 'manual' ? 'true' : 'false'"
+                (dragstart)="onDragStart(task)"
+                (dragover)="$event.preventDefault()"
+                (drop)="onDrop(task)">
+                <div class="drag-handle" title="Drag to reorder">&#9776;</div>
+                <input
+                  type="checkbox"
+                  [checked]="task.status === 'completed'"
+                  (change)="toggleComplete(task, $any($event.target).checked)" />
+                <div class="task-main">
+                  <button type="button" class="task-title" (click)="openDetail(task)">
+                    <span>{{ task.title }}</span>
+                  </button>
+                  <div class="task-meta">
+                    <span class="assignee">
+                      <span class="avatar">{{ assigneeInitials(task) }}</span>
+                      <span>{{ task.assigneeName || 'Unassigned' }}</span>
+                    </span>
+                    <span class="due" [attr.data-state]="dueState(task)">
+                      @if (task.dueDate) {
+                        {{ task.dueDate | date: 'dd/MM/yyyy' }}
+                      } @else {
+                        No due date
+                      }
+                      @if (task.dueTime) {
+                        · {{ task.dueTime }}
+                      }
+                    </span>
+                    <span class="category">{{ task.category }}</span>
+                  </div>
+                </div>
+                <div class="task-actions">
+                  <button type="button" (click)="openDetail(task)">Edit</button>
+                  <button type="button" (click)="cancelTask(task)">Cancel</button>
+                  <button type="button" class="danger" (click)="deleteTask(task)">Delete</button>
+                </div>
+              </li>
+            }
+          </ul>
+        </article>
+      }
+      @if (tasks().length === 0) {
+        <article class="state">No tasks configured for this enquiry.</article>
+      }
+    </section>
+  }
+
+  <section class="quick-add">
+    <form class="quick-add-row" [formGroup]="quickAddForm" (submit)="quickAdd()">
+      <input
+        #quickAddInput
+        type="text"
+        formControlName="title"
+        placeholder="+ Add Task"
+        (keydown)="onQuickAddKeydown($event)" />
+      <button type="submit">Add</button>
+    </form>
+
+    @if (showFullForm()) {
+      <form class="full-form" [formGroup]="taskForm" (ngSubmit)="createFromForm()">
+        <label>
+          Title
+          <input type="text" formControlName="title" />
+        </label>
+        <label>
+          Description
+          <textarea rows="2" formControlName="description"></textarea>
+        </label>
+        <label>
+          Status
+          <select formControlName="status">
+            <option value="todo">Todo</option>
+            <option value="in_progress">In Progress</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </label>
+        <label>
+          Priority
+          <select formControlName="priority">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="urgent">Urgent</option>
+          </select>
+        </label>
+        <label>
+          Category
+          <select formControlName="category">
+            <option value="follow_up">Follow Up</option>
+            <option value="site_visit">Site Visit</option>
+            <option value="document">Document</option>
+            <option value="payment">Payment</option>
+            <option value="catering">Catering</option>
+            <option value="setup">Setup</option>
+            <option value="communication">Communication</option>
+            <option value="internal">Internal</option>
+            <option value="other">Other</option>
+          </select>
+        </label>
+        <label>
+          Assignee
+          <select formControlName="assigneeId">
+            <option value="">Unassigned</option>
+            @for (user of users; track user.id) {
+              <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Due Date
+          <input type="date" formControlName="dueDate" />
+        </label>
+        <label>
+          Due Time
+          <input type="time" formControlName="dueTime" />
+        </label>
+        <label class="full-width">
+          Notes
+          <textarea rows="2" formControlName="notes"></textarea>
+        </label>
+        <div class="full-width actions">
+          <button type="submit" class="primary">Create Task</button>
+        </div>
+      </form>
+    }
+  </section>
+</section>
+
+@if (selectedTask(); as activeTask) {
+  <aside class="task-detail">
+    <header>
+      <h3>Task Detail</h3>
+      <button type="button" (click)="closeDetail()">&#10005;</button>
+    </header>
+    <form [formGroup]="taskForm" (ngSubmit)="saveDetail()">
+      <label>
+        Title
+        <input type="text" formControlName="title" />
+      </label>
+      <label>
+        Description
+        <textarea rows="3" formControlName="description"></textarea>
+      </label>
+      <label>
+        Status
+        <select formControlName="status">
+          <option value="todo">Todo</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </label>
+      <label>
+        Priority
+        <select formControlName="priority">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select>
+      </label>
+      <label>
+        Assignee
+        <select formControlName="assigneeId">
+          <option value="">Unassigned</option>
+          @for (user of users; track user.id) {
+            <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Due Date
+        <input type="date" formControlName="dueDate" />
+      </label>
+      <label>
+        Due Time
+        <input type="time" formControlName="dueTime" />
+      </label>
+      <label class="full-width">
+        Notes
+        <textarea rows="3" formControlName="notes"></textarea>
+      </label>
+      <div class="full-width detail-actions">
+        <button type="submit" class="primary">Save</button>
+        @if (activeTask.status !== 'completed') {
+          <button type="button" (click)="toggleComplete(activeTask, true)">Mark Complete</button>
+        } @else {
+          <button type="button" (click)="toggleComplete(activeTask, false)">Reopen</button>
+        }
+      </div>
+      <section class="mini-log">
+        <p>Created by {{ activeTask.createdByName || 'System' }} on {{ activeTask.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</p>
+        @if (activeTask.completedAtUtc) {
+          <p>Completed by {{ activeTask.completedByName || 'System' }} on {{ activeTask.completedAtUtc | date: 'dd/MM/yyyy HH:mm' }}</p>
+        }
+      </section>
+    </form>
+  </aside>
+}
+
+@if (showTemplateModal()) {
+  <div class="modal-backdrop" (click)="closeTemplateModal()"></div>
+  <section class="template-modal">
+    <header>
+      <h3>Apply Task Template</h3>
+      <button type="button" (click)="closeTemplateModal()">&#10005;</button>
+    </header>
+    <label class="force-option">
+      <input type="checkbox" [checked]="templateForceApply()" (change)="templateForceApply.set($any($event.target).checked)" />
+      <span>Apply again even if already used</span>
+    </label>
+    <ul>
+      @for (template of templates(); track template.id) {
+        <li>
+          <div>
+            <strong>{{ template.name }}</strong>
+            <small>{{ template.tasks.length }} tasks · Auto apply: {{ template.autoApplyOnStatus }}</small>
+            <p>{{ templateTaskTitles(template) }}</p>
+          </div>
+          <button type="button" (click)="applyTemplate(template)">Apply</button>
+        </li>
+      }
+      @if (templates().length === 0) {
+        <li class="empty">No templates available for this event type.</li>
+      }
+    </ul>
+  </section>
+}

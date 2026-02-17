@@ -1,11 +1,15 @@
 import { Component, DestroyRef, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe, UpperCasePipe } from '@angular/common';
 import { Router } from '@angular/router';
+import { Chart as ChartJs, registerables } from 'chart.js';
 
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { catchError, forkJoin, of } from 'rxjs';
 import {
   ActivityFeedItemDto,
+  ActionRequiredEnquiryDto,
+  AiPricingInsightDto,
+  AiPricingInsightsResponse,
   ApiService,
   DashboardKpiCardDto,
   DashboardResponse,
@@ -14,6 +18,7 @@ import {
   UpcomingEventDto
 } from '../../services/api.service';
 import { AuthService } from '../../services/auth.service';
+import { QuickTaskCreatedEvent, TaskQuickCreateModalComponent } from '../../ui/task-quick-create-modal/task-quick-create-modal.component';
 
 interface SourceSlice {
   source: string;
@@ -29,23 +34,13 @@ interface RevenueTrendPoint {
   currencyCode: string;
 }
 
-interface ChartJsInstance {
-  destroy(): void;
-}
+type ChartJsInstance = ChartJs;
 
-interface ChartJsConstructor {
-  new (context: CanvasRenderingContext2D, config: Record<string, unknown>): ChartJsInstance;
-}
-
-declare global {
-  interface Window {
-    Chart?: ChartJsConstructor;
-  }
-}
+ChartJs.register(...registerables);
 
 @Component({
     selector: 'app-dashboard',
-    imports: [DatePipe, DecimalPipe],
+    imports: [DatePipe, DecimalPipe, UpperCasePipe, TaskQuickCreateModalComponent],
     templateUrl: './dashboard.component.html',
     styleUrl: './dashboard.component.scss'
 })
@@ -66,8 +61,12 @@ export class DashboardComponent implements OnInit {
 
   sourceSlices: SourceSlice[] = [];
   revenueTrend: RevenueTrendPoint[] = [];
+  aiPricingInsights: AiPricingInsightDto[] = [];
+  aiPricingMessage = '';
+  aiPricingLoading = false;
   chartLibraryUnavailable = false;
   chartErrorMessage = '';
+  showAddTaskModal = false;
 
   @ViewChild('sourceChartCanvas')
   private sourceChartCanvas?: ElementRef<HTMLCanvasElement>;
@@ -97,6 +96,9 @@ export class DashboardComponent implements OnInit {
       if (!venueId) {
         this.currentVenueId = null;
         this.data = null;
+        this.aiPricingInsights = [];
+        this.aiPricingMessage = '';
+        this.aiPricingLoading = false;
         this.errorMessage = 'Select a venue to view dashboard metrics.';
         return;
       }
@@ -132,6 +134,16 @@ export class DashboardComponent implements OnInit {
     });
   }
 
+  openPricingInsight(insight: AiPricingInsightDto): void {
+    this.router.navigate(['/enquiries'], {
+      queryParams: {
+        statusTab: 'all',
+        eventType: insight.eventType,
+        eventDate: insight.eventDate
+      }
+    });
+  }
+
   openActionRequired(action: 'inactive' | 'unassigned' | 'expiring' | 'total'): void {
     switch (action) {
       case 'inactive':
@@ -148,8 +160,67 @@ export class DashboardComponent implements OnInit {
     }
   }
 
+  openPriorityEnquiry(item: ActionRequiredEnquiryDto): void {
+    this.router.navigate(['/enquiries'], {
+      queryParams: {
+        enquiry: item.enquiryId,
+        statusTab: 'all',
+        tab: 'overview'
+      }
+    });
+  }
+
+  scoreBandToken(scoreBand: string | null | undefined): 'hot' | 'warm' | 'watch' | 'cold' {
+    const normalized = (scoreBand ?? '').trim().toLowerCase();
+    if (normalized === 'hot' || normalized === 'warm' || normalized === 'watch' || normalized === 'cold') {
+      return normalized;
+    }
+
+    return 'watch';
+  }
+
+  trendToken(direction: string | null | undefined): 'warming' | 'cooling' | 'stable' {
+    const normalized = (direction ?? '').trim().toLowerCase();
+    if (normalized === 'warming' || normalized === 'cooling') {
+      return normalized;
+    }
+
+    return 'stable';
+  }
+
+  trendLabel(direction: string | null | undefined): string {
+    const token = this.trendToken(direction);
+    return token === 'warming' ? 'Warming' : token === 'cooling' ? 'Cooling' : 'Stable';
+  }
+
+  trendDeltaLabel(delta: number): string {
+    if (!Number.isFinite(delta)) {
+      return '0.0';
+    }
+
+    return `${delta >= 0 ? '+' : ''}${delta.toFixed(1)}`;
+  }
+
   openTask(task: TaskDueDto): void {
-    this.router.navigate(['/enquiries'], { queryParams: { enquiry: task.enquiryId, statusTab: 'all' } });
+    this.router.navigate(['/enquiries'], { queryParams: { enquiry: task.enquiryId, tab: 'tasks', statusTab: 'all' } });
+  }
+
+  completeTaskFromWidget(task: TaskDueDto): void {
+    if (!this.data) {
+      return;
+    }
+
+    this.api
+      .completeTask(task.enquiryId, task.taskId, null)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.loadDashboard();
+        },
+        error: () => {
+          this.errorMessage = 'Unable to complete task from dashboard widget.';
+        }
+      });
   }
 
   openUpcomingEvent(event: UpcomingEventDto): void {
@@ -169,6 +240,33 @@ export class DashboardComponent implements OnInit {
 
   openLink(path: string): void {
     this.router.navigateByUrl(path);
+  }
+
+  openTasks(summary: 'all' | 'today' | 'overdue' | 'my'): void {
+    if (summary === 'my') {
+      this.router.navigate(['/tasks'], { queryParams: { view: 'my' } });
+      return;
+    }
+
+    if (summary === 'today' || summary === 'overdue') {
+      this.router.navigate(['/tasks'], { queryParams: { summary } });
+      return;
+    }
+
+    this.router.navigate(['/tasks']);
+  }
+
+  openAddTask(): void {
+    this.showAddTaskModal = true;
+  }
+
+  closeAddTaskModal(): void {
+    this.showAddTaskModal = false;
+  }
+
+  onTaskQuickCreated(event: QuickTaskCreatedEvent): void {
+    this.showAddTaskModal = false;
+    this.loadDashboard();
   }
 
   retryLoad(): void {
@@ -195,6 +293,7 @@ export class DashboardComponent implements OnInit {
           this.recoveringVenue = false;
           this.isLoading = false;
           this.loadDashboardCharts(venueId, this.period);
+          this.loadAiPricingInsights(venueId);
         },
         error: (error) => {
           if (error?.status === 403 && this.auth.isOperationsOnly()) {
@@ -231,12 +330,39 @@ export class DashboardComponent implements OnInit {
           this.data = null;
           this.sourceSlices = [];
           this.revenueTrend = [];
+          this.aiPricingInsights = [];
+          this.aiPricingLoading = false;
+          this.aiPricingMessage = '';
           this.destroyCharts();
           const message = connectivityMessage ?? apiMessage ?? 'Unable to load dashboard data right now. Please retry.';
           const codeSuffix = apiCode ? ` [${apiCode}]` : '';
           const correlationSuffix = correlationId ? ` (Ref: ${correlationId})` : '';
           this.errorMessage = `${message}${codeSuffix}${correlationSuffix}`;
           this.isLoading = false;
+        }
+      });
+  }
+
+  private loadAiPricingInsights(venueId: string): void {
+    this.aiPricingLoading = true;
+    this.aiPricingMessage = '';
+
+    this.api
+      .getAiPricingInsights(venueId, 5)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response: AiPricingInsightsResponse) => {
+          this.aiPricingInsights = response.items ?? [];
+          this.aiPricingMessage =
+            this.aiPricingInsights.length > 0
+              ? ''
+              : response.message || (!response.hasSufficientData ? 'Gathering data...' : 'No opportunities identified.');
+          this.aiPricingLoading = false;
+        },
+        error: () => {
+          this.aiPricingInsights = [];
+          this.aiPricingMessage = 'Gathering data...';
+          this.aiPricingLoading = false;
         }
       });
   }
@@ -387,15 +513,15 @@ export class DashboardComponent implements OnInit {
           legend: { display: false },
           tooltip: {
             callbacks: {
-              label: (context: { label?: string; parsed?: number }) => {
-                const value = typeof context.parsed === 'number' ? context.parsed : 0;
+              label: (context: any) => {
+                const value = typeof context?.parsed === 'number' ? context.parsed : 0;
                 const pct = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-                return `${context.label ?? 'Source'}: ${value} (${pct}%)`;
+                return `${context?.label ?? 'Source'}: ${value} (${pct}%)`;
               }
             }
           }
         },
-        onClick: (_event: unknown, activeElements: Array<{ index: number }>) => {
+        onClick: (_event: unknown, activeElements: any[]) => {
           if (activeElements.length === 0) {
             return;
           }
@@ -485,8 +611,8 @@ export class DashboardComponent implements OnInit {
           },
           tooltip: {
             callbacks: {
-              label: (context: { dataset: { label?: string }; parsed: { y?: number } }) =>
-                `${context.dataset.label ?? 'Value'}: ${formatter.format(context.parsed.y ?? 0)}`
+              label: (context: any) =>
+                `${context?.dataset?.label ?? 'Value'}: ${formatter.format(context?.parsed?.y ?? 0)}`
             }
           }
         },
@@ -511,16 +637,9 @@ export class DashboardComponent implements OnInit {
     return { from, to };
   }
 
-  private resolveChartCtor(): ChartJsConstructor | null {
-    const chartCtor = window.Chart;
-    if (!chartCtor) {
-      this.chartLibraryUnavailable = true;
-      this.chartErrorMessage = 'Chart library failed to load.';
-      return null;
-    }
-
+  private resolveChartCtor(): typeof ChartJs | null {
     this.chartLibraryUnavailable = false;
-    return chartCtor;
+    return ChartJs;
   }
 
   private destroyCharts(): void {

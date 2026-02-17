@@ -1,0 +1,371 @@
+<section class="portfolio-page">
+  <header class="page-header">
+    <div>
+      <h1>Portfolio Dashboard</h1>
+      <p>Group-level visibility across all venues with benchmarking, reporting, and settings cascade controls.</p>
+    </div>
+
+    <label class="venue-filter">
+      <span>Portfolio Scope</span>
+      <select [(ngModel)]="selectedVenueFilterId" (change)="onDashboardVenueFilterChange()">
+        <option value="all">All Venues</option>
+        @for (venue of venueOptions; track venue.id) {
+          <option [value]="venue.id">{{ venue.name }}</option>
+        }
+      </select>
+    </label>
+  </header>
+
+  @if (dashboardError) {
+    <p class="error-banner">{{ dashboardError }}</p>
+  }
+
+  @if (loadingDashboard) {
+    <section class="loading-card">Loading portfolio metrics...</section>
+  } @else if (dashboardData; as dashboard) {
+    <section class="aggregate-grid">
+      <article>
+        <span>Active Enquiries</span>
+        <strong>{{ dashboard.aggregate.totalActiveEnquiries }}</strong>
+      </article>
+      <article>
+        <span>Confirmed Events</span>
+        <strong>{{ dashboard.aggregate.totalConfirmedEvents }}</strong>
+      </article>
+      <article>
+        <span>Portfolio Pipeline</span>
+        <strong>{{ dashboard.aggregate.totalPipelineValue | number: '1.0-2' }} {{ dashboard.aggregate.currencyCode }}</strong>
+      </article>
+      <article>
+        <span>Monthly Revenue</span>
+        <strong>{{ dashboard.aggregate.totalMonthlyRevenue | number: '1.0-2' }} {{ dashboard.aggregate.currencyCode }}</strong>
+      </article>
+    </section>
+
+    <section class="card">
+      <div class="card-heading">
+        <h2>Venue Performance</h2>
+        <span>{{ dashboard.generatedAtUtc | date: 'dd MMM yyyy HH:mm' }} UTC</span>
+      </div>
+
+      <div class="venue-grid">
+        @for (venue of dashboard.venues; track trackVenueMetric($index, venue)) {
+          <article class="venue-card">
+            <header>
+              <h3>{{ venue.venueName }}</h3>
+              <p>{{ venue.currencyCode }}</p>
+            </header>
+            <div class="metric-grid">
+              <div>
+                <span>Active</span>
+                <strong>{{ venue.activeEnquiries }}</strong>
+              </div>
+              <div>
+                <span>Confirmed</span>
+                <strong>{{ venue.confirmedEvents }}</strong>
+              </div>
+              <div>
+                <span>Pipeline</span>
+                <strong>{{ venue.pipelineValue | number: '1.0-0' }}</strong>
+              </div>
+              <div>
+                <span>Revenue</span>
+                <strong>{{ venue.monthlyRevenue | number: '1.0-0' }}</strong>
+              </div>
+            </div>
+            <div class="rank-grid">
+              <span>Conversion {{ venue.conversionRatePercent | number: '1.0-2' }}% (Rank {{ venue.conversionRateRank }})</span>
+              <span>Avg booking {{ venue.averageBookingValue | number: '1.0-0' }} (Rank {{ venue.averageBookingValueRank }})</span>
+              <span>Response {{ venue.averageResponseTimeHours | number: '1.0-1' }}h (Rank {{ venue.responseTimeRank }})</span>
+            </div>
+            <footer>
+              <button type="button" (click)="switchToVenue(venue.venueId)">Switch Venue</button>
+              <button type="button" class="secondary" (click)="openVenueEnquiries(venue.venueId)">Open Enquiries</button>
+              <button type="button" class="secondary" (click)="openVenueReports(venue.venueId)">View Reports</button>
+            </footer>
+          </article>
+        }
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-heading">
+        <h2>Pipeline Comparison</h2>
+        <span>Cross-venue benchmark by total pipeline value</span>
+      </div>
+      <div class="bar-list">
+        @for (bar of dashboardComparisonBars; track bar.venueId) {
+          <article class="bar-row">
+            <header>
+              <strong>{{ bar.venueName }}</strong>
+              <span>{{ bar.value | number: '1.0-0' }} {{ currencyCode }}</span>
+            </header>
+            <div class="track">
+              <div class="fill" [style.width.%]="bar.widthPercent"></div>
+            </div>
+          </article>
+        }
+      </div>
+    </section>
+  }
+
+  <section class="card">
+    <div class="card-heading">
+      <h2>Group Reports</h2>
+      <span>Portfolio rollups with venue drill-down</span>
+    </div>
+
+    <div class="report-controls">
+      <label>
+        <span>Report</span>
+        <select [(ngModel)]="selectedReportKey" (change)="loadGroupReport()">
+          @for (option of reportOptions; track option.key) {
+            <option [value]="option.key">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>Preset</span>
+        <select [(ngModel)]="selectedReportPreset" (change)="applyReportPreset(selectedReportPreset)">
+          <option value="this-month">This Month</option>
+          <option value="last-30d">Last 30 Days</option>
+          <option value="last-90d">Last 90 Days</option>
+          <option value="this-year">This Year</option>
+          <option value="custom">Custom</option>
+        </select>
+      </label>
+      <label>
+        <span>From</span>
+        <input type="date" [(ngModel)]="reportFrom" (change)="onReportFilterChanged()" />
+      </label>
+      <label>
+        <span>To</span>
+        <input type="date" [(ngModel)]="reportTo" (change)="onReportFilterChanged()" />
+      </label>
+      <label>
+        <span>Event Type</span>
+        <select [(ngModel)]="reportEventType" (change)="loadGroupReport()">
+          @for (eventType of eventTypeOptions; track eventType) {
+            <option [value]="eventType">{{ eventType === 'all' ? 'All Types' : eventType }}</option>
+          }
+        </select>
+      </label>
+      <button type="button" (click)="loadGroupReport()">Refresh</button>
+    </div>
+
+    @if (reportError) {
+      <p class="error-banner">{{ reportError }}</p>
+    }
+
+    @if (loadingReport) {
+      <p class="loading-inline">Loading report...</p>
+    } @else if (groupReport; as report) {
+      <article class="report-block">
+        <h3>Portfolio Aggregate</h3>
+        @if (report.aggregate.note) {
+          <p class="hint">{{ report.aggregate.note }}</p>
+        }
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                @for (column of report.aggregate.columns; track column) {
+                  <th>{{ column }}</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of report.aggregate.rows; track $index) {
+                <tr>
+                  @for (column of report.aggregate.columns; track column) {
+                    <td>{{ reportCellValue(row, column) }}</td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-block">
+        <h3>Cross-Venue Comparison</h3>
+        <div class="bar-list">
+          @for (bar of reportComparisonBars; track bar.venueId) {
+            <article class="bar-row">
+              <header>
+                <strong>{{ bar.venueName }}</strong>
+                <span>{{ bar.value | number: '1.0-2' }}</span>
+              </header>
+              <div class="track">
+                <div class="fill accent" [style.width.%]="bar.widthPercent"></div>
+              </div>
+            </article>
+          }
+        </div>
+      </article>
+
+      <article class="report-block">
+        <h3>Venue Breakdown</h3>
+        <div class="venue-report-grid">
+          @for (venueReport of report.venues; track trackVenueReport($index, venueReport)) {
+            <section class="venue-report-card">
+              <header>
+                <strong>{{ venueReport.venueName }}</strong>
+                <button type="button" class="secondary" (click)="openVenueReports(venueReport.venueId)">Drill Down</button>
+              </header>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      @for (column of venueReport.report.columns; track column) {
+                        <th>{{ column }}</th>
+                      }
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of venueReport.report.rows; track $index) {
+                      <tr>
+                        @for (column of venueReport.report.columns; track column) {
+                          <td>{{ reportCellValue(row, column) }}</td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+        </div>
+      </article>
+    }
+  </section>
+
+  <section class="card">
+    <div class="card-heading">
+      <h2>Shared Availability Explorer</h2>
+      <span>Compare venue availability before routing enquiries.</span>
+    </div>
+
+    <div class="report-controls">
+      <label>
+        <span>Date</span>
+        <input type="date" [(ngModel)]="sharedAvailabilityDate" (change)="onSharedAvailabilityFilterChanged()" />
+      </label>
+      <label>
+        <span>Guests</span>
+        <input
+          type="number"
+          min="1"
+          step="1"
+          [(ngModel)]="sharedAvailabilityGuests"
+          (change)="onSharedAvailabilityFilterChanged()" />
+      </label>
+      <label>
+        <span>Exclude Source Venue</span>
+        <select [(ngModel)]="sharedAvailabilitySourceVenueId" (change)="onSharedAvailabilityFilterChanged()">
+          <option value="all">No source selected</option>
+          @for (venue of venueOptions; track venue.id) {
+            <option [value]="venue.id">{{ venue.name }}</option>
+          }
+        </select>
+      </label>
+      <button type="button" (click)="loadSharedAvailability()">Refresh</button>
+    </div>
+
+    @if (sharedAvailabilityError) {
+      <p class="error-banner">{{ sharedAvailabilityError }}</p>
+    }
+
+    @if (sharedAvailabilityLoading) {
+      <p class="loading-inline">Loading shared availability...</p>
+    } @else if (sharedAvailabilityData; as sharedAvailability) {
+      <div class="availability-grid">
+        @for (venue of sharedAvailability.venueOptions; track trackSharedAvailabilityVenue($index, venue)) {
+          <article class="availability-venue-card">
+            <header>
+              <strong>{{ venue.venueName }}</strong>
+              <span>{{ venue.availableSpaceCount }} / {{ venue.totalSpaceCount }} spaces free</span>
+            </header>
+            <small>{{ venue.sameDateEnquiryCount }} same-date enquiries</small>
+            <div class="availability-space-list">
+              @for (space of venue.spaces; track space.spaceId) {
+                <span [class.available]="space.isAvailable" [class.unavailable]="!space.isAvailable">
+                  {{ space.spaceName }} · cap {{ space.capacity }}
+                </span>
+              }
+            </div>
+            <footer>
+              <button type="button" class="secondary" (click)="switchToVenue(venue.venueId)">Switch</button>
+              <button type="button" class="secondary" (click)="openVenueEnquiries(venue.venueId)">View Enquiries</button>
+            </footer>
+          </article>
+        }
+      </div>
+    }
+  </section>
+
+  <section class="card">
+    <div class="card-heading">
+      <h2>Centralised Settings Cascade</h2>
+      <span>Apply group standards and keep venue-specific overrides as needed.</span>
+    </div>
+
+    <div class="cascade-grid">
+      <label>
+        <span>Source Venue</span>
+        <select [(ngModel)]="cascadeSourceVenueId" (change)="onCascadeSourceVenueChange()">
+          @for (venue of venueOptions; track venue.id) {
+            <option [value]="venue.id">{{ venue.name }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="cascade-targets">
+        <div class="targets-header">
+          <span>Target Venues</span>
+          <div>
+            <button type="button" class="link-btn" (click)="selectAllCascadeTargets()">All</button>
+            <button type="button" class="link-btn" (click)="clearCascadeTargets()">None</button>
+          </div>
+        </div>
+        <div class="targets-list">
+          @for (venue of targetVenueOptions; track venue.id) {
+            <label>
+              <input
+                type="checkbox"
+                [checked]="isCascadeTargetSelected(venue.id)"
+                (change)="setCascadeTargetSelection(venue.id, $any($event.target).checked)" />
+              <span>{{ venue.name }}</span>
+            </label>
+          }
+        </div>
+      </div>
+
+      <div class="cascade-options">
+        <label><input type="checkbox" [(ngModel)]="cascadeIncludeVenueProfileBranding" /> Venue profile branding</label>
+        <label><input type="checkbox" [(ngModel)]="cascadeIncludePaymentSchedules" /> Payment schedules</label>
+        <label><input type="checkbox" [(ngModel)]="cascadeIncludeTermsDocuments" /> Terms &amp; Conditions</label>
+        <label><input type="checkbox" [(ngModel)]="cascadeIncludeProposalTemplates" /> Proposal templates</label>
+        <label><input type="checkbox" [(ngModel)]="cascadeIncludeProposalPdfSettings" /> Proposal PDF settings</label>
+        <label><input type="checkbox" [(ngModel)]="cascadeIncludePlanningMilestones" /> Planning milestones</label>
+        <label><input type="checkbox" [(ngModel)]="cascadeIncludeReportConfiguration" /> Report configuration</label>
+      </div>
+    </div>
+
+    @if (cascadeError) {
+      <p class="error-banner">{{ cascadeError }}</p>
+    }
+    @if (cascadeSuccess) {
+      <p class="success-banner">{{ cascadeSuccess }}</p>
+    }
+
+    <footer class="cascade-footer">
+      <p>
+        Group-level defaults can be applied any time. Local venue teams can still adjust their own settings afterward.
+      </p>
+      <button type="button" [disabled]="!canApplyCascade" (click)="applyCascade()">
+        {{ cascadeApplying ? 'Applying...' : 'Apply Cascade' }}
+      </button>
+    </footer>
+  </section>
+</section>

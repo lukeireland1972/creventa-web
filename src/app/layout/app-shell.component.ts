@@ -4,12 +4,18 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ReactiveFormsModule, Validators, FormBuilder } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { distinctUntilChanged, map } from 'rxjs';
 import {
+  AiAssistantActionDto,
+  AiAssistantMessageResponse,
+  AiAssistantSummaryResponse,
   ApiService,
   AvailabilitySidebarResponse,
+  CreateVenueRequest,
   DuplicateEnquiryMatchDto,
   EnquiryDuplicateCheckResponse,
   GlobalSearchGroupDto,
+  GlobalSearchIntentDto,
   GlobalSearchResultDto,
   NotificationItemDto,
   RecentlyViewedDto,
@@ -27,6 +33,17 @@ interface NavItem {
   badge?: string;
   disabled?: boolean;
   disabledReason?: string;
+}
+
+interface AssistantUiMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  text: string;
+  generatedAtUtc: string;
+  intent?: string;
+  fallbackUsed?: boolean;
+  actions?: AiAssistantActionDto[];
+  suggestions?: string[];
 }
 
 @Component({
@@ -50,6 +67,7 @@ export class AppShellComponent implements OnInit {
   isSettingsOpen = false;
   isNotificationsOpen = false;
   isSearchOpen = false;
+  isAssistantOpen = false;
   isMobileNavOpen = false;
 
   venues: VenueSummaryDto[] = [];
@@ -60,16 +78,38 @@ export class AppShellComponent implements OnInit {
   duplicateCheckLoading = false;
   dismissDuplicateAdvisory = false;
   dismissDateConflictAdvisory = false;
+  showDuplicateWarningModal = false;
+  selectedDuplicateEnquiryId = '';
   notifications: NotificationItemDto[] = [];
   unreadNotifications = 0;
+  overdueTaskCount = 0;
   searchQuery = '';
   searchGroups: GlobalSearchGroupDto[] = [];
   recentSearches: string[] = [];
+  searchIntent: GlobalSearchIntentDto | null = null;
+  assistantPrompt = '';
+  assistantTone: 'friendly' | 'formal' | 'urgent' = 'friendly';
+  assistantLoading = false;
+  assistantError = '';
+  assistantMessages: AssistantUiMessage[] = [];
+  private hasLoadedInitialAssistantBriefing = false;
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private duplicateCheckDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private duplicateCheckRequestId = 0;
 
   navItems: NavItem[] = [];
+  isCreateVenueOpen = false;
+  isCreatingVenue = false;
+  createVenueError = '';
+
+  createVenueForm = this.formBuilder.group({
+    name: ['', [Validators.required, Validators.maxLength(200)]],
+    timeZone: ['Europe/London', [Validators.required, Validators.maxLength(80)]],
+    currencyCode: ['GBP', [Validators.required, Validators.maxLength(8)]],
+    locale: ['en-GB', [Validators.required, Validators.maxLength(12)]],
+    countryCode: ['GB', [Validators.required, Validators.maxLength(8)]],
+    enquiriesEmail: ['', Validators.email]
+  });
 
   enquiryForm = this.formBuilder.group({
     contactFirstName: ['', Validators.required],
@@ -98,6 +138,25 @@ export class AppShellComponent implements OnInit {
 
   get operationsOnly(): boolean {
     return this.auth.isOperationsOnly();
+  }
+
+  get canCreateVenue(): boolean {
+    if (this.operationsOnly) {
+      return false;
+    }
+
+    const roles = this.auth.session?.venueRoles ?? [];
+    return roles.some((x) => x.role === 'GroupAdmin');
+  }
+
+  get canViewPortfolio(): boolean {
+    if (this.operationsOnly) {
+      return false;
+    }
+
+    const roles = this.auth.session?.venueRoles ?? [];
+    const isGroupAdmin = roles.some((x) => x.role === 'GroupAdmin');
+    return isGroupAdmin || roles.length > 1;
   }
 
   get displayName(): string {
@@ -170,9 +229,57 @@ export class AppShellComponent implements OnInit {
     return !this.dismissDateConflictAdvisory && !!this.primarySameDateConflict;
   }
 
+  get hasPotentialDuplicateSignals(): boolean {
+    return (this.duplicateCheck?.duplicateMatches?.length ?? 0) > 0
+      || (this.duplicateCheck?.sameDateConflicts?.length ?? 0) > 0;
+  }
+
+  get canUseAssistant(): boolean {
+    return !this.operationsOnly && !!this.selectedVenueId;
+  }
+
+  get currentEnquiryIdFromUrl(): string | null {
+    const tree = this.router.parseUrl(this.router.url);
+    const enquiryId = tree.queryParams['enquiry'];
+    if (typeof enquiryId === 'string' && enquiryId.trim().length > 0) {
+      return enquiryId.trim();
+    }
+
+    return null;
+  }
+
+  get duplicateModalMatches(): DuplicateEnquiryMatchDto[] {
+    return this.duplicateCheck?.duplicateMatches ?? [];
+  }
+
+  get duplicateModalConflicts(): SameDateEnquiryConflictDto[] {
+    return this.duplicateCheck?.sameDateConflicts ?? [];
+  }
+
   ngOnInit(): void {
     this.setNavItems();
     this.selectedVenueId = this.auth.selectedVenueId;
+
+    this.auth.session$
+      .pipe(
+        map((session) => session?.venueId ?? null),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((venueId) => {
+        const venueChanged = this.selectedVenueId !== venueId;
+        this.selectedVenueId = venueId;
+        this.setNavItems();
+        this.loadRecent();
+        this.loadNotifications();
+        this.loadTaskBadge();
+        if (venueChanged) {
+          this.searchIntent = null;
+          this.assistantMessages = [];
+          this.assistantError = '';
+          this.hasLoadedInitialAssistantBriefing = false;
+        }
+      });
 
     this.api
       .getVenues()
@@ -191,6 +298,7 @@ export class AppShellComponent implements OnInit {
 
     this.loadRecent();
     this.loadNotifications();
+    this.loadTaskBadge();
 
     this.enquiryForm.controls.eventDate.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((date) => {
       if (!date || !this.selectedVenueId) {
@@ -214,12 +322,21 @@ export class AppShellComponent implements OnInit {
     this.enquiryForm.controls.contactPhoneNumberE164.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.scheduleDuplicateCheck();
     });
+
+    this.enquiryForm.controls.contactFirstName.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.scheduleDuplicateCheck();
+    });
+
+    this.enquiryForm.controls.contactLastName.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.scheduleDuplicateCheck();
+    });
   }
 
   toggleRecent(): void {
     this.isSettingsOpen = false;
     this.isNotificationsOpen = false;
     this.isSearchOpen = false;
+    this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
     this.isRecentOpen = !this.isRecentOpen;
   }
@@ -229,6 +346,7 @@ export class AppShellComponent implements OnInit {
     this.isRecentOpen = false;
     this.isNotificationsOpen = false;
     this.isSearchOpen = false;
+    this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
     this.isSettingsOpen = !this.isSettingsOpen;
   }
@@ -238,11 +356,136 @@ export class AppShellComponent implements OnInit {
     this.isRecentOpen = false;
     this.isSettingsOpen = false;
     this.isSearchOpen = false;
+    this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
     this.isNotificationsOpen = !this.isNotificationsOpen;
     if (this.isNotificationsOpen) {
       this.loadNotifications();
     }
+  }
+
+  toggleAssistant(event: MouseEvent): void {
+    event.stopPropagation();
+    if (!this.canUseAssistant) {
+      return;
+    }
+
+    this.isRecentOpen = false;
+    this.isSettingsOpen = false;
+    this.isNotificationsOpen = false;
+    this.isSearchOpen = false;
+    this.isAssistantOpen = false;
+    this.isMobileNavOpen = false;
+    this.isAssistantOpen = !this.isAssistantOpen;
+
+    if (this.isAssistantOpen && !this.hasLoadedInitialAssistantBriefing) {
+      this.loadDailyBriefing();
+    }
+  }
+
+  sendAssistantPrompt(event: Event): void {
+    event.preventDefault();
+    const prompt = this.assistantPrompt.trim();
+    if (!prompt || this.assistantLoading) {
+      return;
+    }
+
+    this.assistantPrompt = '';
+    this.appendAssistantMessage({
+      id: this.buildAssistantMessageId('user'),
+      role: 'user',
+      text: prompt,
+      generatedAtUtc: new Date().toISOString()
+    });
+    this.queryAssistant(prompt, this.assistantTone);
+  }
+
+  loadDailyBriefing(): void {
+    if (!this.selectedVenueId || this.assistantLoading) {
+      return;
+    }
+
+    this.assistantLoading = true;
+    this.assistantError = '';
+    this.api
+      .getAiDailyBriefing(this.selectedVenueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.assistantLoading = false;
+          this.hasLoadedInitialAssistantBriefing = true;
+          this.appendAssistantMessage(this.mapSummaryToAssistantMessage(response, 'daily_briefing'));
+        },
+        error: () => {
+          this.assistantLoading = false;
+          this.assistantError = 'Unable to load briefing right now.';
+        }
+      });
+  }
+
+  loadMeetingPrep(): void {
+    if (!this.selectedVenueId || this.assistantLoading) {
+      return;
+    }
+
+    this.assistantLoading = true;
+    this.assistantError = '';
+    this.api
+      .getAiMeetingPrep({ venueId: this.selectedVenueId })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.assistantLoading = false;
+          const lines: string[] = [response.summary];
+          response.items.slice(0, 5).forEach((item) => {
+            lines.push(`- ${new Date(item.startUtc).toLocaleString()} · ${item.title} · ${item.clientName}`);
+            lines.push(`  ${item.briefing}`);
+          });
+
+          this.appendAssistantMessage({
+            id: this.buildAssistantMessageId('assistant'),
+            role: 'assistant',
+            text: lines.join('\n').trim(),
+            generatedAtUtc: response.generatedAtUtc,
+            intent: 'meeting_prep',
+            actions: [
+              { key: 'open-diary', label: 'Open Event Diary', type: 'navigate', route: '/event-diary' },
+              { key: 'open-connect', label: 'Open Connect', type: 'navigate', route: '/connect' }
+            ],
+            suggestions: [
+              "What's my pipeline looking like this month?",
+              'Which enquiries should I follow up on today?'
+            ]
+          });
+        },
+        error: () => {
+          this.assistantLoading = false;
+          this.assistantError = 'Unable to load meeting prep right now.';
+        }
+      });
+  }
+
+  loadCurrentEnquirySummary(): void {
+    const enquiryId = this.currentEnquiryIdFromUrl;
+    if (!this.selectedVenueId || !enquiryId || this.assistantLoading) {
+      return;
+    }
+
+    this.assistantLoading = true;
+    this.assistantError = '';
+    this.api
+      .getAiEnquirySummary(this.selectedVenueId, enquiryId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.assistantLoading = false;
+          this.appendAssistantMessage(this.mapSummaryToAssistantMessage(response, 'enquiry_summary'));
+        },
+        error: () => {
+          this.assistantLoading = false;
+          this.assistantError = 'Unable to load enquiry summary.';
+        }
+      });
   }
 
   toggleMobileNav(event: Event): void {
@@ -251,6 +494,7 @@ export class AppShellComponent implements OnInit {
     this.isSettingsOpen = false;
     this.isNotificationsOpen = false;
     this.isSearchOpen = false;
+    this.isAssistantOpen = false;
     this.isMobileNavOpen = !this.isMobileNavOpen;
   }
 
@@ -272,15 +516,90 @@ export class AppShellComponent implements OnInit {
     this.router.navigate(['/admin']);
   }
 
+  openCreateVenueModal(event?: Event): void {
+    event?.stopPropagation();
+    if (!this.canCreateVenue || this.isCreatingVenue) {
+      return;
+    }
+
+    const selectedVenue = this.venues.find((venue) => venue.id === this.selectedVenueId);
+    this.createVenueForm.reset({
+      name: '',
+      timeZone: selectedVenue?.timeZone ?? 'Europe/London',
+      currencyCode: selectedVenue?.currencyCode ?? 'GBP',
+      locale: 'en-GB',
+      countryCode: 'GB',
+      enquiriesEmail: ''
+    });
+    this.createVenueError = '';
+    this.isCreateVenueOpen = true;
+    this.isSettingsOpen = false;
+    this.isRecentOpen = false;
+    this.isNotificationsOpen = false;
+    this.isSearchOpen = false;
+    this.isMobileNavOpen = false;
+  }
+
+  closeCreateVenueModal(): void {
+    if (this.isCreatingVenue) {
+      return;
+    }
+
+    this.isCreateVenueOpen = false;
+    this.createVenueError = '';
+    this.createVenueForm.markAsPristine();
+    this.createVenueForm.markAsUntouched();
+  }
+
+  submitCreateVenue(): void {
+    if (!this.canCreateVenue || this.isCreatingVenue) {
+      return;
+    }
+
+    if (this.createVenueForm.invalid) {
+      this.createVenueForm.markAllAsTouched();
+      this.createVenueError = 'Provide a venue name, timezone, and currency code.';
+      return;
+    }
+
+    const value = this.createVenueForm.getRawValue();
+    const payload: CreateVenueRequest = {
+      name: (value.name ?? '').trim(),
+      timeZone: (value.timeZone ?? '').trim() || null,
+      currencyCode: (value.currencyCode ?? '').trim().toUpperCase() || null,
+      locale: (value.locale ?? '').trim() || null,
+      countryCode: (value.countryCode ?? '').trim().toUpperCase() || null,
+      enquiriesEmail: (value.enquiriesEmail ?? '').trim() || null
+    };
+
+    this.isCreatingVenue = true;
+    this.createVenueError = '';
+
+    this.api
+      .createVenue(payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (createdVenue) => {
+          this.isCreatingVenue = false;
+          this.isCreateVenueOpen = false;
+
+          this.venues = [...this.venues, createdVenue].sort((left, right) =>
+            left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
+
+          this.selectVenue(createdVenue.id);
+        },
+        error: (error) => {
+          this.isCreatingVenue = false;
+          this.createVenueError = error?.error?.message ?? error?.error ?? 'Unable to create venue.';
+        }
+      });
+  }
+
   selectVenue(venueId: string): void {
-    const venueChanged = this.applySelectedVenue(venueId);
+    this.applySelectedVenue(venueId);
     this.closeMobileNav();
     if (this.searchQuery.trim().length >= 3) {
       this.executeSearch();
-    }
-
-    if (venueChanged) {
-      window.location.reload();
     }
   }
 
@@ -293,6 +612,8 @@ export class AppShellComponent implements OnInit {
     this.isDrawerOpen = false;
     this.submissionError = '';
     this.showValidation = false;
+    this.showDuplicateWarningModal = false;
+    this.selectedDuplicateEnquiryId = '';
     this.clearDuplicateAdvisories();
   }
 
@@ -307,7 +628,7 @@ export class AppShellComponent implements OnInit {
     this.router.navigateByUrl('/login');
   }
 
-  submitEnquiry(): void {
+  submitEnquiry(ignoreDuplicateWarnings = false): void {
     this.showValidation = true;
     if (this.enquiryForm.invalid || !this.selectedVenueId) {
       this.enquiryForm.markAllAsTouched();
@@ -319,6 +640,11 @@ export class AppShellComponent implements OnInit {
     const eventStartUtc = this.buildIsoDate(value.eventDate ?? '', value.eventTime ?? '12:00');
     if (!eventStartUtc) {
       this.submissionError = 'Select a valid event date.';
+      return;
+    }
+
+    if (!ignoreDuplicateWarnings && this.hasPotentialDuplicateSignals) {
+      this.openDuplicateWarningModal();
       return;
     }
 
@@ -407,6 +733,65 @@ export class AppShellComponent implements OnInit {
     });
   }
 
+  openDuplicateWarningModal(): void {
+    if (!this.hasPotentialDuplicateSignals) {
+      return;
+    }
+
+    const duplicate = this.duplicateModalMatches[0]?.enquiryId;
+    const conflict = this.duplicateModalConflicts[0]?.enquiryId;
+    this.selectedDuplicateEnquiryId = duplicate ?? conflict ?? '';
+    this.showDuplicateWarningModal = true;
+  }
+
+  closeDuplicateWarningModal(): void {
+    this.showDuplicateWarningModal = false;
+  }
+
+  createEnquiryAnyway(): void {
+    this.dismissDuplicateAdvisory = true;
+    this.dismissDateConflictAdvisory = true;
+    this.showDuplicateWarningModal = false;
+    this.submitEnquiry(true);
+  }
+
+  viewDuplicateSelection(): void {
+    const enquiryId = this.selectedDuplicateEnquiryId || this.duplicateModalMatches[0]?.enquiryId || this.duplicateModalConflicts[0]?.enquiryId;
+    if (!enquiryId) {
+      return;
+    }
+
+    this.showDuplicateWarningModal = false;
+    this.openExistingEnquiry(enquiryId);
+  }
+
+  openMergeFromDuplicateWarning(): void {
+    const first = this.duplicateModalMatches[0]?.enquiryId;
+    const second = this.duplicateModalMatches[1]?.enquiryId;
+    this.showDuplicateWarningModal = false;
+    this.closeDrawer();
+
+    if (first && second) {
+      this.router.navigate(['/enquiries'], {
+        queryParams: {
+          statusTab: 'all',
+          mergeA: first,
+          mergeB: second
+        }
+      });
+      return;
+    }
+
+    if (first) {
+      this.router.navigate(['/enquiries'], {
+        queryParams: {
+          statusTab: 'all',
+          enquiry: first
+        }
+      });
+    }
+  }
+
   openRecentItem(item: RecentlyViewedDto): void {
     this.isRecentOpen = false;
     this.closeMobileNav();
@@ -420,6 +805,7 @@ export class AppShellComponent implements OnInit {
     this.isRecentOpen = false;
     this.isSettingsOpen = false;
     this.isNotificationsOpen = false;
+    this.isAssistantOpen = false;
     this.isSearchOpen = true;
     this.executeSearch();
   }
@@ -437,11 +823,17 @@ export class AppShellComponent implements OnInit {
       return;
     }
 
+    if (this.searchIntent?.isNaturalLanguage && this.searchIntent.suggestedRoute) {
+      this.router.navigateByUrl(this.searchIntent.suggestedRoute);
+      return;
+    }
+
     this.router.navigate(['/enquiries'], { queryParams: { search: query, statusTab: 'all' } });
   }
 
   useRecentSearch(query: string): void {
     this.searchQuery = query;
+    this.searchIntent = null;
     this.executeSearch();
   }
 
@@ -449,6 +841,51 @@ export class AppShellComponent implements OnInit {
     this.isSearchOpen = false;
     this.closeMobileNav();
     this.router.navigateByUrl(result.route);
+  }
+
+  openSearchIntentRoute(): void {
+    if (!this.searchIntent?.suggestedRoute) {
+      return;
+    }
+
+    this.isSearchOpen = false;
+    this.closeMobileNav();
+    this.router.navigateByUrl(this.searchIntent.suggestedRoute);
+  }
+
+  runAssistantAction(action: AiAssistantActionDto): void {
+    if (action.type === 'copy') {
+      if (!action.payload) {
+        return;
+      }
+
+      if (navigator?.clipboard?.writeText) {
+        navigator.clipboard.writeText(action.payload).catch(() => {
+          this.assistantError = 'Unable to copy to clipboard.';
+        });
+      }
+      return;
+    }
+
+    if (action.type === 'navigate' && action.route) {
+      this.isAssistantOpen = false;
+      this.router.navigateByUrl(action.route);
+    }
+  }
+
+  runAssistantSuggestion(prompt: string): void {
+    if (!prompt.trim()) {
+      return;
+    }
+
+    this.assistantPrompt = '';
+    this.appendAssistantMessage({
+      id: this.buildAssistantMessageId('user'),
+      role: 'user',
+      text: prompt,
+      generatedAtUtc: new Date().toISOString()
+    });
+    this.queryAssistant(prompt, this.assistantTone);
   }
 
   markAllNotificationsRead(): void {
@@ -482,7 +919,11 @@ export class AppShellComponent implements OnInit {
     this.isSettingsOpen = false;
     this.isNotificationsOpen = false;
     this.isSearchOpen = false;
+    this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
+    if (!this.isCreatingVenue) {
+      this.isCreateVenueOpen = false;
+    }
   }
 
   @HostListener('document:keydown.escape')
@@ -491,7 +932,11 @@ export class AppShellComponent implements OnInit {
     this.isSettingsOpen = false;
     this.isNotificationsOpen = false;
     this.isSearchOpen = false;
+    this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
+    if (!this.isCreatingVenue) {
+      this.isCreateVenueOpen = false;
+    }
   }
 
   private buildIsoDate(date: string, time: string): string | null {
@@ -540,6 +985,28 @@ export class AppShellComponent implements OnInit {
       });
   }
 
+  private loadTaskBadge(): void {
+    if (this.operationsOnly || !this.selectedVenueId) {
+      this.overdueTaskCount = 0;
+      this.setNavItems();
+      return;
+    }
+
+    this.api
+      .getOverdueTasks(this.selectedVenueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.overdueTaskCount = response.summary.overdue;
+          this.setNavItems();
+        },
+        error: () => {
+          this.overdueTaskCount = 0;
+          this.setNavItems();
+        }
+      });
+  }
+
   private scheduleSearch(): void {
     if (this.searchDebounceTimer) {
       clearTimeout(this.searchDebounceTimer);
@@ -555,6 +1022,7 @@ export class AppShellComponent implements OnInit {
     if (!this.selectedVenueId) {
       this.searchGroups = [];
       this.recentSearches = [];
+      this.searchIntent = null;
       return;
     }
 
@@ -565,12 +1033,81 @@ export class AppShellComponent implements OnInit {
         next: (response) => {
           this.searchGroups = response.groups;
           this.recentSearches = response.recentSearches;
+          this.searchIntent = response.intent ?? null;
         },
         error: () => {
           this.searchGroups = [];
           this.recentSearches = [];
+          this.searchIntent = null;
         }
       });
+  }
+
+  private queryAssistant(prompt: string, tone: string): void {
+    if (!this.selectedVenueId) {
+      this.assistantError = 'Select a venue to use the AI assistant.';
+      return;
+    }
+
+    this.assistantLoading = true;
+    this.assistantError = '';
+    this.api
+      .queryAiAssistant(this.selectedVenueId, {
+        query: prompt,
+        enquiryId: this.currentEnquiryIdFromUrl,
+        tone
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.assistantLoading = false;
+          this.appendAssistantMessage(this.mapAssistantResponse(response));
+        },
+        error: () => {
+          this.assistantLoading = false;
+          this.assistantError = 'AI assistant is temporarily unavailable.';
+        }
+      });
+  }
+
+  private appendAssistantMessage(message: AssistantUiMessage): void {
+    this.assistantMessages = [...this.assistantMessages, message];
+  }
+
+  private mapSummaryToAssistantMessage(
+    response: AiAssistantSummaryResponse,
+    intent: string
+  ): AssistantUiMessage {
+    return {
+      id: this.buildAssistantMessageId('assistant'),
+      role: 'assistant',
+      text: response.summary,
+      generatedAtUtc: response.generatedAtUtc,
+      intent,
+      actions: response.actions,
+      suggestions: [
+        'Which enquiries should I follow up on today?',
+        "Compare this month's revenue to last year",
+        'Draft a follow-up email for the Smith wedding'
+      ]
+    };
+  }
+
+  private mapAssistantResponse(response: AiAssistantMessageResponse): AssistantUiMessage {
+    return {
+      id: this.buildAssistantMessageId('assistant'),
+      role: 'assistant',
+      text: response.answer,
+      generatedAtUtc: response.generatedAtUtc,
+      intent: response.intent,
+      fallbackUsed: response.fallbackUsed,
+      actions: response.actions,
+      suggestions: response.suggestedPrompts
+    };
+  }
+
+  private buildAssistantMessageId(role: 'user' | 'assistant'): string {
+    return `${role}-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
   }
 
   private scheduleDuplicateCheck(): void {
@@ -597,9 +1134,9 @@ export class AppShellComponent implements OnInit {
     const phoneControl = this.enquiryForm.controls.contactPhoneNumberE164;
     const dateControl = this.enquiryForm.controls.eventDate;
 
-    const email = emailControl.valid && !!emailControl.value?.trim() ? emailControl.value.trim().toLowerCase() : '';
-    const phone = phoneControl.valid && !!phoneControl.value?.trim() ? phoneControl.value.trim() : '';
-    const eventDate = dateControl.value?.trim() ?? '';
+    const email = this.normalizeDuplicateCheckEmail(emailControl.value);
+    const phone = this.normalizeDuplicateCheckPhone(phoneControl.value);
+    const eventDate = (dateControl.value || '').trim();
 
     if (!email && !phone && !eventDate) {
       this.clearDuplicateAdvisories();
@@ -614,6 +1151,8 @@ export class AppShellComponent implements OnInit {
         venueId: this.selectedVenueId,
         email: email || undefined,
         phone: phone || undefined,
+        firstName: (this.enquiryForm.controls.contactFirstName.value || '').trim() || undefined,
+        lastName: (this.enquiryForm.controls.contactLastName.value || '').trim() || undefined,
         eventDate: eventDate || undefined
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -627,6 +1166,9 @@ export class AppShellComponent implements OnInit {
           this.duplicateCheck = response;
           this.dismissDuplicateAdvisory = false;
           this.dismissDateConflictAdvisory = false;
+          if (this.showDuplicateWarningModal && !this.hasPotentialDuplicateSignals) {
+            this.showDuplicateWarningModal = false;
+          }
         },
         error: () => {
           if (requestId !== this.duplicateCheckRequestId) {
@@ -635,8 +1177,32 @@ export class AppShellComponent implements OnInit {
 
           this.duplicateCheckLoading = false;
           this.duplicateCheck = null;
+          this.showDuplicateWarningModal = false;
         }
       });
+  }
+
+  private normalizeDuplicateCheckEmail(rawEmail: string | null | undefined): string {
+    const trimmed = (rawEmail || '').trim().toLowerCase();
+    if (!trimmed) {
+      return '';
+    }
+
+    return trimmed;
+  }
+
+  private normalizeDuplicateCheckPhone(rawPhone: string | null | undefined): string {
+    const trimmed = (rawPhone || '').trim();
+    if (!trimmed) {
+      return '';
+    }
+
+    // Ignore untouched country prefix defaults to avoid noisy queries.
+    if (trimmed === '+44') {
+      return '';
+    }
+
+    return trimmed;
   }
 
   private clearDuplicateAdvisories(): void {
@@ -645,6 +1211,8 @@ export class AppShellComponent implements OnInit {
     this.duplicateCheckLoading = false;
     this.dismissDuplicateAdvisory = false;
     this.dismissDateConflictAdvisory = false;
+    this.showDuplicateWarningModal = false;
+    this.selectedDuplicateEnquiryId = '';
 
     if (this.duplicateCheckDebounceTimer) {
       clearTimeout(this.duplicateCheckDebounceTimer);
@@ -660,6 +1228,9 @@ export class AppShellComponent implements OnInit {
 
     this.navItems = [
       { label: 'Dashboard', section: 'primary', route: '/', exact: true },
+      ...(this.canViewPortfolio
+        ? [{ label: 'Portfolio', section: 'primary', route: '/portfolio', exact: false } as NavItem]
+        : []),
       {
         label: 'Connect',
         section: 'primary',
@@ -667,17 +1238,18 @@ export class AppShellComponent implements OnInit {
         exact: false,
         badge: this.unreadNotifications > 0 ? String(this.unreadNotifications) : undefined
       },
+      { label: 'Contacts', section: 'primary', route: '/contacts', exact: false },
       { label: 'Enquiries', section: 'primary', route: '/enquiries', exact: false },
       { label: 'Event Diary', section: 'primary', route: '/event-diary', exact: false },
-      { label: 'Reports', section: 'reports', route: '/reports', exact: false },
       {
-        label: 'Events Hub',
-        section: 'reports',
-        externalUrl: 'https://events-hub.creventaflow.com',
+        label: 'Tasks',
+        section: 'primary',
+        route: '/tasks',
         exact: false,
-        disabled: true,
-        disabledReason: 'Connection not ready'
+        badge: this.overdueTaskCount > 0 ? String(this.overdueTaskCount) : undefined
       },
+      { label: 'Events Hub', section: 'primary', route: '/events-hub', exact: false },
+      { label: 'Reports', section: 'reports', route: '/reports', exact: false },
       { label: 'Admin', section: 'admin', route: '/admin', exact: false },
       { label: 'Settings', section: 'admin', route: '/settings', exact: false }
     ];
@@ -689,6 +1261,7 @@ export class AppShellComponent implements OnInit {
     this.auth.setSelectedVenue(venueId);
     this.loadRecent();
     this.loadNotifications();
+    this.loadTaskBadge();
     return venueChanged;
   }
 }

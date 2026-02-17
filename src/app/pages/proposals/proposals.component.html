@@ -14,12 +14,20 @@
   </div>
 </section>
 
+<input
+  #manualSignedFileInput
+  type="file"
+  accept=".pdf,.doc,.docx"
+  hidden
+  (change)="onManualSignedFileSelected($event)" />
+
 @if (isBuilderOpen) {
-  <section class="builder-panel">
+  <div class="builder-overlay"></div>
+  <section class="builder-panel builder-modal" role="dialog" aria-modal="true" aria-label="Proposal Builder">
     <header>
       <div>
-        <h2>{{ builderMode === 'edit' ? 'Edit Proposal Draft' : 'Create Proposal' }}</h2>
-        <p>Build line items, VAT, terms, validity, and send to the client portal.</p>
+        <h2>{{ builderMode === 'edit' ? 'Edit Proposal' : 'Create New Proposal' }}</h2>
+        <p>Section-based proposal builder with pricing, terms, PDF generation, and portal sending.</p>
       </div>
       <button type="button" class="btn-close" (click)="closeBuilder()">Close</button>
     </header>
@@ -33,7 +41,7 @@
     }
 
     <form class="builder-form" [formGroup]="builderForm" (ngSubmit)="saveBuilder(false)">
-      <div class="builder-meta-grid">
+      <section class="builder-meta-grid">
         <label>
           <span>Enquiry</span>
           <select formControlName="enquiryId">
@@ -55,7 +63,7 @@
         </label>
 
         <label>
-          <span>Title</span>
+          <span>Proposal Title</span>
           <input type="text" formControlName="title" placeholder="Proposal title" />
         </label>
 
@@ -68,7 +76,7 @@
           <span>Terms Version</span>
           <select formControlName="termsVersion">
             <option value="">Select terms</option>
-            @for (doc of termsDocuments; track doc) {
+            @for (doc of termsDocuments; track doc.id) {
               <option [value]="doc.version">{{ doc.title }} · {{ doc.version }}</option>
             }
           </select>
@@ -83,22 +91,100 @@
           <span>Service Charge %</span>
           <input type="number" min="0" max="100" step="0.01" formControlName="serviceChargePercent" />
         </label>
-      </div>
+
+        <label>
+          <span>Send To Email</span>
+          <input type="email" [ngModel]="sendEmailDraft" (ngModelChange)="sendEmailDraft = $event" [ngModelOptions]="{ standalone: true }" />
+        </label>
+      </section>
+
+      <section class="builder-sections-layout">
+        <h3>Section Layout</h3>
+        <div class="section-layout-list">
+          @for (section of orderedBuilderSections; track section.key; let i = $index) {
+            <article>
+              <label>
+                <input type="checkbox" [checked]="section.isEnabled" (change)="toggleSection(section.key)" />
+                <span>{{ section.title }}</span>
+              </label>
+              <div class="section-layout-actions">
+                <button type="button" class="btn-link" [disabled]="i === 0" (click)="moveSection(i, -1)">Up</button>
+                <button type="button" class="btn-link" [disabled]="i === orderedBuilderSections.length - 1" (click)="moveSection(i, 1)">Down</button>
+              </div>
+            </article>
+          }
+        </div>
+      </section>
+
+      @if (sectionEnabled('coverPage')) {
+        <section class="builder-card">
+          <h3>Cover Page</h3>
+          <div class="cover-grid">
+            <p><strong>Venue:</strong> {{ venueProfile?.name || 'Venue Name' }}</p>
+            <p><strong>Prepared For:</strong> {{ builderForm.controls.preparedFor.value || 'Client Name' }}</p>
+            <p><strong>Event Title:</strong> {{ builderForm.controls.title.value || builderEnquiryDetail?.eventName || 'Event Proposal' }}</p>
+            <p><strong>Event Date:</strong> {{ builderForm.controls.eventDate.value || 'TBC' }}</p>
+            <p><strong>Reference:</strong> {{ builderEnquiryDetail?.reference || 'ENQ' }}</p>
+            <p><strong>Valid Until:</strong> {{ builderForm.controls.validUntilDate.value }}</p>
+          </div>
+          @if (venueProfile?.logoUrl) {
+            <img class="venue-logo" [src]="venueProfile?.logoUrl || ''" alt="Venue logo" />
+          }
+        </section>
+      }
+
+      @if (sectionEnabled('eventDetails')) {
+        <section class="builder-card">
+          <h3>Event Details</h3>
+          <div class="event-grid">
+            <label><span>Date</span><input type="text" formControlName="eventDate" /></label>
+            <label><span>Time</span><input type="text" formControlName="eventTime" /></label>
+            <label><span>Guest Count</span><input type="number" formControlName="guestCount" /></label>
+            <label><span>Style</span><input type="text" formControlName="eventStyle" /></label>
+            <label class="full-width"><span>Assigned Space</span><input type="text" formControlName="assignedSpace" /></label>
+          </div>
+        </section>
+      }
+
+      @if (sectionEnabled('menuPackages')) {
+        <section class="builder-card">
+          <header class="section-header">
+            <h3>Menu / Package Selection</h3>
+            <button type="button" class="btn-secondary" (click)="addLineItemForSection('MenuPackage')">Add Line Item</button>
+          </header>
+          <p class="section-subtotal">
+            Subtotal: {{ sectionSubtotal('MenuPackage') | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}
+          </p>
+        </section>
+      }
+
+      @if (sectionEnabled('additionalServices')) {
+        <section class="builder-card">
+          <header class="section-header">
+            <h3>Additional Services</h3>
+            <button type="button" class="btn-secondary" (click)="addLineItemForSection('AdditionalServices')">Add Line Item</button>
+          </header>
+          <p class="section-subtotal">
+            Subtotal: {{ sectionSubtotal('AdditionalServices') | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}
+          </p>
+        </section>
+      }
 
       <label class="full-width">
-        <span>Introduction</span>
+        <span>Introduction / Welcome Message</span>
         <textarea formControlName="introduction" rows="3" placeholder="Welcome message shown in proposal section"></textarea>
       </label>
 
       <section class="line-editor" formArrayName="lineItems">
         <header>
-          <h3>Pricing Line Items</h3>
+          <h3>Line Item Editor</h3>
           <button type="button" class="btn-secondary" (click)="addLineItem()">Add Line Item</button>
         </header>
 
         <table>
           <thead>
             <tr>
+              <th>Section</th>
               <th>Category</th>
               <th>Description</th>
               <th>Qty</th>
@@ -107,15 +193,25 @@
               <th>VAT %</th>
               <th>Discount %</th>
               <th>Discount Amt</th>
-              <th>Subtotal</th>
-              <th>VAT</th>
-              <th>Total</th>
+              <th>Line Total</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
             @for (lineControl of lineItemControls; track lineControl; let i = $index) {
-              <tr [formGroupName]="i">
+              <tr
+                [formGroupName]="i"
+                draggable="true"
+                (dragstart)="onLineDragStart(i, $event)"
+                (dragover)="onLineDragOver($event)"
+                (drop)="onLineDrop(i, $event)">
+                <td>
+                  <select formControlName="sectionType">
+                    @for (sectionOption of lineSectionOptions; track sectionOption.value) {
+                      <option [value]="sectionOption.value">{{ sectionOption.label }}</option>
+                    }
+                  </select>
+                </td>
                 <td>
                   <select formControlName="category">
                     <option value="Room Hire">Room Hire</option>
@@ -147,8 +243,6 @@
                 </td>
                 <td><input type="number" min="0" max="100" step="0.01" formControlName="discountPercent" /></td>
                 <td><input type="number" min="0" step="0.01" formControlName="discountAmount" /></td>
-                <td>{{ lineSubtotal(i) | number: '1.2-2' }}</td>
-                <td>{{ lineVat(i) | number: '1.2-2' }}</td>
                 <td>{{ lineTotal(i) | number: '1.2-2' }}</td>
                 <td>
                   <button type="button" class="btn-link" (click)="removeLineItem(i)">Remove</button>
@@ -159,37 +253,163 @@
         </table>
       </section>
 
-      <section class="totals-grid">
-        <article>
-          <span>Subtotal (ex VAT)</span>
-          <strong>{{ builderSubtotalExclVat | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
-        </article>
-        <article>
-          <span>Service Charge</span>
-          <strong>{{ builderServiceChargeAmount | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
-        </article>
-        <article>
-          <span>Total VAT</span>
-          <strong>{{ builderTotalVat | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
-        </article>
-        <article>
-          <span>Total (inc VAT)</span>
-          <strong>{{ builderTotalInclVat | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
-        </article>
-      </section>
+      @if (sectionEnabled('pricingSummary')) {
+        <section class="totals-grid">
+          <article>
+            <span>Subtotal (ex VAT)</span>
+            <strong>{{ builderSubtotalExclVat | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
+          </article>
+          <article>
+            <span>Service Charge</span>
+            <strong>{{ builderServiceChargeAmount | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
+          </article>
+          <article>
+            <span>Total VAT</span>
+            <strong>{{ builderTotalVat | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
+          </article>
+          <article>
+            <span>Grand Total</span>
+            <strong>{{ builderTotalInclVat | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
+          </article>
+        </section>
+
+        <section class="ai-pricing-card">
+          <header>
+            <h4>Suggested Pricing</h4>
+            <span class="pricing-tone" [attr.data-tone]="aiPricingTone">
+              {{
+                aiPricingTone === 'above'
+                  ? 'Above Suggestion'
+                  : aiPricingTone === 'below'
+                    ? 'Below Suggestion'
+                    : aiPricingTone === 'at'
+                      ? 'At Suggestion'
+                      : 'Guidance'
+              }}
+            </span>
+          </header>
+
+          @if (aiPricingLoading) {
+            <p class="ai-pricing-message">Analysing historical demand and conversion data...</p>
+          } @else if (aiPricingRecommendation; as recommendation) {
+            <div class="ai-pricing-grid">
+              <article>
+                <span>Min</span>
+                <strong>{{ recommendation.minRecommendedPrice | number: '1.2-2' }} {{ recommendation.currencyCode }}</strong>
+              </article>
+              <article>
+                <span>Suggested</span>
+                <strong>{{ recommendation.suggestedPrice | number: '1.2-2' }} {{ recommendation.currencyCode }}</strong>
+              </article>
+              <article>
+                <span>Max</span>
+                <strong>{{ recommendation.maxRecommendedPrice | number: '1.2-2' }} {{ recommendation.currencyCode }}</strong>
+              </article>
+              <article>
+                <span>Demand</span>
+                <strong>{{ recommendation.demandIntensity }} ({{ recommendation.demandScore | number: '1.0-0' }})</strong>
+              </article>
+            </div>
+            <p class="ai-pricing-message">
+              Current quote: {{ builderTotalInclVat | number: '1.2-2' }} {{ recommendation.currencyCode }}.
+              @if (recommendation.hasSufficientData) {
+                Confidence {{ recommendation.confidenceScore * 100 | number: '1.0-0' }}%.
+              } @else {
+                {{ recommendation.message || 'Gathering data...' }}
+              }
+            </p>
+          } @else {
+            <p class="ai-pricing-message">{{ aiPricingMessage || 'Gathering data...' }}</p>
+          }
+        </section>
+      }
+
+      @if (sectionEnabled('sustainabilityImpact')) {
+        <section class="builder-card sustainability-impact-card">
+          <h3>Sustainability Impact</h3>
+          @if (builderEnquirySustainability; as sustainability) {
+            <div class="sustainability-impact-grid">
+              <article>
+                <span>Projected Grade</span>
+                <strong>{{ sustainability.sustainabilityGrade }}</strong>
+                <small>Score {{ sustainability.sustainabilityScore | number: '1.0-1' }}</small>
+              </article>
+              <article>
+                <span>Carbon Footprint</span>
+                <strong>{{ sustainability.carbonKgCo2e | number: '1.0-2' }} kgCO2e</strong>
+                <small>{{ sustainability.carbonKgPerGuest | number: '1.0-2' }} kg per guest</small>
+              </article>
+              <article>
+                <span>Waste Diversion</span>
+                <strong>{{ sustainability.wasteDiversionPercent | number: '1.0-1' }}%</strong>
+                <small>{{ (sustainability.recyclablesKg + sustainability.compostablesKg) | number: '1.0-2' }} kg diverted</small>
+              </article>
+              <article>
+                <span>Local Sourcing</span>
+                <strong>{{ sustainability.localSourcingPercent | number: '1.0-1' }}%</strong>
+                <small>{{ sustainability.cateringType }} · Energy {{ sustainability.venueEnergyRating }}</small>
+              </article>
+            </div>
+            <p class="sustainability-impact-note">
+              This event is projected to be a Grade {{ sustainability.sustainabilityGrade }} sustainability event.
+              Local sourcing benchmark: {{ sustainability.localSourcingRadiusMiles }}-mile radius.
+              @if (sustainability.includeInProposal) {
+                Included in the client proposal output.
+              } @else {
+                Enable “Include sustainability section in proposal” on the enquiry Sustainability tab to publish this section.
+              }
+            </p>
+            @if (sustainability.scoreMethodology) {
+              <p class="sustainability-impact-note">{{ sustainability.scoreMethodology }}</p>
+            }
+          } @else {
+            <p class="sustainability-impact-note">No sustainability profile found for this enquiry yet.</p>
+          }
+        </section>
+      }
 
       @if (builderVatBreakdown.length > 0) {
         <section class="vat-breakdown">
           <h4>VAT Breakdown</h4>
           <div class="chips">
-            @for (vat of builderVatBreakdown; track vat) {
+            @for (vat of builderVatBreakdown; track vat.vatRate) {
               <span>VAT {{ vat.vatRate }}%: {{ vat.vatAmount | number: '1.2-2' }}</span>
             }
           </div>
         </section>
       }
 
+      @if (sectionEnabled('termsConditions')) {
+        <section class="builder-card">
+          <h3>Terms &amp; Conditions</h3>
+          <p class="terms-meta">Using version: {{ builderForm.controls.termsVersion.value || 'No version selected' }}</p>
+          <div class="terms-content">
+            {{ selectedTermsContent() }}
+          </div>
+        </section>
+      }
+
+      @if (sectionEnabled('acceptanceBlock')) {
+        <section class="builder-card">
+          <h3>Acceptance Block</h3>
+          <div class="acceptance-grid">
+            <label><span>Valid Until</span><input type="date" formControlName="validUntilDate" /></label>
+            <label><span>Digital Signature (typed)</span><input type="text" formControlName="acceptanceSignature" placeholder="Client full legal name" /></label>
+          </div>
+          <div class="acceptance-actions">
+            <button type="button" class="btn-secondary" disabled>Reject (Portal)</button>
+            <button type="button" class="btn-primary" disabled>Accept (Portal)</button>
+          </div>
+        </section>
+      }
+
       <footer class="builder-actions">
+        <button type="button" class="btn-secondary" [disabled]="savingTemplate || builderSaving" (click)="saveBuilderAsTemplate()">
+          {{ savingTemplate ? 'Saving Template…' : 'Save as Template' }}
+        </button>
+        @if (builderMode === 'edit' && selectedProposalId) {
+          <button type="button" class="btn-secondary" [disabled]="builderSaving" (click)="generatePdfForSelectedProposal()">Generate PDF</button>
+        }
         <button type="submit" class="btn-secondary" [disabled]="builderSaving">
           {{ builderSaving ? 'Saving…' : 'Save Draft' }}
         </button>
@@ -268,7 +488,8 @@
             <th>Event</th>
             <th>Status</th>
             <th>Value</th>
-            <th>Created</th>
+            <th>Sent</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -297,7 +518,17 @@
                 </span>
               </td>
               <td>{{ proposal.totalAmount | number: '1.2-2' }} {{ proposal.currencyCode }}</td>
-              <td>{{ proposal.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+              <td>{{ proposal.sentAtUtc ? (proposal.sentAtUtc | date: 'dd/MM/yyyy HH:mm') : 'Not sent' }}</td>
+              <td>
+                <div class="row-actions">
+                  <button type="button" class="btn-link" (click)="viewProposalFromList(proposal.id, $event)">View</button>
+                  <button type="button" class="btn-link" (click)="editProposalFromList(proposal.id, $event)" [disabled]="!proposal.isLatestVersion || proposal.status !== 'Draft'">Edit</button>
+                  <button type="button" class="btn-link" (click)="generatePdfFromList(proposal.id, $event)">Generate PDF</button>
+                  <button type="button" class="btn-link" (click)="duplicateProposalFromList(proposal.id, $event)">Duplicate</button>
+                  <button type="button" class="btn-link" (click)="sendProposalFromList(proposal.id, $event)" [disabled]="proposal.status === 'Accepted' || proposal.status === 'Declined'">Send</button>
+                  <button type="button" class="btn-link" (click)="sendProposalForSignatureFromList(proposal.id, $event)" [disabled]="proposal.status === 'Accepted' || proposal.status === 'Declined'">Send for Signature</button>
+                </div>
+              </td>
             </tr>
           }
         </tbody>
@@ -334,9 +565,36 @@
 
           <section class="actions">
             <button type="button" (click)="sendSelectedProposal()">Send to Client</button>
+            <button type="button" (click)="sendSelectedProposalForSignature()" [disabled]="signatureBusy">Send for Signature</button>
             <button type="button" (click)="duplicateSelectedProposal()">Duplicate</button>
+            <button type="button" (click)="generatePdfForSelectedProposal()">Generate PDF</button>
+            <button type="button" (click)="counterSignSelectedProposal()" [disabled]="!canCounterSignSelectedProposal || signatureBusy">Counter-Sign</button>
+            <button type="button" (click)="openManualMarkSignedPicker()" [disabled]="signatureBusy">Mark as Signed (Upload)</button>
             @if (selectedProposalCanEdit) {
               <button type="button" (click)="openBuilderForEdit()">Edit Draft</button>
+            }
+          </section>
+
+          <section class="signature-status">
+            <h3>E-Signature</h3>
+            @if (signatureLoading) {
+              <p>Loading signature status...</p>
+            } @else if (signatureEnvelope; as signature) {
+              <div class="signature-grid">
+                <p><strong>Provider:</strong> {{ signature.provider }}</p>
+                <p><strong>Status:</strong> {{ signature.status }}</p>
+                <p><strong>Client:</strong> {{ signature.clientName || signature.clientEmail }}</p>
+                <p><strong>Sent:</strong> {{ signature.sentAtUtc ? (signature.sentAtUtc | date: 'dd/MM/yyyy HH:mm') : 'Not sent' }}</p>
+                <p><strong>Client Signed:</strong> {{ signature.clientSignedAtUtc ? (signature.clientSignedAtUtc | date: 'dd/MM/yyyy HH:mm') : 'Not yet' }}</p>
+                <p><strong>Counter-Signed:</strong> {{ signature.counterSignedAtUtc ? (signature.counterSignedAtUtc | date: 'dd/MM/yyyy HH:mm') : 'Not yet' }}</p>
+              </div>
+              @if (signature.signingUrl) {
+                <p>
+                  <a [href]="signature.signingUrl" target="_blank" rel="noopener">Open signing link</a>
+                </p>
+              }
+            } @else {
+              <p>No signature request has been sent for this proposal.</p>
             }
           </section>
 

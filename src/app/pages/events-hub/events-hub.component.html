@@ -1,0 +1,369 @@
+<section class="events-hub-page">
+  <header class="page-header">
+    <div>
+      <h1>Events Hub</h1>
+      <p>Manage venue-hosted events, registrations, and Creventa publishing/sync workflows.</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="ghost" (click)="loadEvents()">Refresh</button>
+      <button type="button" class="primary" (click)="startNewEvent()">+ New Venue Event</button>
+    </div>
+  </header>
+
+  @if (errorMessage) {
+    <p class="alert error">{{ errorMessage }}</p>
+  }
+
+  @if (lastActionMessage) {
+    <p class="alert success">{{ lastActionMessage }}</p>
+  }
+
+  @if (loading) {
+    <article class="state-card">
+      <h2>Loading Events Hub</h2>
+      <p>Fetching events and venue configuration…</p>
+    </article>
+  } @else {
+    <div class="layout-grid">
+      <section class="card list-card">
+        <header>
+          <h2>Venue Events</h2>
+          <small>{{ events.length }} event{{ events.length === 1 ? '' : 's' }}</small>
+        </header>
+
+        <div class="events-list">
+          @for (event of events; track event.id) {
+            <button
+              type="button"
+              class="event-row"
+              [class.active]="event.id === selectedEventId"
+              (click)="selectEvent(event.id)">
+              <div>
+                <strong>{{ event.name }}</strong>
+                <p>{{ event.type }} · {{ event.startUtc | date: 'dd/MM/yyyy HH:mm' }} - {{ event.endUtc | date: 'HH:mm' }}</p>
+              </div>
+              <div class="badges">
+                <span class="badge" [attr.data-status]="event.status.toLowerCase()">{{ event.status }}</span>
+                <span class="badge" [attr.data-publish]="event.publishState.toLowerCase()">{{ event.publishState }}</span>
+              </div>
+            </button>
+          }
+
+          @if (events.length === 0) {
+            <p class="empty">No venue-hosted events yet. Create your first event to start tracking registrations.</p>
+          }
+        </div>
+      </section>
+
+      <section class="card editor-card">
+        <header>
+          <div>
+            <h2>{{ selectedEvent ? 'Edit Event' : 'Create Event' }}</h2>
+            <p>Events publish to Creventa and appear in Event Diary as Venue Events.</p>
+          </div>
+          @if (selectedEvent) {
+            <div class="editor-actions">
+              <button type="button" class="danger" (click)="deleteSelectedEvent()" [disabled]="deletingEvent">{{ deletingEvent ? 'Deleting…' : 'Delete' }}</button>
+            </div>
+          }
+        </header>
+
+        <form [formGroup]="eventForm" (ngSubmit)="saveEvent()" class="event-form">
+          <div class="grid two">
+            <label>
+              <span>Event Name</span>
+              <input type="text" formControlName="name" maxlength="200" />
+            </label>
+            <label>
+              <span>Type</span>
+              <select formControlName="type">
+                @for (type of eventTypeOptions; track type) {
+                  <option [value]="type">{{ type }}</option>
+                }
+              </select>
+            </label>
+          </div>
+
+          <div class="grid three">
+            <label>
+              <span>Date</span>
+              <input type="date" formControlName="eventDate" />
+            </label>
+            <label>
+              <span>Start Time</span>
+              <input type="time" formControlName="startTime" />
+            </label>
+            <label>
+              <span>End Time</span>
+              <input type="time" formControlName="endTime" />
+            </label>
+          </div>
+
+          <div class="space-picker">
+            <h3>Space Assignment</h3>
+            <div class="space-grid">
+              @for (space of spaces; track space.id) {
+                <label class="space-option">
+                  <input
+                    type="checkbox"
+                    [checked]="isSpaceSelected(space.id)"
+                    (change)="toggleSpace(space.id, $any($event.target).checked)" />
+                  <span>
+                    <strong>{{ space.name }}</strong>
+                    <small>Max capacity: {{ spaceMaxCapacity(space) }}</small>
+                  </span>
+                </label>
+              }
+              @if (spaces.length === 0) {
+                <p class="empty">No active spaces configured. Configure spaces in Settings first.</p>
+              }
+            </div>
+          </div>
+
+          <div class="grid three">
+            <label>
+              <span>Capacity</span>
+              <input type="number" min="1" formControlName="capacity" />
+            </label>
+            <label>
+              <span>Registration Limit</span>
+              <input type="number" min="1" formControlName="registrationLimit" />
+            </label>
+            <label>
+              <span>Status</span>
+              <select formControlName="status">
+                @for (status of statusOptions; track status) {
+                  <option [value]="status">{{ status }}</option>
+                }
+              </select>
+            </label>
+          </div>
+
+          <label>
+            <span>Description</span>
+            <textarea rows="3" formControlName="description" placeholder="Rich text editor can be swapped in here."></textarea>
+          </label>
+
+          <div class="grid two">
+            <label>
+              <span>Featured Image</span>
+              <input type="file" accept="image/*" (change)="onFeaturedImageSelected($event)" />
+            </label>
+            <label>
+              <span>Listing Status</span>
+              <select formControlName="listingStatus">
+                @for (status of listingStatusOptions; track status) {
+                  <option [value]="status">{{ status }}</option>
+                }
+              </select>
+            </label>
+          </div>
+
+          @if (eventForm.controls.featuredImageUrl.value) {
+            <div class="image-preview">
+              <img [src]="eventForm.controls.featuredImageUrl.value" alt="Featured preview" />
+            </div>
+          }
+
+          <div class="pricing-block">
+            <h3>Pricing</h3>
+            <label class="checkbox-row">
+              <input type="checkbox" formControlName="isPaid" />
+              <span>Paid event</span>
+            </label>
+
+            <div class="grid three">
+              <label>
+                <span>Ticket Price</span>
+                <input type="number" min="0" step="0.01" formControlName="ticketPrice" [disabled]="!eventForm.controls.isPaid.value" />
+              </label>
+              <label>
+                <span>Currency</span>
+                <input type="text" maxlength="8" formControlName="currencyCode" />
+              </label>
+              <label class="checkbox-row compact">
+                <input type="checkbox" formControlName="hasEarlyBird" [disabled]="!eventForm.controls.isPaid.value" />
+                <span>Early bird pricing</span>
+              </label>
+            </div>
+
+            <div class="grid two" [class.disabled]="!eventForm.controls.hasEarlyBird.value || !eventForm.controls.isPaid.value">
+              <label>
+                <span>Early Bird Price</span>
+                <input type="number" min="0" step="0.01" formControlName="earlyBirdPrice" [disabled]="!eventForm.controls.hasEarlyBird.value || !eventForm.controls.isPaid.value" />
+              </label>
+              <label>
+                <span>Early Bird Ends</span>
+                <input type="date" formControlName="earlyBirdEndsOn" [disabled]="!eventForm.controls.hasEarlyBird.value || !eventForm.controls.isPaid.value" />
+              </label>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="primary" [disabled]="savingEvent">{{ savingEvent ? 'Saving…' : 'Save Event' }}</button>
+            @if (selectedEvent) {
+              <button type="button" class="ghost" (click)="publishToCreventa()" [disabled]="publishing">{{ publishing ? 'Publishing…' : 'Publish to Creventa' }}</button>
+              <button type="button" class="ghost" (click)="syncFromCreventa()" [disabled]="syncing">{{ syncing ? 'Syncing…' : 'Sync Ticket & Pre-Order Data' }}</button>
+            }
+          </div>
+        </form>
+
+        @if (publishResponse) {
+          <p class="integration-note" [class.warning]="publishResponse.queued || !publishResponse.published">
+            {{ publishResponse.message }}
+            @if (publishResponse.creventaListingId) {
+              <strong> Listing ID: {{ publishResponse.creventaListingId }}</strong>
+            }
+          </p>
+        }
+
+        @if (syncResponse) {
+          <p class="integration-note">{{ syncResponse.message }}</p>
+        }
+      </section>
+    </div>
+
+    @if (selectedEvent) {
+      <div class="dashboard-grid">
+        <section class="card analytics-card">
+          <header>
+            <h2>Post-Event Analytics</h2>
+          </header>
+
+          @if (loadingAnalytics) {
+            <p>Loading analytics…</p>
+          } @else if (analytics) {
+            <div class="kpis">
+              <article>
+                <span>Attendance</span>
+                <strong>{{ analytics.checkedInCount }} / {{ analytics.attendeeCount }}</strong>
+                <small>{{ analytics.attendanceRatePercent }}%</small>
+              </article>
+              <article>
+                <span>Capacity</span>
+                <strong>{{ analytics.capacity }}</strong>
+                <small>Registration limit {{ analytics.registrationLimit }}</small>
+              </article>
+              <article>
+                <span>Ticket Revenue</span>
+                <strong>{{ analytics.ticketRevenue | number: '1.2-2' }} {{ eventForm.controls.currencyCode.value }}</strong>
+                <small>{{ analytics.ticketSalesCount }} ticket sales</small>
+              </article>
+              <article>
+                <span>Lead Conversion</span>
+                <strong>{{ analytics.leadConversions }}</strong>
+                <small>{{ analytics.leadConversionRatePercent }}%</small>
+              </article>
+            </div>
+          } @else {
+            <p class="empty">Analytics will appear once event and attendee data are available.</p>
+          }
+
+          @if (selectedEvent.menuRequirements.length > 0) {
+            <div class="summary-block">
+              <h3>Pre-Order Menu Requirements</h3>
+              <ul>
+                @for (item of selectedEvent.menuRequirements; track item.menuName) {
+                  <li>
+                    <span>{{ item.menuName }}</span>
+                    <strong>{{ item.quantity }}</strong>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+
+          @if (selectedEvent.allergenSummary.length > 0) {
+            <div class="summary-block">
+              <h3>Allergen Summary</h3>
+              <ul>
+                @for (item of selectedEvent.allergenSummary; track item.allergen) {
+                  <li>
+                    <span>{{ item.allergen }}</span>
+                    <strong>{{ item.count }}</strong>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+        </section>
+
+        <section class="card attendee-card">
+          <header>
+            <h2>Registration Tracking</h2>
+            <small>{{ attendees.length }} attendee{{ attendees.length === 1 ? '' : 's' }} · {{ checkedInCount }} checked-in</small>
+          </header>
+
+          <form class="attendee-form" [formGroup]="attendeeForm" (ngSubmit)="addAttendee()">
+            <div class="grid three">
+              <label>
+                <span>First Name</span>
+                <input type="text" formControlName="firstName" />
+              </label>
+              <label>
+                <span>Last Name</span>
+                <input type="text" formControlName="lastName" />
+              </label>
+              <label>
+                <span>Email</span>
+                <input type="email" formControlName="email" />
+              </label>
+            </div>
+            <div class="grid three">
+              <label>
+                <span>Phone (E.164)</span>
+                <input type="text" formControlName="phoneNumberE164" placeholder="+447700900000" />
+              </label>
+              <label>
+                <span>Interest</span>
+                <input type="text" formControlName="eventInterest" />
+              </label>
+              <label>
+                <span>Follow-up</span>
+                <select formControlName="followUpStatus">
+                  @for (status of followUpStatusOptions; track status) {
+                    <option [value]="status">{{ status }}</option>
+                  }
+                </select>
+              </label>
+            </div>
+            <label>
+              <span>Notes</span>
+              <textarea rows="2" formControlName="notes"></textarea>
+            </label>
+            <div class="form-actions compact">
+              <button type="submit" class="primary" [disabled]="addingAttendee">{{ addingAttendee ? 'Adding…' : 'Add Attendee' }}</button>
+            </div>
+          </form>
+
+          @if (loadingAttendees) {
+            <p>Loading attendees…</p>
+          } @else {
+            <div class="attendee-list">
+              @for (attendee of attendees; track attendee.id) {
+                <article class="attendee-row">
+                  <div>
+                    <strong>{{ attendee.firstName }} {{ attendee.lastName }}</strong>
+                    <p>{{ attendee.email }} · {{ attendee.eventInterest || 'General interest' }}</p>
+                    <small>{{ attendee.followUpStatus }}</small>
+                  </div>
+                  <div class="attendee-actions">
+                    <button type="button" class="ghost" (click)="toggleCheckIn(attendee)">
+                      {{ attendee.checkedIn ? 'Undo Check-In' : 'Check-In' }}
+                    </button>
+                    <button type="button" class="ghost" (click)="convertAttendeeToEnquiry(attendee)" [disabled]="!!attendee.convertedEnquiryId">
+                      {{ attendee.convertedEnquiryId ? 'Converted' : 'Convert to Enquiry' }}
+                    </button>
+                  </div>
+                </article>
+              }
+              @if (attendees.length === 0) {
+                <p class="empty">No registrations yet.</p>
+              }
+            </div>
+          }
+        </section>
+      </div>
+    }
+  }
+</section>

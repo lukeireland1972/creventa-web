@@ -1,0 +1,200 @@
+<section class="documents-panel">
+  <header class="documents-toolbar">
+    <div class="documents-filters">
+      <label>
+        <span>Search</span>
+        <input
+          type="search"
+          [ngModel]="searchTerm"
+          (ngModelChange)="onSearchTermInput($event)"
+          placeholder="Search documents..." />
+      </label>
+      <label>
+        <span>Category</span>
+        <select [ngModel]="categoryFilter" (ngModelChange)="onCategoryFilterChange($event)">
+          <option value="All">All Categories</option>
+          @for (category of categories; track category) {
+            <option [value]="category">{{ category }}</option>
+          }
+        </select>
+      </label>
+    </div>
+
+    <div class="documents-toolbar-actions">
+      <button
+        type="button"
+        class="primary"
+        [disabled]="!canGenerateBeo || generatingBeo || !enquiryId"
+        (click)="generateBeo()">
+        {{ generatingBeo ? 'Generating BEO...' : 'Generate BEO' }}
+      </button>
+      @if (!canGenerateBeo) {
+        <small>BEO generation is available once the enquiry is Confirmed.</small>
+      }
+    </div>
+  </header>
+
+  <section
+    class="upload-zone"
+    [class.drag-active]="dropActive"
+    (dragover)="onDragOver($event)"
+    (dragleave)="onDragLeave($event)"
+    (drop)="onDrop($event)">
+    <input
+      #documentFileInput
+      type="file"
+      accept=".pdf,.docx,.xlsx,.png,.jpg,.jpeg"
+      (change)="onFileSelected($event)"
+      hidden />
+
+    <p>Drag and drop a file, or click Upload.</p>
+    <p class="hint">Supported: PDF, DOCX, XLSX, PNG, JPG. Max 25MB.</p>
+
+    @if (pendingFileLabel) {
+      <p class="pending-file">{{ pendingFileLabel }}</p>
+    }
+
+    <div class="upload-controls">
+      <label>
+        <span>Category</span>
+        <select [ngModel]="pendingCategory" (ngModelChange)="onPendingCategoryChange($event)">
+          @for (category of categories; track category) {
+            <option [value]="category">{{ category }}</option>
+          }
+        </select>
+      </label>
+
+      <div class="upload-actions">
+        <button type="button" (click)="documentFileInput.click()">Upload</button>
+        <button type="button" class="primary" (click)="uploadPendingDocument()" [disabled]="!pendingFile || uploadBusy || !enquiryId">
+          {{ uploadBusy ? 'Uploading...' : 'Save Document' }}
+        </button>
+        <button type="button" class="ghost" (click)="clearPendingFile()" [disabled]="!pendingFile || uploadBusy">Clear</button>
+      </div>
+    </div>
+
+    @if (uploadBusy) {
+      <div class="progress-wrapper" role="progressbar" [attr.aria-valuenow]="uploadProgressPercent" aria-valuemin="0" aria-valuemax="100">
+        <div class="progress-track">
+          <span [style.width.%]="uploadProgressPercent"></span>
+        </div>
+        <span>{{ uploadProgressPercent }}%</span>
+      </div>
+    }
+  </section>
+
+  @if (busyMessage) {
+    <p class="info">{{ busyMessage }}</p>
+  }
+  @if (feedbackMessage) {
+    <p class="success">{{ feedbackMessage }}</p>
+  }
+  @if (uploadError) {
+    <p class="error">{{ uploadError }}</p>
+  }
+  @if (loadingError) {
+    <p class="error">{{ loadingError }}</p>
+  }
+
+  @if (loading) {
+    <p class="empty">Loading documents...</p>
+  } @else if (documents.length === 0) {
+    <p class="empty">No documents available for this enquiry.</p>
+  } @else {
+    <table class="documents-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Category</th>
+          <th>Size</th>
+          <th>Uploaded By</th>
+          <th>Date</th>
+          <th>Version</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (document of documents; track document.id) {
+          <tr [class.non-latest]="!document.isLatestVersion">
+            <td>{{ document.fileName }}</td>
+            <td>{{ fileTypeLabel(document) }}</td>
+            <td><span class="document-category">{{ document.category }}</span></td>
+            <td>{{ humanFileSize(document.fileSizeBytes) }}</td>
+            <td>{{ document.uploadedByName || 'System' }}</td>
+            <td>{{ document.uploadedAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+            <td>
+              v{{ document.versionNumber }}
+              @if (document.isLatestVersion) {
+                <span class="latest-badge">Latest</span>
+              }
+            </td>
+            <td>
+              <div class="actions">
+                <button type="button" (click)="downloadDocument(document)">Download</button>
+                @if (canPreview(document)) {
+                  <button type="button" (click)="previewDocument(document)">Preview</button>
+                }
+                <button type="button" (click)="showVersionHistory(document)">History</button>
+                <button type="button" (click)="shareDocument(document)" [disabled]="sharingDocumentId === document.id">
+                  {{ sharingDocumentId === document.id ? 'Sharing...' : 'Share' }}
+                </button>
+                <button type="button" (click)="renameDocument(document)" [disabled]="renamingDocumentId === document.id">
+                  {{ renamingDocumentId === document.id ? 'Renaming...' : 'Rename' }}
+                </button>
+                <button type="button" class="danger" (click)="deleteDocument(document)" [disabled]="deletingDocumentId === document.id">
+                  {{ deletingDocumentId === document.id ? 'Deleting...' : 'Delete' }}
+                </button>
+              </div>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+
+  @if (versionHistoryDocument) {
+    <section class="version-history">
+      <header>
+        <h3>Version History: {{ versionHistoryDocument.fileName }}</h3>
+        <button type="button" class="ghost" (click)="closeVersionHistory()">Close</button>
+      </header>
+
+      @if (versionHistoryLoading) {
+        <p>Loading version history...</p>
+      } @else if (versionHistoryError) {
+        <p class="error">{{ versionHistoryError }}</p>
+      } @else if (versionHistoryRows.length === 0) {
+        <p>No historical versions found.</p>
+      } @else {
+        <table>
+          <thead>
+            <tr>
+              <th>Version</th>
+              <th>Date</th>
+              <th>Uploaded By</th>
+              <th>Size</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (version of versionHistoryRows; track version.id) {
+              <tr>
+                <td>v{{ version.versionNumber }}</td>
+                <td>{{ version.uploadedAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+                <td>{{ version.uploadedByName || 'System' }}</td>
+                <td>{{ humanFileSize(version.fileSizeBytes) }}</td>
+                <td>
+                  <button type="button" (click)="downloadDocument(version)">Download</button>
+                  @if (canPreview(version)) {
+                    <button type="button" (click)="previewDocument(version)">Preview</button>
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </section>
+  }
+</section>

@@ -1,0 +1,285 @@
+<section class="tasks-page">
+  <header class="page-header">
+    <div>
+      <h1>Tasks</h1>
+      <p>Checklist-driven execution across all venue enquiries.</p>
+    </div>
+    <div class="header-actions">
+      <button type="button" class="add-task-btn" (click)="openAddTaskModal()">+ Add Task</button>
+      <div class="view-toggle" role="group" aria-label="Task view mode">
+        <button type="button" [class.active]="viewMode() === 'all'" (click)="setViewMode('all')">All Tasks</button>
+        <button type="button" [class.active]="viewMode() === 'my'" (click)="setViewMode('my')">My Tasks</button>
+      </div>
+    </div>
+  </header>
+
+  @if (summary(); as modelSummary) {
+    <section class="summary-grid">
+      <button type="button" class="summary-card overdue" [class.active]="activeSummaryFilter() === 'overdue'" (click)="setSummaryFilter('overdue')">
+        <span>Overdue</span>
+        <strong>{{ modelSummary.overdue }}</strong>
+      </button>
+      <button type="button" class="summary-card today" [class.active]="activeSummaryFilter() === 'today'" (click)="setSummaryFilter('today')">
+        <span>Due Today</span>
+        <strong>{{ modelSummary.dueToday }}</strong>
+      </button>
+      <button type="button" class="summary-card week" [class.active]="activeSummaryFilter() === 'week'" (click)="setSummaryFilter('week')">
+        <span>Due This Week</span>
+        <strong>{{ modelSummary.dueThisWeek }}</strong>
+      </button>
+      <button type="button" class="summary-card progress" [class.active]="activeSummaryFilter() === 'in_progress'" (click)="setSummaryFilter('in_progress')">
+        <span>In Progress</span>
+        <strong>{{ modelSummary.inProgress }}</strong>
+      </button>
+      <button type="button" class="summary-card completed" [class.active]="activeSummaryFilter() === 'completed30'" (click)="setSummaryFilter('completed30')">
+        <span>Completed (30d)</span>
+        <strong>{{ modelSummary.completedLast30Days }}</strong>
+      </button>
+    </section>
+  }
+
+  <section class="filter-bar">
+    <form [formGroup]="filtersForm" class="filter-grid">
+      <label>
+        Status
+        <select formControlName="status">
+          <option value="">All</option>
+          <option value="todo">Todo</option>
+          <option value="in_progress">In Progress</option>
+          <option value="completed">Completed</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+      </label>
+
+      <label>
+        Assignee
+        <select formControlName="assigneeScope">
+          <option value="all">All</option>
+          <option value="mine">Mine</option>
+          <option value="unassigned">Unassigned</option>
+          <option value="specific">Specific user</option>
+        </select>
+      </label>
+
+      @if (filtersForm.get('assigneeScope')?.value === 'specific') {
+        <label>
+          User
+          <select formControlName="assigneeId">
+            <option value="">Select user</option>
+            @for (user of users(); track user.id) {
+              <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+            }
+          </select>
+        </label>
+      }
+
+      <label>
+        Category
+        <select formControlName="category">
+          <option value="">All</option>
+          <option value="follow_up">Follow Up</option>
+          <option value="site_visit">Site Visit</option>
+          <option value="document">Document</option>
+          <option value="payment">Payment</option>
+          <option value="catering">Catering</option>
+          <option value="setup">Setup</option>
+          <option value="communication">Communication</option>
+          <option value="internal">Internal</option>
+          <option value="other">Other</option>
+        </select>
+      </label>
+
+      <label>
+        Priority
+        <select formControlName="priority">
+          <option value="">All</option>
+          <option value="urgent">Urgent</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+      </label>
+
+      <label>
+        Group By
+        <select formControlName="groupBy">
+          <option value="none">None</option>
+          <option value="enquiry">Enquiry</option>
+          <option value="assignee">Assignee</option>
+          <option value="category">Category</option>
+          <option value="priority">Priority</option>
+        </select>
+      </label>
+
+      <label>
+        Sort
+        <select formControlName="sort">
+          <option value="due_date">Due Date</option>
+          <option value="priority">Priority</option>
+          <option value="enquiry">Enquiry</option>
+          <option value="created_date">Created Date</option>
+          <option value="manual">Manual</option>
+        </select>
+      </label>
+
+      <label>
+        Date Range
+        <select formControlName="datePreset" (change)="onDatePresetChange()">
+          <option value="">Custom</option>
+          <option value="this_month">This Month</option>
+          <option value="last_30">Last 30d</option>
+          <option value="last_90">Last 90d</option>
+          <option value="this_year">This Year</option>
+        </select>
+      </label>
+
+      <label>
+        From
+        <input type="date" formControlName="dateFrom" />
+      </label>
+
+      <label>
+        To
+        <input type="date" formControlName="dateTo" />
+      </label>
+    </form>
+  </section>
+
+  @if (selectedCount > 0) {
+    <section class="bulk-toolbar">
+      <strong>{{ selectedCount }} {{ selectedCount === 1 ? 'task' : 'tasks' }} selected</strong>
+      <form [formGroup]="bulkForm" class="bulk-actions">
+        <select formControlName="assignTo">
+          <option value="">Bulk Assign</option>
+          <option value="">Unassigned</option>
+          @for (user of users(); track user.id) {
+            <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+          }
+        </select>
+        <button type="button" (click)="applyBulkAssign()" [disabled]="bulkBusy()">Apply Assign</button>
+
+        <select formControlName="changePriority">
+          <option value="">Change Priority</option>
+          <option value="urgent">Urgent</option>
+          <option value="high">High</option>
+          <option value="medium">Medium</option>
+          <option value="low">Low</option>
+        </select>
+        <button type="button" (click)="applyBulkPriority()" [disabled]="bulkBusy()">Apply Priority</button>
+
+        <label>
+          Reschedule
+          <input type="date" formControlName="rescheduleDate" />
+        </label>
+        <button type="button" (click)="applyBulkReschedule()" [disabled]="bulkBusy()">Apply Date</button>
+
+        <button type="button" class="complete" (click)="applyBulkComplete()" [disabled]="bulkBusy()">Bulk Complete</button>
+      </form>
+      @if (bulkMessage()) {
+        <em>{{ bulkMessage() }}</em>
+      }
+    </section>
+  }
+
+  @if (loading()) {
+    <article class="state-card">Loading tasks...</article>
+  } @else if (errorMessage()) {
+    <article class="state-card error">{{ errorMessage() }}</article>
+  } @else {
+    <section class="table-wrap">
+      @for (group of groupedTasks(); track group.key) {
+        <article class="task-group">
+          @if (groupedTasks().length > 1) {
+            <header>
+              <h2>{{ group.label }}</h2>
+              <small>{{ group.tasks.length }} tasks</small>
+            </header>
+          }
+          <table>
+            <thead>
+              <tr>
+                <th class="check-col">
+                  <input
+                    type="checkbox"
+                    [checked]="allSelected"
+                    [indeterminate]="someSelected"
+                    (change)="toggleSelectAll($any($event.target).checked)" />
+                </th>
+                <th>Priority</th>
+                <th>Title</th>
+                <th>Enquiry</th>
+                <th>Assignee</th>
+                <th>Category</th>
+                <th>Due Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (task of group.tasks; track task.id) {
+                <tr [class.completed]="task.status === 'completed'" [class.overdue]="task.isOverdue">
+                  <td class="check-col">
+                    <input
+                      type="checkbox"
+                      [checked]="isSelected(task.id)"
+                      (change)="toggleRowSelection(task.id, $any($event.target).checked)" />
+                  </td>
+                  <td><span class="priority-pill" [attr.data-priority]="task.priority">{{ task.priority }}</span></td>
+                  <td>
+                    <button type="button" class="title-btn" (click)="toggleExpanded(task.id)">{{ task.title }}</button>
+                    @if (expandedTaskId() === task.id) {
+                      <div class="task-expanded">
+                        <p>{{ task.description || 'No description provided.' }}</p>
+                        @if (task.notes) {
+                          <small>Notes: {{ task.notes }}</small>
+                        }
+                      </div>
+                    }
+                  </td>
+                  <td>
+                    <button type="button" class="link-btn" (click)="openEnquiry(task)">
+                      {{ task.enquiryReference }}
+                    </button>
+                  </td>
+                  <td>{{ task.assigneeName || 'Unassigned' }}</td>
+                  <td><span class="category-chip">{{ task.category }}</span></td>
+                  <td>
+                    @if (task.dueDate) {
+                      <span>{{ task.dueDate | date: 'dd/MM/yyyy' }}</span>
+                      @if (task.dueTime) {
+                        <small>{{ task.dueTime }}</small>
+                      }
+                    } @else {
+                      <span>-</span>
+                    }
+                  </td>
+                  <td><span class="status-pill" [attr.data-status]="task.status">{{ task.status }}</span></td>
+                  <td class="actions">
+                    <label class="quick-complete">
+                      <input
+                        type="checkbox"
+                        [checked]="task.status === 'completed'"
+                        (change)="toggleComplete(task, $any($event.target).checked)" />
+                      <span>Done</span>
+                    </label>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </article>
+      }
+
+      @if (visibleTasks().length === 0) {
+        <article class="state-card">No tasks match the selected filters.</article>
+      }
+    </section>
+  }
+</section>
+
+<app-task-quick-create-modal
+  [isOpen]="showAddTaskModal()"
+  [defaultEnquiryId]="null"
+  (close)="closeAddTaskModal()"
+  (created)="onTaskQuickCreated($event)">
+</app-task-quick-create-modal>

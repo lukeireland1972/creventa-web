@@ -3,8 +3,39 @@
     <h1>Enquiry Management</h1>
     <p>Pipeline, status transitions, and same-date availability in one view.</p>
   </div>
-  <span class="period-pill">This Month</span>
+  <div class="page-header-actions">
+    <button
+      type="button"
+      class="seed-enquiries-btn"
+      (click)="createTestEnquiries()"
+      [disabled]="creatingTestEnquiries">
+      {{ creatingTestEnquiries ? 'Creating...' : 'Create 10 Test Enquiries' }}
+    </button>
+    <button type="button" class="add-task-btn" (click)="openAddTask()">+ Add Task</button>
+    <span class="period-pill">This Month</span>
+  </div>
 </section>
+
+@if (testDataFeedbackMessage) {
+  <p
+    class="test-data-feedback"
+    [class.info]="testDataFeedbackType === 'info'"
+    [class.success]="testDataFeedbackType === 'success'"
+    [class.error]="testDataFeedbackType === 'error'">
+    {{ testDataFeedbackMessage }}
+  </p>
+}
+
+<app-task-quick-create-modal
+  [isOpen]="showAddTaskModal"
+  [defaultEnquiryId]="selectedEnquiryId"
+  (close)="closeAddTaskModal()"
+  (created)="onTaskQuickCreated($event)">
+</app-task-quick-create-modal>
+
+@if (enquiryLoadError) {
+  <p class="error-banner">{{ enquiryLoadError }}</p>
+}
 
 @if (listResponse; as list) {
   <section class="stats">
@@ -68,6 +99,19 @@
       <option [value]="quickFilter.value">{{ quickFilter.label }}</option>
     }
   </select>
+  <label class="score-field">
+    <span>Score Min</span>
+    <input type="number" min="0" max="100" step="1" formControlName="conversionScoreMin" placeholder="0" />
+  </label>
+  <label class="score-field">
+    <span>Score Max</span>
+    <input type="number" min="0" max="100" step="1" formControlName="conversionScoreMax" placeholder="100" />
+  </label>
+  <select formControlName="sort">
+    @for (option of conversionSortOptions; track option.value) {
+      <option [value]="option.value">{{ option.label }}</option>
+    }
+  </select>
   <select formControlName="pageSize">
     <option [value]="10">10 per page</option>
     <option [value]="25">25 per page</option>
@@ -80,12 +124,31 @@
   <p class="bulk-feedback-banner">{{ bulkActionFeedback }}</p>
 }
 
+@if (mergeResultMessage && selectedCount === 0) {
+  <p class="bulk-feedback-banner">{{ mergeResultMessage }}</p>
+}
+
+@if (bulkUndoState && selectedCount === 0) {
+  <section class="bulk-undo bulk-undo-standalone">
+    <span>Undo available ({{ bulkUndoSecondsRemaining }}s)</span>
+    <button type="button" (click)="undoLastBulkAction()" [disabled]="bulkActionBusy">Undo</button>
+  </section>
+}
+
 @if (selectedCount > 0) {
   <section class="bulk-toolbar">
     <div class="bulk-toolbar-left">
       <strong>{{ selectedCount }} {{ selectedCount === 1 ? 'enquiry' : 'enquiries' }} selected</strong>
+      @if (canSelectAllMatching) {
+        <button type="button" class="inline-action" (click)="selectAllMatchingEnquiries()" [disabled]="selectingAllMatching || bulkActionBusy">
+          {{ selectingAllMatching ? 'Selecting...' : ('Select all ' + allMatchingCount + ' matching') }}
+        </button>
+      }
       @if (bulkActionFeedback) {
         <span class="bulk-feedback">{{ bulkActionFeedback }}</span>
+      }
+      @if (mergeResultMessage) {
+        <span class="bulk-feedback">{{ mergeResultMessage }}</span>
       }
     </div>
     <div class="bulk-toolbar-actions">
@@ -114,8 +177,29 @@
         {{ loadingBulkEmailRecipients ? 'Loading...' : 'Send Email' }}
       </button>
       <button type="button" (click)="exportSelected()" [disabled]="bulkActionBusy">Export Selected</button>
+      <button type="button" (click)="confirmBulkArchive()" [disabled]="bulkActionBusy">Archive</button>
+      <button type="button" (click)="openMergeModalForSelected()" [disabled]="bulkActionBusy || !canMergeSelected">Merge</button>
       <button type="button" class="ghost" (click)="clearBulkSelection()" [disabled]="bulkActionBusy">Clear</button>
     </div>
+
+    @if (hasBulkProgress) {
+      <div class="bulk-progress">
+        <div class="bulk-progress-meta">
+          <span>{{ bulkProgressLabel }}</span>
+          <strong>{{ bulkProgressCompleted }} of {{ bulkProgressTotal }} completed</strong>
+        </div>
+        <div class="bulk-progress-track" role="progressbar" [attr.aria-valuenow]="bulkProgressPercent" aria-valuemin="0" aria-valuemax="100">
+          <span [style.width.%]="bulkProgressPercent"></span>
+        </div>
+      </div>
+    }
+
+    @if (bulkUndoState) {
+      <div class="bulk-undo">
+        <span>Undo available ({{ bulkUndoSecondsRemaining }}s)</span>
+        <button type="button" (click)="undoLastBulkAction()" [disabled]="bulkActionBusy">Undo</button>
+      </div>
+    }
   </section>
 }
 
@@ -138,6 +222,7 @@
             <th>Date</th>
             <th>Guests</th>
             <th>Status</th>
+            <th>Score</th>
             <th>Value</th>
             <th>Owner</th>
             <th>Last Activity</th>
@@ -176,6 +261,19 @@
                 </span>
               </td>
               <td>
+                <div class="conversion-score-cell">
+                  <span class="conversion-badge" [attr.data-band]="conversionScoreBandToken(enquiry.conversionScoreBand, enquiry.conversionScore)">
+                    {{ conversionScoreValue(enquiry.conversionScore) }}
+                  </span>
+                  <small
+                    class="trend-label"
+                    [attr.data-direction]="conversionTrendToken(enquiry.conversionTrendDirection)">
+                    {{ conversionTrendDirectionLabel(enquiry.conversionTrendDirection) }}
+                    {{ conversionTrendDeltaLabel(enquiry.conversionTrendDelta) }}
+                  </small>
+                </div>
+              </td>
+              <td>
                 {{ enquiry.proposalValue ? (enquiry.proposalValue | number: '1.0-0') : 'TBD' }}
                 {{ enquiry.currencyCode }}
               </td>
@@ -183,6 +281,21 @@
               <td>
                 <div class="cell-main">{{ enquiry.lastActivityAtUtc | date: 'dd/MM HH:mm' }}</div>
                 <div class="cell-sub">{{ enquiry.daysSinceContact }} days</div>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="11" class="enquiries-empty-cell">
+                <p>
+                  @if (hasEnquiryFiltersApplied) {
+                    No enquiries match the current filters.
+                  } @else {
+                    No enquiries available for the selected tab.
+                  }
+                </p>
+                @if (hasEnquiryFiltersApplied) {
+                  <button type="button" class="inline-action" (click)="clearEnquiryFilters()">Clear filters</button>
+                }
               </td>
             </tr>
           }
@@ -196,42 +309,578 @@
     @if (selectedEnquiry; as detail) {
       <aside class="detail-panel">
         <header>
-          <div>
+          <div class="detail-header-main">
             <h2>{{ detail.reference }}</h2>
             <p>{{ detail.contactFirstName }} {{ detail.contactLastName }}</p>
+            @if (detail.returningGuestInsight; as returningGuest) {
+              @if (returningGuest.isReturningGuest) {
+                <div class="returning-guest-chip">
+                  <strong>Returning Guest</strong>
+                  <span>
+                    {{ returningGuest.previousEnquiryCount }} previous enquiries
+                    @if (returningGuest.lastEventName) {
+                      · last event: {{ returningGuest.lastEventName }}
+                    }
+                  </span>
+                </div>
+              }
+            }
           </div>
-          <span class="status" [attr.data-status]="statusToken(detail.status)">{{ detail.status }}</span>
+          <div class="detail-header-badges">
+            <span class="conversion-badge large" [attr.data-band]="conversionScoreBandToken(detail.conversionScoreBand, detail.conversionScore)">
+              {{ conversionScoreValue(detail.conversionScore) }}
+            </span>
+            <span class="status" [attr.data-status]="statusToken(detail.status)">{{ detail.status }}</span>
+          </div>
         </header>
+
+        <section class="nudge-panel">
+          <header>
+            <h3>AI Follow-Up Nudges</h3>
+            @if (detail.conversionScore !== null && detail.conversionScore !== undefined) {
+              <small
+                class="nudge-trend"
+                [attr.data-direction]="conversionTrendToken(detail.conversionTrendDirection)">
+                {{ conversionTrendDirectionLabel(detail.conversionTrendDirection) }}
+                {{ conversionTrendDeltaLabel(detail.conversionTrendDelta) }} this week
+              </small>
+            }
+          </header>
+
+          @if (aiFollowUpRecommendationsLoading) {
+            <p class="nudge-empty">Analysing engagement and pipeline signals...</p>
+          } @else if (aiFollowUpRecommendations.length > 0) {
+            <ul>
+              @for (recommendation of aiFollowUpRecommendations; track recommendation.key) {
+                <li>
+                  <div class="nudge-copy">
+                    <div class="nudge-title-row">
+                      <strong>{{ recommendation.title }}</strong>
+                      <span class="priority-pill" [attr.data-priority]="followUpPriorityToken(recommendation.priority)">
+                        {{ recommendation.priority }}
+                      </span>
+                    </div>
+                    <p>{{ recommendation.reason }}</p>
+                    <small>Recommended {{ recommendation.recommendedChannel }} · {{ recommendation.optimalSendAtUtc | date: 'EEE d MMM, HH:mm' }}</small>
+                  </div>
+                  <div class="nudge-actions">
+                    <button
+                      type="button"
+                      class="primary"
+                      [disabled]="isRecommendationExecuting(recommendation)"
+                      (click)="executeFollowUpRecommendation(recommendation)">
+                      {{ isRecommendationExecuting(recommendation) ? 'Running...' : 'Run Action' }}
+                    </button>
+                    @if (recommendation.routeHint) {
+                      <button type="button" class="secondary" (click)="openFollowUpRecommendation(recommendation)">Open</button>
+                    }
+                  </div>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="nudge-empty">{{ aiFollowUpRecommendationsMessage || 'No nudges right now.' }}</p>
+          }
+
+          @if (aiFollowUpExecutionMessage) {
+            <p class="nudge-feedback success">{{ aiFollowUpExecutionMessage }}</p>
+          }
+          @if (aiFollowUpExecutionError) {
+            <p class="nudge-feedback error">{{ aiFollowUpExecutionError }}</p>
+          }
+        </section>
 
         <div class="actions">
           <button (click)="changeStatus('Tentative')">Tentative</button>
           <button (click)="changeStatus('OpenProposal')">Open Proposal</button>
           <button (click)="changeStatus('Provisional')">Provisional</button>
           <button (click)="changeStatus('Confirmed')">Confirmed</button>
+          <button class="danger" (click)="changeStatus('Lost')">Lost</button>
         </div>
 
         <nav class="detail-tabs">
           <button [class.active]="detailTab === 'overview'" (click)="changeDetailTab('overview')">Overview</button>
           <button [class.active]="detailTab === 'events'" (click)="changeDetailTab('events')">Events</button>
           <button [class.active]="detailTab === 'appointments'" (click)="changeDetailTab('appointments')">Appointments</button>
+          <button [class.active]="detailTab === 'tasks'" (click)="changeDetailTab('tasks')">Tasks</button>
           <button [class.active]="detailTab === 'proposals'" (click)="changeDetailTab('proposals')">Proposals</button>
+          @if (canShowPaymentsTab) {
+            <button [class.active]="detailTab === 'payments'" (click)="changeDetailTab('payments')">Payments</button>
+          }
+          <button [class.active]="detailTab === 'sustainability'" (click)="changeDetailTab('sustainability')">Sustainability</button>
           <button [class.active]="detailTab === 'documents'" (click)="changeDetailTab('documents')">Documents</button>
           <button [class.active]="detailTab === 'activity'" (click)="changeDetailTab('activity')">Activity</button>
         </nav>
 
         @if (detailTab === 'overview') {
           <section class="tab-panel">
+            @if (detail.returningGuestInsight; as returningGuest) {
+              @if (returningGuest.isReturningGuest) {
+                <article class="returning-guest-summary-card">
+                  <h3>Returning Guest Intelligence</h3>
+                  <div class="returning-guest-metrics">
+                    <span>Prev confirmed: <strong>{{ returningGuest.previousConfirmedEventCount }}</strong></span>
+                    <span>Lifetime value: <strong>{{ returningGuest.lifetimeValue | number: '1.0-0' }} {{ detail.currencyCode }}</strong></span>
+                    <span>Avg event value: <strong>{{ returningGuest.averageEventValue | number: '1.0-0' }} {{ detail.currencyCode }}</strong></span>
+                    @if (returningGuest.preferredEventStyle) {
+                      <span>Preferred style: <strong>{{ returningGuest.preferredEventStyle }}</strong></span>
+                    }
+                    @if (returningGuest.preferredSetupStyle) {
+                      <span>Preferred setup: <strong>{{ returningGuest.preferredSetupStyle }}</strong></span>
+                    }
+                    @if (returningGuest.dietaryPreferences) {
+                      <span>Dietary note: <strong>{{ returningGuest.dietaryPreferences }}</strong></span>
+                    }
+                  </div>
+                </article>
+              }
+            }
+
             <div class="overview-grid">
-              <p><strong>Event:</strong> {{ detail.eventName || detail.eventType }}</p>
-              <p><strong>Date:</strong> {{ detail.eventStartUtc | date: 'dd/MM/yyyy HH:mm' }}</p>
-              <p><strong>Guests:</strong> {{ detail.guestsExpected }}</p>
-              <p><strong>Style:</strong> {{ detail.eventStyle || 'Not set' }}</p>
-              <p><strong>Manager:</strong> {{ detail.eventManagerName || 'Unassigned' }}</p>
-              <p><strong>Lead Quality:</strong> {{ detail.leadQuality }}/5</p>
-              <p><strong>Source:</strong> {{ detail.sourceType }} {{ detail.sourceDetail ? '· ' + detail.sourceDetail : '' }}</p>
-              <p><strong>Phone:</strong> {{ detail.contactPhoneNumberE164 }}</p>
-              <p><strong>Email:</strong> {{ detail.contactEmail }}</p>
+              <article class="overview-field" [class.editing]="isOverviewEditing('contactName')" [class.saved]="isOverviewFieldSaved('contactName')">
+                <label>Contact Name</label>
+                @if (isOverviewEditing('contactName')) {
+                  <input
+                    type="text"
+                    [value]="overviewDraft.contactName"
+                    (input)="overviewDraft.contactName = $any($event.target).value"
+                    (blur)="saveOverviewField('contactName')"
+                    (keydown)="onOverviewFieldKeydown('contactName', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('contactName')">
+                    <span>{{ overviewDraft.contactName || (detail.contactFirstName + ' ' + detail.contactLastName) }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('contactName')) {
+                  <p class="inline-error">{{ overviewFieldError('contactName') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('eventName')" [class.saved]="isOverviewFieldSaved('eventName')">
+                <label>Event Name</label>
+                @if (isOverviewEditing('eventName')) {
+                  <input
+                    type="text"
+                    [value]="overviewDraft.eventName"
+                    (input)="overviewDraft.eventName = $any($event.target).value"
+                    (blur)="saveOverviewField('eventName')"
+                    (keydown)="onOverviewFieldKeydown('eventName', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('eventName')">
+                    <span>{{ overviewDraft.eventName || detail.eventName || detail.eventType }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('eventName')) {
+                  <p class="inline-error">{{ overviewFieldError('eventName') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('eventDate')" [class.saved]="isOverviewFieldSaved('eventDate')">
+                <label>Date</label>
+                @if (isOverviewEditing('eventDate')) {
+                  <input
+                    type="date"
+                    [value]="overviewDraft.eventDate"
+                    (input)="overviewDraft.eventDate = $any($event.target).value"
+                    (blur)="saveOverviewField('eventDate')"
+                    (keydown)="onOverviewFieldKeydown('eventDate', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('eventDate')">
+                    <span>{{ detail.eventStartUtc | date: 'dd/MM/yyyy' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('eventDate')) {
+                  <p class="inline-error">{{ overviewFieldError('eventDate') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('startTime')" [class.saved]="isOverviewFieldSaved('startTime')">
+                <label>Start Time</label>
+                @if (isOverviewEditing('startTime')) {
+                  <input
+                    type="time"
+                    [value]="overviewDraft.startTime"
+                    (input)="overviewDraft.startTime = $any($event.target).value"
+                    (blur)="saveOverviewField('startTime')"
+                    (keydown)="onOverviewFieldKeydown('startTime', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('startTime')">
+                    <span>{{ detail.eventStartUtc | date: 'HH:mm' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('startTime')) {
+                  <p class="inline-error">{{ overviewFieldError('startTime') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('guestsExpected')" [class.saved]="isOverviewFieldSaved('guestsExpected')">
+                <label>Guests</label>
+                @if (isOverviewEditing('guestsExpected')) {
+                  <input
+                    type="number"
+                    min="1"
+                    [value]="overviewDraft.guestsExpected"
+                    (input)="overviewDraft.guestsExpected = +$any($event.target).value"
+                    (blur)="saveOverviewField('guestsExpected')"
+                    (keydown)="onOverviewFieldKeydown('guestsExpected', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('guestsExpected')">
+                    <span>{{ detail.guestsExpected }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('guestsExpected')) {
+                  <p class="inline-error">{{ overviewFieldError('guestsExpected') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('eventStyle')" [class.saved]="isOverviewFieldSaved('eventStyle')">
+                <label>Style</label>
+                @if (isOverviewEditing('eventStyle')) {
+                  <select
+                    [value]="overviewDraft.eventStyle"
+                    (change)="overviewDraft.eventStyle = $any($event.target).value; saveOverviewField('eventStyle')"
+                    (keydown)="onOverviewFieldKeydown('eventStyle', $event)">
+                    <option value="">Not set</option>
+                    @for (style of eventStyleOptions; track style) {
+                      <option [value]="style">{{ style }}</option>
+                    }
+                  </select>
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('eventStyle')">
+                    <span>{{ detail.eventStyle || 'Not set' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('eventStyle')) {
+                  <p class="inline-error">{{ overviewFieldError('eventStyle') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('setupStyle')" [class.saved]="isOverviewFieldSaved('setupStyle')">
+                <label>Setup Style</label>
+                @if (isOverviewEditing('setupStyle')) {
+                  <select
+                    [value]="overviewDraft.setupStyle"
+                    (change)="overviewDraft.setupStyle = $any($event.target).value; saveOverviewField('setupStyle')"
+                    (keydown)="onOverviewFieldKeydown('setupStyle', $event)">
+                    <option value="">Not set</option>
+                    @for (style of setupStyleOptions; track style) {
+                      <option [value]="style">{{ style }}</option>
+                    }
+                  </select>
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('setupStyle')">
+                    <span>{{ detail.setupStyle || 'Not set' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('setupStyle')) {
+                  <p class="inline-error">{{ overviewFieldError('setupStyle') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('eventManagerUserId')" [class.saved]="isOverviewFieldSaved('eventManagerUserId')">
+                <label>Manager</label>
+                @if (isOverviewEditing('eventManagerUserId')) {
+                  <select
+                    [value]="overviewDraft.eventManagerUserId"
+                    (change)="overviewDraft.eventManagerUserId = $any($event.target).value; saveOverviewField('eventManagerUserId')"
+                    (keydown)="onOverviewFieldKeydown('eventManagerUserId', $event)">
+                    <option value="">Unassigned</option>
+                    @for (manager of managersForOverview; track manager.id) {
+                      <option [value]="manager.id">{{ manager.firstName }} {{ manager.lastName }}</option>
+                    }
+                  </select>
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('eventManagerUserId')">
+                    <span>{{ detail.eventManagerName || 'Unassigned' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('eventManagerUserId')) {
+                  <p class="inline-error">{{ overviewFieldError('eventManagerUserId') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('leadQuality')" [class.saved]="isOverviewFieldSaved('leadQuality')">
+                <label>Lead Quality (1-5)</label>
+                @if (isOverviewEditing('leadQuality')) {
+                  <input
+                    type="number"
+                    min="1"
+                    max="5"
+                    [value]="overviewDraft.leadQuality"
+                    (input)="overviewDraft.leadQuality = +$any($event.target).value"
+                    (blur)="saveOverviewField('leadQuality')"
+                    (keydown)="onOverviewFieldKeydown('leadQuality', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('leadQuality')">
+                    <span>{{ detail.leadQuality }}/5</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('leadQuality')) {
+                  <p class="inline-error">{{ overviewFieldError('leadQuality') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('sourceType')" [class.saved]="isOverviewFieldSaved('sourceType')">
+                <label>Source</label>
+                @if (isOverviewEditing('sourceType')) {
+                  <select
+                    [value]="overviewDraft.sourceType"
+                    (change)="overviewDraft.sourceType = $any($event.target).value; saveOverviewField('sourceType')"
+                    (keydown)="onOverviewFieldKeydown('sourceType', $event)">
+                    @for (source of sourceTypeOptions; track source) {
+                      <option [value]="source">{{ source }}</option>
+                    }
+                  </select>
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('sourceType')">
+                    <span>{{ detail.sourceType }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('sourceType')) {
+                  <p class="inline-error">{{ overviewFieldError('sourceType') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('sourceDetail')" [class.saved]="isOverviewFieldSaved('sourceDetail')">
+                <label>Source Detail</label>
+                @if (isOverviewEditing('sourceDetail')) {
+                  <input
+                    type="text"
+                    [value]="overviewDraft.sourceDetail"
+                    (input)="overviewDraft.sourceDetail = $any($event.target).value"
+                    (blur)="saveOverviewField('sourceDetail')"
+                    (keydown)="onOverviewFieldKeydown('sourceDetail', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('sourceDetail')">
+                    <span>{{ detail.sourceDetail || 'None' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('sourceDetail')) {
+                  <p class="inline-error">{{ overviewFieldError('sourceDetail') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('contactPhoneNumberE164')" [class.saved]="isOverviewFieldSaved('contactPhoneNumberE164')">
+                <label>Phone</label>
+                @if (isOverviewEditing('contactPhoneNumberE164')) {
+                  <input
+                    type="text"
+                    [value]="overviewDraft.contactPhoneNumberE164"
+                    (input)="overviewDraft.contactPhoneNumberE164 = $any($event.target).value"
+                    (blur)="saveOverviewField('contactPhoneNumberE164')"
+                    (keydown)="onOverviewFieldKeydown('contactPhoneNumberE164', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('contactPhoneNumberE164')">
+                    <span>{{ detail.contactPhoneNumberE164 }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('contactPhoneNumberE164')) {
+                  <p class="inline-error">{{ overviewFieldError('contactPhoneNumberE164') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('contactEmail')" [class.saved]="isOverviewFieldSaved('contactEmail')">
+                <label>Email</label>
+                @if (isOverviewEditing('contactEmail')) {
+                  <input
+                    type="email"
+                    [value]="overviewDraft.contactEmail"
+                    (input)="overviewDraft.contactEmail = $any($event.target).value"
+                    (blur)="saveOverviewField('contactEmail')"
+                    (keydown)="onOverviewFieldKeydown('contactEmail', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('contactEmail')">
+                    <span>{{ detail.contactEmail }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('contactEmail')) {
+                  <p class="inline-error">{{ overviewFieldError('contactEmail') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('companyName')" [class.saved]="isOverviewFieldSaved('companyName')">
+                <label>Company</label>
+                @if (isOverviewEditing('companyName')) {
+                  <input
+                    type="text"
+                    [value]="overviewDraft.companyName"
+                    (input)="overviewDraft.companyName = $any($event.target).value"
+                    (blur)="saveOverviewField('companyName')"
+                    (keydown)="onOverviewFieldKeydown('companyName', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('companyName')">
+                    <span>{{ detail.companyName || 'None' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('companyName')) {
+                  <p class="inline-error">{{ overviewFieldError('companyName') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('budgetMinAmount')" [class.saved]="isOverviewFieldSaved('budgetMinAmount')">
+                <label>Budget Min</label>
+                @if (isOverviewEditing('budgetMinAmount')) {
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    [value]="overviewDraft.budgetMinAmount"
+                    (input)="overviewDraft.budgetMinAmount = $any($event.target).value"
+                    (blur)="saveOverviewField('budgetMinAmount')"
+                    (keydown)="onOverviewFieldKeydown('budgetMinAmount', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('budgetMinAmount')">
+                    <span>{{ detail.budgetMinAmount ? (detail.budgetMinAmount | number: '1.2-2') : 'Not set' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('budgetMinAmount')) {
+                  <p class="inline-error">{{ overviewFieldError('budgetMinAmount') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('budgetMaxAmount')" [class.saved]="isOverviewFieldSaved('budgetMaxAmount')">
+                <label>Event Value</label>
+                @if (isOverviewEditing('budgetMaxAmount')) {
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    [value]="overviewDraft.budgetMaxAmount"
+                    (input)="overviewDraft.budgetMaxAmount = $any($event.target).value"
+                    (blur)="saveOverviewField('budgetMaxAmount')"
+                    (keydown)="onOverviewFieldKeydown('budgetMaxAmount', $event)" />
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('budgetMaxAmount')">
+                    <span>{{ detail.budgetMaxAmount ? (detail.budgetMaxAmount | number: '1.2-2') : 'Not set' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('budgetMaxAmount')) {
+                  <p class="inline-error">{{ overviewFieldError('budgetMaxAmount') }}</p>
+                }
+              </article>
+
+              <article class="overview-field full-width" [class.editing]="isOverviewEditing('specialRequirements')" [class.saved]="isOverviewFieldSaved('specialRequirements')">
+                <label>Special Requirements</label>
+                @if (isOverviewEditing('specialRequirements')) {
+                  <textarea
+                    rows="3"
+                    [value]="overviewDraft.specialRequirements"
+                    (input)="overviewDraft.specialRequirements = $any($event.target).value"
+                    (blur)="saveOverviewField('specialRequirements')"
+                    (keydown)="onOverviewFieldKeydown('specialRequirements', $event)"></textarea>
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('specialRequirements')">
+                    <span>{{ detail.specialRequirements || 'None' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('specialRequirements')) {
+                  <p class="inline-error">{{ overviewFieldError('specialRequirements') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('hasFlexibleDates')" [class.saved]="isOverviewFieldSaved('hasFlexibleDates')">
+                <label>Flexible Dates</label>
+                @if (isOverviewEditing('hasFlexibleDates')) {
+                  <label class="checkbox-edit">
+                    <input
+                      type="checkbox"
+                      [checked]="overviewDraft.hasFlexibleDates"
+                      (change)="overviewDraft.hasFlexibleDates = $any($event.target).checked; saveOverviewField('hasFlexibleDates')" />
+                    <span>{{ overviewDraft.hasFlexibleDates ? 'Enabled' : 'Disabled' }}</span>
+                  </label>
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('hasFlexibleDates')">
+                    <span>{{ detail.hasFlexibleDates ? 'Enabled' : 'Disabled' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('hasFlexibleDates')) {
+                  <p class="inline-error">{{ overviewFieldError('hasFlexibleDates') }}</p>
+                }
+              </article>
+
+              <article class="overview-field" [class.editing]="isOverviewEditing('marketingConsent')" [class.saved]="isOverviewFieldSaved('marketingConsent')">
+                <label>Marketing Consent</label>
+                @if (isOverviewEditing('marketingConsent')) {
+                  <label class="checkbox-edit">
+                    <input
+                      type="checkbox"
+                      [checked]="overviewDraft.marketingConsent"
+                      (change)="overviewDraft.marketingConsent = $any($event.target).checked; saveOverviewField('marketingConsent')" />
+                    <span>{{ overviewDraft.marketingConsent ? 'Opted in' : 'Not opted in' }}</span>
+                  </label>
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('marketingConsent')">
+                    <span>{{ detail.marketingConsent ? 'Opted in' : 'Not opted in' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('marketingConsent')) {
+                  <p class="inline-error">{{ overviewFieldError('marketingConsent') }}</p>
+                }
+              </article>
+
+              <article class="overview-field full-width" [class.editing]="isOverviewEditing('flexibleDateNotes')" [class.saved]="isOverviewFieldSaved('flexibleDateNotes')">
+                <label>Flexible Date Notes</label>
+                @if (isOverviewEditing('flexibleDateNotes')) {
+                  <textarea
+                    rows="3"
+                    [value]="overviewDraft.flexibleDateNotes"
+                    (input)="overviewDraft.flexibleDateNotes = $any($event.target).value"
+                    (blur)="saveOverviewField('flexibleDateNotes')"
+                    (keydown)="onOverviewFieldKeydown('flexibleDateNotes', $event)"></textarea>
+                } @else {
+                  <button type="button" class="field-display" (click)="startOverviewEdit('flexibleDateNotes')">
+                    <span>{{ detail.flexibleDateNotes || 'None' }}</span>
+                    <span class="pencil">&#9998;</span>
+                  </button>
+                }
+                @if (overviewFieldError('flexibleDateNotes')) {
+                  <p class="inline-error">{{ overviewFieldError('flexibleDateNotes') }}</p>
+                }
+              </article>
             </div>
+
+            @if (timelineSubEvents.length > 0) {
+              <div class="overview-sub-event-summary">
+                <h3>Sub-event summary</h3>
+                <div class="overview-sub-event-summary-grid">
+                  <article>
+                    <span>Sub-events</span>
+                    <strong>{{ timelineSubEvents.length }}</strong>
+                  </article>
+                  <article>
+                    <span>Total guests</span>
+                    <strong>{{ subEventTotalGuests }}</strong>
+                  </article>
+                  <article>
+                    <span>Spaces used</span>
+                    <strong>{{ subEventUniqueSpaceCount }}</strong>
+                  </article>
+                  <article>
+                    <span>Scheduled hours</span>
+                    <strong>{{ subEventTotalDurationHours | number: '1.1-1' }}</strong>
+                  </article>
+                </div>
+              </div>
+            }
 
             @if (detail.sameDateAvailability) {
               <div class="same-date">
@@ -240,7 +889,28 @@
                   <article>
                     <header>
                       <strong>{{ group.spaceName }}</strong>
-                      <span [class.busy]="!group.isAvailable">{{ group.isAvailable ? 'Available' : 'Busy' }}</span>
+                      <div class="space-actions">
+                        @if (isSpaceAssigned(group.spaceId)) {
+                          <span class="space-badge booked">Booked</span>
+                          <button
+                            type="button"
+                            class="space-remove"
+                            [disabled]="spaceAssignmentBusySpaceId === group.spaceId"
+                            (click)="unassignSpace(group.spaceId)">
+                            {{ spaceAssignmentBusySpaceId === group.spaceId ? '...' : 'X' }}
+                          </button>
+                        } @else if (showSpaceBookButton(group.spaceId, group.isAvailable)) {
+                          <button
+                            type="button"
+                            class="book-btn"
+                            [disabled]="spaceAssignmentBusySpaceId === group.spaceId"
+                            (click)="bookSpace(group.spaceId)">
+                            {{ spaceAssignmentBusySpaceId === group.spaceId ? 'Booking...' : 'Book' }}
+                          </button>
+                        } @else {
+                          <span class="space-badge unavailable">Unavailable</span>
+                        }
+                      </div>
                     </header>
                     @for (event of group.events; track event) {
                       <p>
@@ -251,19 +921,391 @@
                 }
               </div>
             }
+
+            <div class="cross-venue-routing">
+              <h3>Cross-venue routing</h3>
+              <p>Route to a sister venue when this date or layout cannot be accommodated locally.</p>
+
+              @if (routingOptionsLoading) {
+                <p class="routing-muted">Checking shared availability across the portfolio...</p>
+              } @else if (routingOptionsError) {
+                <p class="routing-error">{{ routingOptionsError }}</p>
+              } @else if (hasCrossVenueRoutingOptions) {
+                <div class="routing-controls">
+                  <label>
+                    <span>Suggested Venue</span>
+                    <select
+                      [value]="selectedRoutingVenueId"
+                      (change)="onRoutingVenueSelected($any($event.target).value)"
+                      [disabled]="routingTransferring">
+                      @for (option of routingOptions?.venueOptions ?? []; track option.venueId) {
+                        <option [value]="option.venueId">
+                          {{ option.venueName }} · {{ option.availableSpaceCount }}/{{ option.totalSpaceCount }} spaces free
+                        </option>
+                      }
+                    </select>
+                  </label>
+
+                  <label>
+                    <span>Transfer Reason (optional)</span>
+                    <textarea
+                      rows="2"
+                      [value]="routingTransferReason"
+                      (input)="routingTransferReason = $any($event.target).value"
+                      [disabled]="routingTransferring"
+                      placeholder="e.g. Date unavailable at this venue"></textarea>
+                  </label>
+                </div>
+
+                @if (selectedRoutingVenueOption; as routingVenue) {
+                  <div class="routing-summary">
+                    <span>Same-date enquiries: <strong>{{ routingVenue.sameDateEnquiryCount }}</strong></span>
+                    <span>Available spaces: <strong>{{ routingVenue.availableSpaceCount }} / {{ routingVenue.totalSpaceCount }}</strong></span>
+                  </div>
+
+                  <div class="routing-space-grid">
+                    @for (space of routingVenue.spaces; track space.spaceId) {
+                      <article [class.available]="space.isAvailable" [class.unavailable]="!space.isAvailable">
+                        <strong>{{ space.spaceName }}</strong>
+                        <span>Capacity {{ space.capacity }}</span>
+                        <span>
+                          @if (space.isAvailable) {
+                            Available
+                          } @else {
+                            Busy ({{ space.sameDateConflictCount }})
+                          }
+                        </span>
+                      </article>
+                    }
+                  </div>
+                }
+
+                <div class="routing-actions">
+                  <button
+                    type="button"
+                    class="book-btn"
+                    [disabled]="routingTransferring || !selectedRoutingVenueId"
+                    (click)="transferSelectedEnquiryToVenue()">
+                    {{ routingTransferring ? 'Transferring...' : 'Transfer to Venue' }}
+                  </button>
+                  @if (routingTransferMessage) {
+                    <span class="routing-feedback">{{ routingTransferMessage }}</span>
+                  }
+                </div>
+              } @else {
+                <p class="routing-muted">No sister-venue options available for this enquiry yet.</p>
+              }
+            </div>
           </section>
         }
 
         @if (detailTab === 'events') {
-          <section class="tab-panel">
-            @for (subEvent of detail.subEvents; track subEvent) {
-              <article class="row">
-                <strong>{{ subEvent.name }}</strong>
-                <span>{{ subEvent.startUtc | date: 'dd/MM HH:mm' }} - {{ subEvent.endUtc | date: 'HH:mm' }}</span>
-                <span>{{ subEvent.guestCount }} guests · {{ subEvent.setupStyle || 'Custom' }}</span>
+          <section class="tab-panel events-panel">
+            <div class="events-panel-actions">
+              <button type="button" (click)="toggleAddSubEventForm()">
+                {{ showAddSubEventForm ? 'Close Sub-Event Form' : 'Create Sub-Event' }}
+              </button>
+            </div>
+
+            <div class="sub-event-totals-grid">
+              <article>
+                <span>Total Sub-Events</span>
+                <strong>{{ timelineSubEvents.length }}</strong>
+              </article>
+              <article>
+                <span>Aggregate Guests</span>
+                <strong>{{ subEventTotalGuests }}</strong>
+              </article>
+              <article>
+                <span>Spaces Used</span>
+                <strong>{{ subEventUniqueSpaceCount }}</strong>
+              </article>
+              <article>
+                <span>Total Scheduled Hours</span>
+                <strong>{{ subEventTotalDurationHours | number: '1.1-1' }}</strong>
+              </article>
+            </div>
+
+            @if (subEventSpaceUtilisation.length > 0) {
+              <div class="space-utilisation-list">
+                @for (util of subEventSpaceUtilisation; track util.spaceId) {
+                  <article>
+                    <header>
+                      <strong>{{ util.spaceName }}</strong>
+                      <span>{{ util.minutes }} mins ({{ util.percent | number: '1.0-0' }}%)</span>
+                    </header>
+                    <div class="util-track">
+                      <div class="util-fill" [style.width.%]="util.percent"></div>
+                    </div>
+                  </article>
+                }
+              </div>
+            }
+
+            @if (showAddSubEventForm) {
+              <article class="sub-event-editor">
+                <h3>New sub-event</h3>
+                <div class="sub-event-grid">
+                  <label>
+                    <span>Name</span>
+                    <input
+                      type="text"
+                      [value]="newSubEventDraft.name"
+                      (input)="updateNewSubEventDraft({ name: $any($event.target).value })"
+                      placeholder="e.g. Evening Reception" />
+                  </label>
+                  <label>
+                    <span>Type</span>
+                    <select [value]="newSubEventDraft.type" (change)="updateNewSubEventDraft({ type: $any($event.target).value })">
+                      @for (type of subEventTypeOptions; track type) {
+                        <option [value]="type">{{ type }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>
+                    <span>Status</span>
+                    <select [value]="newSubEventDraft.status" (change)="updateNewSubEventDraft({ status: $any($event.target).value })">
+                      @for (status of subEventStatusOptions; track status) {
+                        <option [value]="status">{{ status }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>
+                    <span>Date</span>
+                    <input type="date" [value]="newSubEventDraft.date" (input)="updateNewSubEventDraft({ date: $any($event.target).value }, true)" />
+                  </label>
+                  <label>
+                    <span>Start Time</span>
+                    <input type="time" [value]="newSubEventDraft.startTime" (input)="updateNewSubEventDraft({ startTime: $any($event.target).value }, true)" />
+                  </label>
+                  <label>
+                    <span>End Time</span>
+                    <input type="time" [value]="newSubEventDraft.endTime" (input)="updateNewSubEventDraft({ endTime: $any($event.target).value }, true)" />
+                  </label>
+                  <label>
+                    <span>Guest Count</span>
+                    <input type="number" min="1" [value]="newSubEventDraft.guestCount" (input)="updateNewSubEventDraft({ guestCount: $any($event.target).valueAsNumber || 0 })" />
+                  </label>
+                  <label>
+                    <span>Space</span>
+                    <select [value]="newSubEventDraft.spaceId" (change)="updateNewSubEventDraft({ spaceId: $any($event.target).value }, true)">
+                      <option value="">Select a space</option>
+                      @for (space of venueSpaces; track space.id) {
+                        <option [value]="space.id">{{ space.name }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>
+                    <span>Setup Style</span>
+                    <select [value]="newSubEventDraft.setupStyle" (change)="updateNewSubEventDraft({ setupStyle: $any($event.target).value })">
+                      <option value="">Select setup style</option>
+                      @for (setupStyle of setupStylesForDraft(newSubEventDraft); track setupStyle) {
+                        <option [value]="setupStyle">{{ setupStyle }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label class="full-width">
+                    <span>Notes</span>
+                    <textarea rows="3" [value]="newSubEventDraft.notes" (input)="updateNewSubEventDraft({ notes: $any($event.target).value })"></textarea>
+                  </label>
+                </div>
+
+                @if (newSubEventError) {
+                  <p class="sub-event-error">{{ newSubEventError }}</p>
+                }
+                @if (subEventAvailabilityIsChecking()) {
+                  <p class="sub-event-warning">Checking live availability...</p>
+                }
+                @if (newSubEventWarning || subEventAvailabilityWarning()) {
+                  <p class="sub-event-warning">{{ newSubEventWarning || subEventAvailabilityWarning() }}</p>
+                }
+                @if (!subEventAvailabilityIsChecking()) {
+                  <p class="sub-event-availability" [class.available]="subEventAvailabilityIsAvailable()" [class.unavailable]="!subEventAvailabilityIsAvailable()">
+                    {{ subEventAvailabilityIsAvailable() ? 'Space appears available for this time.' : 'Space has conflicting bookings at this time.' }}
+                  </p>
+                }
+
+                <div class="sub-event-editor-actions">
+                  <button type="button" class="ghost" (click)="cancelAddSubEvent()">Cancel</button>
+                  <button type="button" (click)="createSubEvent()" [disabled]="creatingSubEvent">
+                    {{ creatingSubEvent ? 'Saving...' : 'Save Sub-Event' }}
+                  </button>
+                  @if (newSubEventCanOverrideConflict) {
+                    <button type="button" class="danger" (click)="createSubEvent(true)" [disabled]="creatingSubEvent">
+                      {{ creatingSubEvent ? 'Saving...' : 'Save Anyway (Override Conflict)' }}
+                    </button>
+                  }
+                </div>
               </article>
             }
-            @if (detail.subEvents.length === 0) {
+
+            @if (timelineSubEvents.length > 0) {
+              <section class="sub-event-day-timeline">
+                <h3>Day Timeline (06:00-23:00)</h3>
+                @for (subEvent of timelineSubEvents; track subEvent.id) {
+                  <article class="timeline-row">
+                    <header>
+                      <strong>{{ subEvent.name }}</strong>
+                      <span>{{ subEventDraft(subEvent.id).startTime }} - {{ subEventDraft(subEvent.id).endTime }}</span>
+                    </header>
+                    <div class="timeline-track">
+                      <div
+                        class="timeline-block"
+                        [style.left.%]="subEventTimelineLeftPercent(subEvent)"
+                        [style.width.%]="subEventTimelineWidthPercent(subEvent)">
+                        {{ subEvent.type }}
+                      </div>
+                    </div>
+                    <div class="timeline-handles">
+                      <label>
+                        <span>Start</span>
+                        <input
+                          type="range"
+                          min="360"
+                          max="1380"
+                          step="5"
+                          [value]="subEventDraftStartMinutes(subEvent.id)"
+                          (input)="onSubEventTimelineHandleChange(subEvent, 'start', +$any($event.target).value)" />
+                      </label>
+                      <label>
+                        <span>End</span>
+                        <input
+                          type="range"
+                          min="360"
+                          max="1380"
+                          step="5"
+                          [value]="subEventDraftEndMinutes(subEvent.id)"
+                          (input)="onSubEventTimelineHandleChange(subEvent, 'end', +$any($event.target).value)" />
+                      </label>
+                    </div>
+                  </article>
+                }
+              </section>
+
+              <div class="sub-event-timeline">
+                @for (subEvent of timelineSubEvents; track subEvent.id) {
+                  <article class="sub-event-card" [class.expanded]="isSubEventExpanded(subEvent.id)">
+                    <div class="sub-event-summary">
+                      <button type="button" class="sub-event-summary-main" (click)="toggleSubEventExpanded(subEvent)">
+                        <strong>{{ subEvent.name }}</strong>
+                        <span>{{ subEvent.startUtc | date: 'dd/MM HH:mm' }} - {{ subEvent.endUtc | date: 'HH:mm' }}</span>
+                        <span>{{ subEvent.guestCount }} guests · {{ getSubEventSpaceName(subEvent) }} · {{ subEvent.setupStyle || 'Custom' }} · {{ subEvent.status }}</span>
+                      </button>
+                      <div class="sub-event-summary-actions">
+                        <button type="button" class="ghost" (click)="toggleSubEventExpanded(subEvent)">
+                          {{ isSubEventExpanded(subEvent.id) ? 'Collapse' : 'Edit' }}
+                        </button>
+                        <button
+                          type="button"
+                          class="danger"
+                          [disabled]="deletingSubEventId === subEvent.id"
+                          (click)="deleteSubEvent(subEvent)">
+                          {{ deletingSubEventId === subEvent.id ? 'Deleting...' : 'Delete' }}
+                        </button>
+                      </div>
+                    </div>
+
+                    @if (isSubEventExpanded(subEvent.id)) {
+                      <div class="sub-event-editor inline">
+                        <div class="sub-event-grid">
+                          <label>
+                            <span>Name</span>
+                            <input type="text" [value]="subEventDraft(subEvent.id).name" (input)="updateSubEventDraftField(subEvent.id, { name: $any($event.target).value })" />
+                          </label>
+                          <label>
+                            <span>Type</span>
+                            <select [value]="subEventDraft(subEvent.id).type" (change)="updateSubEventDraftField(subEvent.id, { type: $any($event.target).value })">
+                              @for (type of subEventTypeOptions; track type) {
+                                <option [value]="type">{{ type }}</option>
+                              }
+                            </select>
+                          </label>
+                          <label>
+                            <span>Status</span>
+                            <select [value]="subEventDraft(subEvent.id).status" (change)="updateSubEventDraftField(subEvent.id, { status: $any($event.target).value })">
+                              @for (status of subEventStatusOptions; track status) {
+                                <option [value]="status">{{ status }}</option>
+                              }
+                            </select>
+                          </label>
+                          <label>
+                            <span>Date</span>
+                            <input type="date" [value]="subEventDraft(subEvent.id).date" (input)="updateSubEventDraftField(subEvent.id, { date: $any($event.target).value }, true)" />
+                          </label>
+                          <label>
+                            <span>Start Time</span>
+                            <input type="time" [value]="subEventDraft(subEvent.id).startTime" (input)="updateSubEventDraftField(subEvent.id, { startTime: $any($event.target).value }, true)" />
+                          </label>
+                          <label>
+                            <span>End Time</span>
+                            <input type="time" [value]="subEventDraft(subEvent.id).endTime" (input)="updateSubEventDraftField(subEvent.id, { endTime: $any($event.target).value }, true)" />
+                          </label>
+                          <label>
+                            <span>Guest Count</span>
+                            <input type="number" min="1" [value]="subEventDraft(subEvent.id).guestCount" (input)="updateSubEventDraftField(subEvent.id, { guestCount: $any($event.target).valueAsNumber || 0 })" />
+                          </label>
+                          <label>
+                            <span>Space</span>
+                            <select [value]="subEventDraft(subEvent.id).spaceId" (change)="updateSubEventDraftField(subEvent.id, { spaceId: $any($event.target).value }, true)">
+                              <option value="">Select a space</option>
+                              @for (space of venueSpaces; track space.id) {
+                                <option [value]="space.id">{{ space.name }}</option>
+                              }
+                            </select>
+                          </label>
+                          <label>
+                            <span>Setup Style</span>
+                            <select [value]="subEventDraft(subEvent.id).setupStyle" (change)="updateSubEventDraftField(subEvent.id, { setupStyle: $any($event.target).value })">
+                              <option value="">Select setup style</option>
+                              @for (setupStyle of setupStylesForDraft(subEventDraft(subEvent.id)); track setupStyle) {
+                                <option [value]="setupStyle">{{ setupStyle }}</option>
+                              }
+                            </select>
+                          </label>
+                          <label class="full-width">
+                            <span>Notes</span>
+                            <textarea rows="3" [value]="subEventDraft(subEvent.id).notes" (input)="updateSubEventDraftField(subEvent.id, { notes: $any($event.target).value })"></textarea>
+                          </label>
+                        </div>
+
+                        @if (subEventErrors[subEvent.id]) {
+                          <p class="sub-event-error">{{ subEventErrors[subEvent.id] }}</p>
+                        }
+                        @if (subEventWarnings[subEvent.id]) {
+                          <p class="sub-event-warning">{{ subEventWarnings[subEvent.id] }}</p>
+                        }
+                        @if (subEventAvailabilityIsChecking(subEvent.id)) {
+                          <p class="sub-event-warning">Checking live availability...</p>
+                        } @else {
+                          <p class="sub-event-availability" [class.available]="subEventAvailabilityIsAvailable(subEvent.id)" [class.unavailable]="!subEventAvailabilityIsAvailable(subEvent.id)">
+                            {{ subEventAvailabilityIsAvailable(subEvent.id) ? 'Space appears available for this time.' : 'Space has conflicting bookings at this time.' }}
+                          </p>
+                        }
+
+                        <div class="sub-event-editor-actions">
+                          <button type="button" class="ghost" (click)="cancelSubEventEdit(subEvent)">Reset</button>
+                          <button
+                            type="button"
+                            (click)="saveSubEventWithConflictPolicy(subEvent, false)"
+                            [disabled]="updatingSubEventIds.has(subEvent.id)">
+                            {{ updatingSubEventIds.has(subEvent.id) ? 'Saving...' : 'Save Changes' }}
+                          </button>
+                          @if (subEventCanOverrideConflict[subEvent.id]) {
+                            <button
+                              type="button"
+                              class="danger"
+                              (click)="saveSubEventWithConflictPolicy(subEvent, true)"
+                              [disabled]="updatingSubEventIds.has(subEvent.id)">
+                              {{ updatingSubEventIds.has(subEvent.id) ? 'Saving...' : 'Save Anyway (Override Conflict)' }}
+                            </button>
+                          }
+                        </div>
+                      </div>
+                    }
+                  </article>
+                }
+              </div>
+            } @else {
               <p class="empty">No sub-events configured.</p>
             }
           </section>
@@ -281,6 +1323,19 @@
             @if (detail.appointments.length === 0) {
               <p class="empty">No appointments linked.</p>
             }
+          </section>
+        }
+
+        @if (detailTab === 'tasks') {
+          <section class="tab-panel">
+            <app-enquiry-tasks-tab
+              [enquiryId]="detail.id"
+              [venueId]="detail.venueId"
+              [eventType]="detail.eventType"
+              [eventDate]="detail.eventStartUtc"
+              [enquiryOwnerId]="detail.eventManagerUserId"
+              [users]="assignableUsers">
+            </app-enquiry-tasks-tab>
           </section>
         }
 
@@ -313,24 +1368,430 @@
           </section>
         }
 
+        @if (detailTab === 'payments') {
+          <section class="tab-panel payments-panel">
+            @if (paymentScheduleError) {
+              <p class="payment-error">{{ paymentScheduleError }}</p>
+            }
+
+            @if (paymentScheduleLoading) {
+              <p class="empty">Loading payment milestones...</p>
+            } @else if (paymentSchedule; as schedule) {
+              <div class="payment-summary-grid">
+                <article>
+                  <span>Total Contract Value</span>
+                  <strong>{{ schedule.proposalTotal | number: '1.2-2' }} {{ paymentSummaryCurrency }}</strong>
+                </article>
+                <article>
+                  <span>Total Paid</span>
+                  <strong>{{ schedule.totalPaid | number: '1.2-2' }} {{ paymentSummaryCurrency }}</strong>
+                </article>
+                <article>
+                  <span>Total Outstanding</span>
+                  <strong>{{ schedule.totalOutstanding | number: '1.2-2' }} {{ paymentSummaryCurrency }}</strong>
+                </article>
+                <article>
+                  <span>Next Due Date</span>
+                  <strong>{{ schedule.nextDueDate ? (schedule.nextDueDate | date: 'dd/MM/yyyy') : 'None' }}</strong>
+                </article>
+              </div>
+
+              <div class="payment-progress">
+                <div class="payment-progress-track">
+                  <div class="payment-progress-fill" [attr.data-status]="paymentProgressStatusToken" [style.width.%]="paymentProgressPercent"></div>
+                </div>
+                <p>{{ paymentProgressPercent | number: '1.0-0' }}% paid · {{ schedule.totalPaid | number: '1.2-2' }} / {{ schedule.proposalTotal | number: '1.2-2' }} {{ paymentSummaryCurrency }}</p>
+              </div>
+
+              <div class="payment-actions">
+                <label>
+                  <span>Schedule Name</span>
+                  <input type="text" [value]="paymentScheduleName" (input)="paymentScheduleName = $any($event.target).value" />
+                </label>
+                <button type="button" (click)="addPaymentMilestone()">Add Milestone</button>
+                <button type="button" (click)="savePaymentMilestones()" [disabled]="paymentSavingSchedule">
+                  {{ paymentSavingSchedule ? 'Saving...' : 'Save Milestones' }}
+                </button>
+              </div>
+
+              @if (hasPaymentScheduleMismatch) {
+                <p class="payment-warning">
+                  Milestone totals differ from proposal total by {{ paymentScheduleDeltaToProposal | number: '1.2-2' }} {{ paymentSummaryCurrency }}.
+                </p>
+              }
+
+              <table class="payments-table">
+                <thead>
+                  <tr>
+                    <th>Label</th>
+                    <th>Due Date</th>
+                    <th>Days Before Event</th>
+                    <th>Amount</th>
+                    <th>% of Total</th>
+                    <th>Paid</th>
+                    <th>Balance</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (milestone of paymentMilestonesDraft; track milestone.clientKey) {
+                    <tr [class.overdue]="isMilestoneOverdueById(milestone.id)" [class.highlighted]="milestone.id && isMilestoneHighlighted(milestone.id)">
+                      <td>
+                        <input type="text" [value]="milestone.label" (input)="milestone.label = $any($event.target).value" />
+                      </td>
+                      <td>
+                        <input type="date" [value]="milestone.dueDate" (input)="milestone.dueDate = $any($event.target).value" />
+                      </td>
+                      <td>
+                        <input type="number" [value]="milestone.daysBeforeEvent" (input)="setMilestoneDaysBeforeEvent(milestone, $any($event.target).value)" />
+                      </td>
+                      <td>
+                        <div class="amount-input">
+                          <input type="number" min="0" step="0.01" [value]="milestone.amount" (input)="setMilestoneAmount(milestone, $any($event.target).value)" />
+                          <span>{{ milestone.currencyCode || paymentSummaryCurrency }}</span>
+                        </div>
+                      </td>
+                      <td>{{ milestonePercentOfContract(milestone) | number: '1.0-2' }}%</td>
+                      <td>{{ milestonePaidAmount(milestone.id) | number: '1.2-2' }}</td>
+                      <td>{{ milestoneBalanceAmount(milestone.id, milestone.amount) | number: '1.2-2' }}</td>
+                      <td>
+                        <span
+                          class="milestone-status"
+                          [attr.data-status]="milestoneStatusToken(milestoneStatusLabel(milestone.id))">
+                          {{ milestoneStatusLabel(milestone.id) }}
+                        </span>
+                      </td>
+                      <td>
+                        <div class="milestone-actions">
+                          @if (milestone.id) {
+                            <button type="button" (click)="openRecordPaymentModalForId(milestone.id)">Record Payment</button>
+                            <button type="button" (click)="createPaymentLinkForMilestone(milestone.id)" [disabled]="paymentCreatingLinkMilestoneId === milestone.id">
+                              {{ paymentCreatingLinkMilestoneId === milestone.id ? 'Creating...' : 'Create Link' }}
+                            </button>
+                            <button type="button" (click)="sendPaymentReminderForMilestone(milestone.id)" [disabled]="paymentSendingReminderMilestoneId === milestone.id">
+                              {{ paymentSendingReminderMilestoneId === milestone.id ? 'Sending...' : 'Send Reminder' }}
+                            </button>
+                            <button type="button" (click)="generateInvoiceForMilestone(milestone.id)" [disabled]="paymentGeneratingInvoiceMilestoneId === milestone.id">
+                              {{ paymentGeneratingInvoiceMilestoneId === milestone.id ? 'Generating...' : 'Generate Invoice' }}
+                            </button>
+                          }
+                          <button type="button" class="danger" (click)="removePaymentMilestone(milestone.clientKey)">Delete</button>
+                        </div>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+
+              @if (schedule.transactions.length > 0) {
+                <section class="payment-history">
+                  <h3>Payment History</h3>
+                  @for (transaction of schedule.transactions; track transaction.id) {
+                    <article>
+                      <strong>{{ transaction.amount | number: '1.2-2' }} {{ transaction.currencyCode }}</strong>
+                      <span>{{ transaction.paidAtUtc | date: 'dd/MM/yyyy HH:mm' }} · {{ transaction.provider }}</span>
+                      <span>{{ transaction.providerReference || 'No reference' }}{{ transaction.notes ? ' · ' + transaction.notes : '' }}</span>
+                    </article>
+                  }
+                </section>
+              }
+            } @else {
+              <p class="empty">Payment schedule unavailable for this enquiry.</p>
+            }
+          </section>
+        }
+
+        @if (detailTab === 'sustainability') {
+          <section class="tab-panel sustainability-panel">
+            @if (sustainabilityError) {
+              <p class="payment-error">{{ sustainabilityError }}</p>
+            }
+
+            @if (sustainabilityLoading) {
+              <p class="empty">Loading sustainability profile...</p>
+            } @else {
+              <div class="sustainability-score-grid">
+                <article>
+                  <span>Sustainability Score</span>
+                  <strong [attr.data-band]="sustainabilityScoreToken(enquirySustainability?.sustainabilityScore)">
+                    {{ enquirySustainability?.sustainabilityScore !== undefined ? (enquirySustainability?.sustainabilityScore | number: '1.0-1') : '0.0' }}
+                  </strong>
+                  <em class="grade-pill" [attr.data-grade]="sustainabilityGradeToken(enquirySustainability?.sustainabilityGrade)">
+                    Grade {{ enquirySustainability?.sustainabilityGrade || 'N/A' }}
+                  </em>
+                </article>
+                <article>
+                  <span>Carbon (kgCO2e)</span>
+                  <strong>{{ enquirySustainability?.carbonKgCo2e !== undefined ? (enquirySustainability?.carbonKgCo2e | number: '1.0-2') : '0.00' }}</strong>
+                  <small>
+                    {{ enquirySustainability?.carbonKgPerGuest !== undefined ? (enquirySustainability?.carbonKgPerGuest | number: '1.0-2') : '0.00' }}
+                    kg per guest
+                  </small>
+                </article>
+                <article>
+                  <span>Waste (kg)</span>
+                  <strong>{{ enquirySustainability?.totalWasteKg !== undefined ? (enquirySustainability?.totalWasteKg | number: '1.0-2') : '0.00' }}</strong>
+                  <small>
+                    {{ enquirySustainability?.wastePerGuestKg !== undefined ? (enquirySustainability?.wastePerGuestKg | number: '1.0-2') : '0.00' }}
+                    kg per guest
+                  </small>
+                </article>
+                <article>
+                  <span>Diversion</span>
+                  <strong>{{ enquirySustainability?.wasteDiversionPercent !== undefined ? (enquirySustainability?.wasteDiversionPercent | number: '1.0-1') : '0.0' }}%</strong>
+                  <small
+                    [attr.data-benchmark]="sustainabilityBenchmarkToken(enquirySustainability?.wasteVsVenueAveragePercent)">
+                    {{ enquirySustainability?.wasteVsVenueAveragePercent !== undefined ? (enquirySustainability?.wasteVsVenueAveragePercent | number: '1.0-1') : '0.0' }}%
+                    vs venue average
+                  </small>
+                </article>
+              </div>
+
+              <p class="sustainability-helper">
+                Local sourcing benchmark uses a radius of
+                <strong>{{ enquirySustainability?.localSourcingRadiusMiles ?? 0 }} miles</strong>.
+              </p>
+              @if (enquirySustainability?.scoreMethodology) {
+                <p class="sustainability-helper">{{ enquirySustainability?.scoreMethodology }}</p>
+              }
+              @if (enquirySustainability?.postEventCapturedAtUtc) {
+                <p class="sustainability-helper">
+                  Post-event waste capture recorded on
+                  {{ enquirySustainability?.postEventCapturedAtUtc | date: 'dd/MM/yyyy HH:mm' }}.
+                </p>
+              }
+
+              <div class="sustainability-form-grid">
+                <label>
+                  <span>Catering Type</span>
+                  <select
+                    [value]="sustainabilityDraft.cateringType"
+                    (change)="sustainabilityDraft.cateringType = $any($event.target).value">
+                    @for (type of sustainabilityCateringTypes; track type) {
+                      <option [value]="type">{{ type }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  <span>Venue Energy Rating</span>
+                  <select
+                    [value]="sustainabilityDraft.venueEnergyRating"
+                    (change)="sustainabilityDraft.venueEnergyRating = $any($event.target).value">
+                    @for (rating of sustainabilityEnergyRatings; track rating) {
+                      <option [value]="rating">{{ rating }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  <span>Guest Count Override</span>
+                  <input
+                    type="number"
+                    min="1"
+                    [value]="sustainabilityDraft.guestCountOverride ?? ''"
+                    (input)="sustainabilityDraft.guestCountOverride = $any($event.target).value ? +$any($event.target).value : null" />
+                </label>
+                <label>
+                  <span>Travel (km per guest)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    [value]="sustainabilityDraft.estimatedTravelKmPerGuest"
+                    (input)="sustainabilityDraft.estimatedTravelKmPerGuest = +$any($event.target).value || 0" />
+                </label>
+                <label>
+                  <span>Food Waste (kg)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    [value]="sustainabilityDraft.foodWasteKg"
+                    (input)="sustainabilityDraft.foodWasteKg = +$any($event.target).value || 0" />
+                </label>
+                <label>
+                  <span>General Waste (kg)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    [value]="sustainabilityDraft.generalWasteKg"
+                    (input)="sustainabilityDraft.generalWasteKg = +$any($event.target).value || 0" />
+                </label>
+                <label>
+                  <span>Recyclables (kg)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    [value]="sustainabilityDraft.recyclablesKg"
+                    (input)="sustainabilityDraft.recyclablesKg = +$any($event.target).value || 0" />
+                </label>
+                <label>
+                  <span>Compostables (kg)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    [value]="sustainabilityDraft.compostablesKg"
+                    (input)="sustainabilityDraft.compostablesKg = +$any($event.target).value || 0" />
+                </label>
+                <label>
+                  <span>Local Sourcing (%)</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    [value]="sustainabilityDraft.localSourcingPercent"
+                    (input)="sustainabilityDraft.localSourcingPercent = +$any($event.target).value || 0" />
+                </label>
+              </div>
+
+              <div class="supplier-share-grid">
+                <label>
+                  <span>Local Suppliers %</span>
+                  <input type="number" min="0" step="0.1" [value]="sustainabilityDraft.localSupplierSharePercent" (input)="sustainabilityDraft.localSupplierSharePercent = +$any($event.target).value || 0" />
+                </label>
+                <label>
+                  <span>Regional Suppliers %</span>
+                  <input type="number" min="0" step="0.1" [value]="sustainabilityDraft.regionalSupplierSharePercent" (input)="sustainabilityDraft.regionalSupplierSharePercent = +$any($event.target).value || 0" />
+                </label>
+                <label>
+                  <span>National Suppliers %</span>
+                  <input type="number" min="0" step="0.1" [value]="sustainabilityDraft.nationalSupplierSharePercent" (input)="sustainabilityDraft.nationalSupplierSharePercent = +$any($event.target).value || 0" />
+                </label>
+                <label>
+                  <span>International Suppliers %</span>
+                  <input type="number" min="0" step="0.1" [value]="sustainabilityDraft.internationalSupplierSharePercent" (input)="sustainabilityDraft.internationalSupplierSharePercent = +$any($event.target).value || 0" />
+                </label>
+              </div>
+
+              <p class="supplier-share-total" [class.warning]="sustainabilitySupplierShareDelta !== 0">
+                Supplier share total: {{ sustainabilitySupplierShareTotal | number: '1.0-2' }}%
+                @if (sustainabilitySupplierShareDelta !== 0) {
+                  <span>(auto-normalised on save)</span>
+                }
+              </p>
+
+              <label class="sustainability-checkbox">
+                <input
+                  type="checkbox"
+                  [checked]="sustainabilityDraft.includeInProposal"
+                  (change)="sustainabilityDraft.includeInProposal = $any($event.target).checked" />
+                <span>Include sustainability section in proposal</span>
+              </label>
+
+              <label class="sustainability-notes">
+                <span>Notes</span>
+                <textarea
+                  rows="3"
+                  [value]="sustainabilityDraft.notes || ''"
+                  (input)="sustainabilityDraft.notes = $any($event.target).value"></textarea>
+              </label>
+
+              <div class="sustainability-actions">
+                <button type="button" (click)="saveEnquirySustainability()" [disabled]="sustainabilitySaving">
+                  {{ sustainabilitySaving ? 'Saving...' : 'Save Sustainability Profile' }}
+                </button>
+                @if (sustainabilityMessage) {
+                  <p class="payment-success">{{ sustainabilityMessage }}</p>
+                }
+              </div>
+            }
+          </section>
+        }
+
         @if (detailTab === 'documents') {
-          <section class="tab-panel">
-            <p>Documents upload/download flow is wired for Phase 2.</p>
+          <section class="tab-panel documents-panel">
+            <app-enquiry-documents
+              [enquiryId]="selectedEnquiryId"
+              [enquiryStatus]="detail.status"></app-enquiry-documents>
           </section>
         }
 
         @if (detailTab === 'activity') {
-          <section class="tab-panel">
-            @for (entry of detail.activityLog; track entry) {
-              <article class="row">
-                <strong>{{ entry.actionType }}</strong>
-                <span>{{ entry.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</span>
-                <span>{{ entry.userName || 'System' }}</span>
-              </article>
+          <section class="tab-panel activity-panel">
+            <header class="activity-filters">
+              <label>
+                <span>Type</span>
+                <select
+                  [value]="activityFilters.actionCategory"
+                  (change)="activityFilters.actionCategory = $any($event.target).value; onActivityFiltersChanged()">
+                  <option value="all">All</option>
+                  <option value="status">Status</option>
+                  <option value="communication">Communication</option>
+                  <option value="document">Document</option>
+                  <option value="payment">Payment</option>
+                </select>
+              </label>
+              <label>
+                <span>User</span>
+                <select
+                  [value]="activityFilters.userId"
+                  (change)="activityFilters.userId = $any($event.target).value; onActivityFiltersChanged()">
+                  <option value="">All users</option>
+                  @for (user of assignableUsers; track user.id) {
+                    <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+                  }
+                </select>
+              </label>
+              <label>
+                <span>From</span>
+                <input
+                  type="date"
+                  [value]="activityFilters.fromDate"
+                  (change)="activityFilters.fromDate = $any($event.target).value; onActivityFiltersChanged()" />
+              </label>
+              <label>
+                <span>To</span>
+                <input
+                  type="date"
+                  [value]="activityFilters.toDate"
+                  (change)="activityFilters.toDate = $any($event.target).value; onActivityFiltersChanged()" />
+              </label>
+            </header>
+
+            @if (activityError) {
+              <p class="error">{{ activityError }}</p>
             }
-            @if (detail.activityLog.length === 0) {
-              <p class="empty">No activity captured yet.</p>
-            }
+
+            <div class="activity-count">Showing {{ activityEntries.length }} of {{ activityTotalCount }} events</div>
+
+            <div class="activity-feed" (scroll)="onActivityFeedScroll($event)">
+              @for (entry of activityEntries; track entry.id) {
+                <article class="activity-row">
+                  <div class="avatar">
+                    @if (entry.userAvatarUrl) {
+                      <img [src]="entry.userAvatarUrl" [alt]="(entry.userName || 'User') + ' avatar'" />
+                    } @else {
+                      {{ activityUserInitials(entry) }}
+                    }
+                  </div>
+                  <div class="body">
+                    <div class="headline">
+                      <strong>{{ entry.actionLabel }}</strong>
+                      <span>{{ entry.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</span>
+                    </div>
+                    <div class="meta">{{ entry.userName || 'System' }} · {{ entry.entityType }}</div>
+                    @if (entry.details) {
+                      <p class="details">{{ entry.details }}</p>
+                    }
+                    @if (entry.ipAddress) {
+                      <p class="ip">IP: {{ entry.ipAddress }}</p>
+                    }
+                  </div>
+                </article>
+              }
+
+              @if (activityLoading || activityLoadingMore) {
+                <p class="empty">Loading activity...</p>
+              }
+
+              @if (!activityLoading && activityEntries.length === 0) {
+                <p class="empty">No activity captured yet.</p>
+              }
+            </div>
           </section>
         }
       </aside>
@@ -340,13 +1801,23 @@
   <section class="loading">Loading enquiries...</section>
 }
 
+@if (overviewToastMessage) {
+  <section class="overview-toast" role="status" aria-live="polite">{{ overviewToastMessage }}</section>
+}
+
 @if (showLostReasonModal) {
   <div class="modal-backdrop" (click)="cancelLostReasonModal()"></div>
-  <section class="modal-card" role="dialog" aria-modal="true" aria-label="Bulk lost reason">
+  <section class="modal-card" role="dialog" aria-modal="true" aria-label="Lost reason">
     <h3>Lost reason required</h3>
-    <p>Add a reason to move selected enquiries to Lost.</p>
+    <p>
+      @if (lostReasonModalMode === 'single') {
+        Add a reason before moving this enquiry to Lost.
+      } @else {
+        Add a reason to move selected enquiries to Lost.
+      }
+    </p>
     <label>
-      <span>Reason</span>
+      <span>Lost Reason</span>
       <select [value]="bulkLostReason" (change)="bulkLostReason = $any($event.target).value">
         <option value="">Select reason</option>
         @for (reason of lostReasonOptions; track reason) {
@@ -354,8 +1825,22 @@
         }
       </select>
     </label>
+    @if (showLostCompetitorField) {
+      <label>
+        <span>Competitor Name (optional)</span>
+        <input
+          type="text"
+          [value]="bulkLostCompetitorName"
+          (input)="bulkLostCompetitorName = $any($event.target).value"
+          placeholder="Competitor venue name" />
+      </label>
+    }
     <label>
-      <span>Additional details</span>
+      <span>Lost Date</span>
+      <input type="date" [value]="bulkLostDate" (input)="bulkLostDate = $any($event.target).value" />
+    </label>
+    <label>
+      <span>Lost Notes</span>
       <textarea
         rows="3"
         [value]="bulkLostReasonDetail"
@@ -369,11 +1854,92 @@
   </section>
 }
 
+@if (showMergeModal) {
+  <div class="modal-backdrop" (click)="closeMergeModal()"></div>
+  <section class="modal-card merge-modal" role="dialog" aria-modal="true" aria-label="Merge enquiries">
+    <h3>Merge Enquiries</h3>
+    <p>Select which record should provide each field. The secondary enquiry will be archived after merge.</p>
+
+    @if (mergeError) {
+      <p class="inline-error">{{ mergeError }}</p>
+    }
+
+    @if (loadingMergeModal) {
+      <p>Loading selected enquiries...</p>
+    } @else if (mergePrimaryDetail && mergeSecondaryDetail) {
+      <div class="merge-header">
+        <article>
+          <h4>Primary</h4>
+          <p>{{ mergePrimaryDetail.reference }} · {{ mergePrimaryDetail.contactFirstName }} {{ mergePrimaryDetail.contactLastName }}</p>
+        </article>
+        <article>
+          <h4>Secondary</h4>
+          <p>{{ mergeSecondaryDetail.reference }} · {{ mergeSecondaryDetail.contactFirstName }} {{ mergeSecondaryDetail.contactLastName }}</p>
+        </article>
+      </div>
+
+      <div class="merge-table-wrap">
+        <table class="merge-table">
+          <thead>
+            <tr>
+              <th>Field</th>
+              <th>{{ mergePrimaryDetail.reference }}</th>
+              <th>{{ mergeSecondaryDetail.reference }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (field of mergeFieldDefinitions; track field.key) {
+              <tr>
+                <td>{{ field.label }}</td>
+                <td>
+                  <label class="merge-choice">
+                    <input
+                      type="radio"
+                      [name]="'merge-' + field.key"
+                      [checked]="mergeFieldSelectedSource(field.key) === 'primary'"
+                      (change)="chooseMergeFieldSource(field.key, 'primary')" />
+                    <span>{{ mergeFieldPreviewValue(mergePrimaryDetail, field.key) }}</span>
+                  </label>
+                </td>
+                <td>
+                  <label class="merge-choice">
+                    <input
+                      type="radio"
+                      [name]="'merge-' + field.key"
+                      [checked]="mergeFieldSelectedSource(field.key) === 'secondary'"
+                      (change)="chooseMergeFieldSource(field.key, 'secondary')" />
+                    <span>{{ mergeFieldPreviewValue(mergeSecondaryDetail, field.key) }}</span>
+                  </label>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+
+    <div class="modal-actions">
+      <button type="button" class="ghost" (click)="closeMergeModal()" [disabled]="mergeSubmitting">Cancel</button>
+      <button
+        type="button"
+        (click)="submitMerge()"
+        [disabled]="mergeSubmitting || loadingMergeModal || !mergePrimaryDetail || !mergeSecondaryDetail">
+        {{ mergeSubmitting ? 'Merging...' : 'Merge Enquiries' }}
+      </button>
+    </div>
+  </section>
+}
+
 @if (showBulkEmailModal) {
   <div class="modal-backdrop" (click)="closeBulkEmailModal()"></div>
   <section class="modal-card email-modal" role="dialog" aria-modal="true" aria-label="Bulk email compose">
     <h3>Send email to selected contacts</h3>
     <p>This sends the same message to each selected enquiry contact.</p>
+
+    <label>
+      <span>To</span>
+      <input type="text" [value]="bulkEmailToDisplay" readonly />
+    </label>
 
     <div class="recipient-list">
       @for (recipient of bulkEmailRecipients; track recipient.enquiryId) {
@@ -394,6 +1960,86 @@
       <button type="button" class="ghost" (click)="closeBulkEmailModal()" [disabled]="sendingBulkEmail">Cancel</button>
       <button type="button" (click)="sendBulkEmail()" [disabled]="sendingBulkEmail">
         {{ sendingBulkEmail ? 'Sending...' : 'Send Email' }}
+      </button>
+    </div>
+  </section>
+}
+
+@if (showRecordPaymentModal && recordingPaymentMilestone; as milestone) {
+  <div class="modal-backdrop" (click)="closeRecordPaymentModal()"></div>
+  <section class="modal-card payment-modal" role="dialog" aria-modal="true" aria-label="Record payment">
+    <h3>Record Payment</h3>
+    <p>
+      {{ milestone.label }} · Due {{ milestone.dueDate | date: 'dd/MM/yyyy' }} ·
+      Balance {{ milestone.balanceRemaining | number: '1.2-2' }} {{ milestone.currencyCode }}
+    </p>
+
+    @if (paymentRecordError) {
+      <p class="payment-error">{{ paymentRecordError }}</p>
+    }
+
+    <label>
+      <span>Date Received</span>
+      <input
+        type="datetime-local"
+        [value]="paymentRecordForm.get('receivedDate')?.value ?? ''"
+        (input)="paymentRecordForm.patchValue({ receivedDate: $any($event.target).value })" />
+    </label>
+
+    <div class="payment-modal-grid">
+      <label>
+        <span>Amount</span>
+        <input
+          type="number"
+          min="0.01"
+          step="0.01"
+          [value]="paymentRecordForm.get('amount')?.value ?? 0"
+          (input)="paymentRecordForm.patchValue({ amount: +$any($event.target).value })" />
+      </label>
+
+      <label>
+        <span>Method</span>
+        <select
+          [value]="paymentRecordForm.get('method')?.value ?? 'Bank Transfer'"
+          (change)="paymentRecordForm.patchValue({ method: $any($event.target).value })">
+          <option value="Bank Transfer">Bank Transfer</option>
+          <option value="Card">Card</option>
+          <option value="Cash">Cash</option>
+          <option value="Cheque">Cheque</option>
+        </select>
+      </label>
+    </div>
+
+    <label>
+      <span>Reference Number</span>
+      <input
+        type="text"
+        [value]="paymentRecordForm.get('reference')?.value ?? ''"
+        (input)="paymentRecordForm.patchValue({ reference: $any($event.target).value })"
+        placeholder="Payment reference" />
+    </label>
+
+    <label>
+      <span>Notes</span>
+      <textarea
+        rows="4"
+        [value]="paymentRecordForm.get('notes')?.value ?? ''"
+        (input)="paymentRecordForm.patchValue({ notes: $any($event.target).value })"
+        placeholder="Optional notes"></textarea>
+    </label>
+
+    <label class="checkbox-inline">
+      <input
+        type="checkbox"
+        [checked]="paymentRecordForm.get('applyOverpaymentToNextMilestone')?.value ?? true"
+        (change)="paymentRecordForm.patchValue({ applyOverpaymentToNextMilestone: $any($event.target).checked })" />
+      <span>Apply any overpayment to the next milestone automatically</span>
+    </label>
+
+    <div class="modal-actions">
+      <button type="button" class="ghost" (click)="closeRecordPaymentModal()" [disabled]="paymentRecordBusy">Cancel</button>
+      <button type="button" (click)="submitRecordPayment()" [disabled]="paymentRecordBusy">
+        {{ paymentRecordBusy ? 'Recording...' : 'Record Payment' }}
       </button>
     </div>
   </section>

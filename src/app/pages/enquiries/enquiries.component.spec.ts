@@ -94,10 +94,18 @@ describe('EnquiriesComponent', () => {
       })
     );
 
-    api = jasmine.createSpyObj<ApiService>('ApiService', ['getEnquiries', 'getEnquiry', 'transitionEnquiryStatus']);
+    api = jasmine.createSpyObj<ApiService>('ApiService', [
+      'getEnquiries',
+      'getEnquiry',
+      'transitionEnquiryStatus',
+      'getUsers',
+      'getLostReasons'
+    ]);
     api.getEnquiries.and.returnValue(of(emptyListResponse));
     api.getEnquiry.and.returnValue(of(detailResponse));
     api.transitionEnquiryStatus.and.returnValue(of(void 0));
+    api.getUsers.and.returnValue(of([]));
+    api.getLostReasons.and.returnValue(of([]));
 
     await TestBed.configureTestingModule({
       imports: [EnquiriesComponent],
@@ -146,11 +154,11 @@ describe('EnquiriesComponent', () => {
     expect(router.navigate).toHaveBeenCalledWith(
       [],
       jasmine.objectContaining({
-        queryParams: {
+        queryParams: jasmine.objectContaining({
           search: 'corporate',
           quickFilter: 'expiring-holds',
           pageSize: 100
-        },
+        }),
         queryParamsHandling: 'merge',
         replaceUrl: true
       })
@@ -165,5 +173,37 @@ describe('EnquiriesComponent', () => {
       queryParams: { statusTab: 'confirmed' },
       queryParamsHandling: 'merge'
     });
+  });
+
+  it('select all toggles visible enquiry rows', () => {
+    component.enquiries = [
+      { id: 'e1' },
+      { id: 'e2' },
+      { id: 'e3' }
+    ] as unknown as EnquiryListResponse['page']['items'];
+
+    component.toggleSelectAll(true);
+    expect(component.selectedCount).toBe(3);
+    expect(component.isEnquirySelected('e1')).toBeTrue();
+    expect(component.isEnquirySelected('e2')).toBeTrue();
+    expect(component.isEnquirySelected('e3')).toBeTrue();
+
+    component.toggleSelectAll(false);
+    expect(component.selectedCount).toBe(0);
+  });
+
+  it('opening Lost bulk status shows lost reason modal', () => {
+    component.selectedEnquiryIds = new Set(['e1', 'e2']);
+    component.applyBulkStatus('Lost');
+
+    expect(component.showLostReasonModal).toBeTrue();
+    expect(component.lostReasonModalMode).toBe('bulk');
+  });
+
+  it('clears bulk selection when changing status tab', () => {
+    component.selectedEnquiryIds = new Set(['e1', 'e2']);
+    component.setTab('confirmed');
+
+    expect(component.selectedCount).toBe(0);
   });
 });

@@ -1,21 +1,42 @@
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { distinctUntilChanged, map } from 'rxjs';
 import {
+  AiPricingRecommendationResponse,
   ApiService,
   CreateProposalLineItemRequest,
+  EnquiryDetailResponse,
+  EnquirySustainabilityResponse,
   EnquiryListItemDto,
   ProposalComparisonResponse,
   ProposalDetailResponse,
   ProposalListItemDto,
   ProposalListResponse,
+  ProposalSectionDto,
+  ProposalSignatureEnvelopeDto,
+  ProposalTemplateSettingDto,
   ProposalTemplateOptionDto,
-  TermsDocumentSettingDto
+  TermsDocumentSettingDto,
+  VenueProfileDto
 } from '../../services/api.service';
 import { AuthService } from '../../services/auth.service';
+
+const DEFAULT_BUILDER_SECTIONS: ProposalSectionDto[] = [
+  { key: 'coverPage', title: 'Cover Page', isEnabled: true, sortOrder: 1 },
+  { key: 'eventDetails', title: 'Event Details', isEnabled: true, sortOrder: 2 },
+  { key: 'menuPackages', title: 'Menu / Package Selection', isEnabled: true, sortOrder: 3 },
+  { key: 'additionalServices', title: 'Additional Services', isEnabled: true, sortOrder: 4 },
+  { key: 'pricingSummary', title: 'Pricing Summary', isEnabled: true, sortOrder: 5 },
+  { key: 'sustainabilityImpact', title: 'Sustainability Impact', isEnabled: false, sortOrder: 6 },
+  { key: 'termsConditions', title: 'Terms & Conditions', isEnabled: true, sortOrder: 7 },
+  { key: 'acceptanceBlock', title: 'Acceptance Block', isEnabled: true, sortOrder: 8 }
+];
+
+type LineSectionType = 'MenuPackage' | 'AdditionalServices';
 
 @Component({
   selector: 'app-proposals',
@@ -37,6 +58,9 @@ export class ProposalsComponent implements OnInit {
   proposals: ProposalListItemDto[] = [];
   selectedProposalId: string | null = null;
   selectedProposal: ProposalDetailResponse | null = null;
+  signatureEnvelope: ProposalSignatureEnvelopeDto | null = null;
+  signatureLoading = false;
+  signatureBusy = false;
   comparison: ProposalComparisonResponse | null = null;
   compareWithProposalId = '';
   lastActionMessage = '';
@@ -51,7 +75,28 @@ export class ProposalsComponent implements OnInit {
   builderServiceChargeAmount = 0;
   builderTotalVat = 0;
   builderTotalInclVat = 0;
+  aiPricingRecommendation: AiPricingRecommendationResponse | null = null;
+  aiPricingLoading = false;
+  aiPricingMessage = '';
   builderVatBreakdown: Array<{ vatRate: number; vatAmount: number }> = [];
+  builderSectionSubtotals: Record<LineSectionType, number> = {
+    MenuPackage: 0,
+    AdditionalServices: 0
+  };
+  builderSections: ProposalSectionDto[] = [...DEFAULT_BUILDER_SECTIONS];
+  draggedLineIndex: number | null = null;
+  savingTemplate = false;
+  builderEnquiryDetail: EnquiryDetailResponse | null = null;
+  builderEnquirySustainability: EnquirySustainabilityResponse | null = null;
+  venueProfile: VenueProfileDto | null = null;
+  sendEmailDraft = '';
+  private pendingManualSignedProposalId: string | null = null;
+  @ViewChild('manualSignedFileInput')
+  private manualSignedFileInput?: ElementRef<HTMLInputElement>;
+  readonly lineSectionOptions: Array<{ value: LineSectionType; label: string }> = [
+    { value: 'MenuPackage', label: 'Menu / Package Selection' },
+    { value: 'AdditionalServices', label: 'Additional Services' }
+  ];
 
   enquiryOptions: EnquiryListItemDto[] = [];
   templateOptions: ProposalTemplateOptionDto[] = [];
@@ -87,6 +132,13 @@ export class ProposalsComponent implements OnInit {
     termsVersion: [''],
     currencyCode: ['GBP', [Validators.required, Validators.maxLength(8)]],
     serviceChargePercent: [0, [Validators.required, Validators.min(0), Validators.max(100)]],
+    preparedFor: [''],
+    eventDate: [''],
+    eventTime: [''],
+    guestCount: [0],
+    eventStyle: [''],
+    assignedSpace: [''],
+    acceptanceSignature: [''],
     lineItems: this.formBuilder.array([])
   });
 
@@ -102,14 +154,49 @@ export class ProposalsComponent implements OnInit {
     return this.lineItemsArray.controls;
   }
 
+  get orderedBuilderSections(): ProposalSectionDto[] {
+    return [...this.builderSections].sort((left, right) => left.sortOrder - right.sortOrder);
+  }
+
   get selectedProposalCanEdit(): boolean {
     return !!this.selectedProposal?.isEditable;
   }
 
+  get aiPricingTone(): 'above' | 'at' | 'below' | 'unknown' {
+    const recommendation = this.aiPricingRecommendation;
+    if (!recommendation || !recommendation.hasSufficientData || recommendation.suggestedPrice <= 0) {
+      return 'unknown';
+    }
+
+    const delta = this.builderTotalInclVat - recommendation.suggestedPrice;
+    const threshold = recommendation.suggestedPrice * 0.03;
+    if (delta > threshold) {
+      return 'above';
+    }
+
+    if (delta < -threshold) {
+      return 'below';
+    }
+
+    return 'at';
+  }
+
+  get canCounterSignSelectedProposal(): boolean {
+    const status = (this.signatureEnvelope?.status ?? '').toLowerCase();
+    return !!this.selectedProposalId && !!this.signatureEnvelope && (status === 'clientsigned' || status === 'viewed');
+  }
+
   ngOnInit(): void {
     this.ensureBuilderHasAtLeastOneLine();
-    this.loadBuilderSources();
-    this.loadProposals(1);
+    this.auth.session$
+      .pipe(
+        map((session) => session?.venueId ?? null),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((venueId) => {
+        this.handleVenueChange(venueId);
+      });
 
     this.filtersForm.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.loadProposals(1);
@@ -155,6 +242,7 @@ export class ProposalsComponent implements OnInit {
   selectProposal(proposalId: string): void {
     this.selectedProposalId = proposalId;
     this.selectedEnquiryIdFilter = null;
+    this.signatureEnvelope = null;
     this.loadProposalDetail(proposalId);
   }
 
@@ -182,7 +270,379 @@ export class ProposalsComponent implements OnInit {
       return;
     }
 
-    this.sendProposalByPrompt(this.selectedProposalId);
+    const suggestedEmail = this.builderEnquiryDetail?.contactEmail;
+    this.sendProposalByPrompt(this.selectedProposalId, suggestedEmail ?? undefined);
+  }
+
+  sendSelectedProposalForSignature(): void {
+    if (!this.selectedProposalId) {
+      return;
+    }
+
+    const defaultEmail = this.builderEnquiryDetail?.contactEmail ?? '';
+    this.sendProposalForSignatureByPrompt(this.selectedProposalId, defaultEmail);
+  }
+
+  sendProposalFromList(proposalId: string, event: Event): void {
+    event.stopPropagation();
+    this.sendProposalByPrompt(proposalId, this.builderEnquiryDetail?.contactEmail ?? undefined);
+  }
+
+  sendProposalForSignatureFromList(proposalId: string, event: Event): void {
+    event.stopPropagation();
+    this.sendProposalForSignatureByPrompt(proposalId, this.builderEnquiryDetail?.contactEmail ?? undefined);
+  }
+
+  viewProposalFromList(proposalId: string, event: Event): void {
+    event.stopPropagation();
+    this.selectProposal(proposalId);
+  }
+
+  editProposalFromList(proposalId: string, event: Event): void {
+    event.stopPropagation();
+    if (proposalId === this.selectedProposalId && this.selectedProposal) {
+      this.openBuilderForEdit();
+      return;
+    }
+
+    this.api
+      .getProposal(proposalId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (proposal) => {
+          this.selectedProposalId = proposal.id;
+          this.selectedProposal = proposal;
+          this.selectedEnquiryIdFilter = proposal.enquiryId;
+          this.openBuilderForEdit();
+        },
+        error: (error) => {
+          this.lastActionMessage = error?.error ?? 'Unable to load proposal for editing.';
+        }
+      });
+  }
+
+  duplicateProposalFromList(proposalId: string, event: Event): void {
+    event.stopPropagation();
+    this.api
+      .duplicateProposal(proposalId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          this.lastActionMessage = `Proposal duplicated as ${result.version}.`;
+          this.loadProposals(this.listResponse?.page.page ?? 1);
+          this.selectProposal(result.proposalId);
+        },
+        error: (error) => {
+          this.lastActionMessage = error?.error ?? 'Unable to duplicate proposal.';
+        }
+      });
+  }
+
+  generatePdfFromList(proposalId: string, event: Event): void {
+    event.stopPropagation();
+    this.api
+      .generateProposalPdf(proposalId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          this.lastActionMessage = `Generated PDF ${result.fileName}.`;
+          if (this.selectedProposalId === proposalId) {
+            this.loadProposalDetail(proposalId);
+          }
+        },
+        error: (error) => {
+          this.lastActionMessage = error?.error ?? 'Unable to generate proposal PDF.';
+        }
+      });
+  }
+
+  generatePdfForSelectedProposal(): void {
+    if (!this.selectedProposalId) {
+      return;
+    }
+
+    this.api
+      .generateProposalPdf(this.selectedProposalId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          this.lastActionMessage = `Generated PDF ${result.fileName}.`;
+          this.loadProposalDetail(this.selectedProposalId!);
+        },
+        error: (error) => {
+          this.lastActionMessage = error?.error ?? 'Unable to generate proposal PDF.';
+        }
+      });
+  }
+
+  counterSignSelectedProposal(): void {
+    if (!this.selectedProposalId || !this.signatureEnvelope) {
+      return;
+    }
+
+    const fullLegalName = window.prompt('Counter-sign full legal name', this.auth.session?.fullName ?? '');
+    if (!fullLegalName || !fullLegalName.trim()) {
+      return;
+    }
+
+    const company = window.prompt('Counter-sign company (optional)', '') ?? '';
+    this.signatureBusy = true;
+    this.api
+      .counterSignProposal(this.selectedProposalId, this.signatureEnvelope.id, {
+        fullLegalName: fullLegalName.trim(),
+        company: this.trimOptional(company),
+        notes: 'Counter-signed from Proposal Maker'
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (envelope) => {
+          this.signatureBusy = false;
+          this.signatureEnvelope = envelope;
+          this.lastActionMessage = 'Counter-signature recorded and proposal accepted.';
+          this.loadProposalDetail(this.selectedProposalId!);
+          this.loadProposals(this.listResponse?.page.page ?? 1);
+        },
+        error: (error) => {
+          this.signatureBusy = false;
+          this.lastActionMessage = error?.error?.message ?? error?.error ?? 'Unable to counter-sign proposal.';
+        }
+      });
+  }
+
+  openManualMarkSignedPicker(): void {
+    if (!this.selectedProposalId || this.signatureBusy) {
+      return;
+    }
+
+    this.pendingManualSignedProposalId = this.selectedProposalId;
+    if (this.manualSignedFileInput?.nativeElement) {
+      this.manualSignedFileInput.nativeElement.value = '';
+      this.manualSignedFileInput.nativeElement.click();
+    }
+  }
+
+  onManualSignedFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !this.pendingManualSignedProposalId) {
+      return;
+    }
+
+    if (file.size > 25 * 1024 * 1024) {
+      this.lastActionMessage = 'Signed document must be under 25MB.';
+      return;
+    }
+
+    const fullLegalName = window.prompt('Client full legal name for this signed file', this.selectedProposal?.clientName ?? '');
+    if (!fullLegalName || !fullLegalName.trim()) {
+      return;
+    }
+
+    const email = window.prompt('Client email', this.builderEnquiryDetail?.contactEmail ?? '');
+    if (!email || !email.trim()) {
+      return;
+    }
+
+    const company = window.prompt('Client company (optional)', '') ?? '';
+    const proposalId = this.pendingManualSignedProposalId;
+    this.pendingManualSignedProposalId = null;
+    this.signatureBusy = true;
+
+    this.fileToBase64(file)
+      .then((base64Content) => {
+        this.api
+          .markProposalSigned(proposalId, {
+            fullLegalName: fullLegalName.trim(),
+            email: email.trim(),
+            company: this.trimOptional(company),
+            fileName: file.name,
+            mimeType: file.type || 'application/pdf',
+            base64Content,
+            notes: 'Manual wet-signed upload'
+          })
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe({
+            next: (envelope) => {
+              this.signatureBusy = false;
+              this.signatureEnvelope = envelope;
+              this.lastActionMessage = 'Manual signed contract recorded and proposal accepted.';
+              this.loadProposalDetail(proposalId);
+              this.loadProposals(this.listResponse?.page.page ?? 1);
+            },
+            error: (error) => {
+              this.signatureBusy = false;
+              this.lastActionMessage = error?.error?.message ?? error?.error ?? 'Unable to mark proposal as signed.';
+            }
+          });
+      })
+      .catch(() => {
+        this.signatureBusy = false;
+        this.lastActionMessage = 'Unable to read the signed file.';
+      });
+  }
+
+  saveBuilderAsTemplate(): void {
+    const venueId = this.venueId;
+    if (!venueId) {
+      this.builderError = 'Select a venue before saving a template.';
+      return;
+    }
+
+    const lineItems = this.toLineItemPayload();
+    if (lineItems.length === 0) {
+      this.builderError = 'Add at least one line item before saving a template.';
+      return;
+    }
+
+    const label = window.prompt('Template name');
+    if (!label || !label.trim()) {
+      return;
+    }
+
+    const eventType = this.builderEnquiryDetail?.eventType
+      ?? this.enquiryOptions.find((x) => x.id === this.builderForm.controls.enquiryId.value)?.eventType
+      ?? 'Other';
+
+    this.savingTemplate = true;
+
+    this.api
+      .getVenueProposalTemplates(venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (existingTemplates) => {
+          const keyBase = label.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'template';
+          let key = keyBase;
+          let suffix = 2;
+          while (existingTemplates.some((template) => template.key === key)) {
+            key = `${keyBase}-${suffix}`;
+            suffix += 1;
+          }
+
+          const today = new Date();
+          const validUntilRaw = this.builderForm.controls.validUntilDate.value;
+          const validUntil = validUntilRaw ? new Date(validUntilRaw) : today;
+          const defaultValidityDays = Math.max(
+            1,
+            Math.round((validUntil.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
+
+          const template: ProposalTemplateSettingDto = {
+            key,
+            label: label.trim(),
+            eventType,
+            defaultLineItems: lineItems.map((line) => ({
+              sectionType: line.sectionType,
+              sortOrder: line.sortOrder ?? null,
+              category: line.category,
+              description: line.description,
+              quantity: line.quantity,
+              unit: line.unit ?? 'Flat rate',
+              unitPriceExclVat: line.unitPriceExclVat,
+              vatRate: line.vatRate,
+              discountPercent: line.discountPercent ?? 0,
+              discountAmount: line.discountAmount ?? 0
+            })),
+            defaultIntroduction: this.trimOptional(this.builderForm.controls.introduction.value),
+            defaultTermsVersion: this.trimOptional(this.builderForm.controls.termsVersion.value),
+            defaultValidityDays
+          };
+
+          this.api
+            .upsertVenueProposalTemplates(venueId, [...existingTemplates, template])
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+              next: () => {
+                this.savingTemplate = false;
+                this.builderNotice = `Saved template "${template.label}".`;
+                this.onBuilderEnquiryChanged(this.builderForm.controls.enquiryId.value ?? '');
+              },
+              error: (error) => {
+                this.savingTemplate = false;
+                this.builderError = error?.error ?? 'Unable to save template.';
+              }
+            });
+        },
+        error: (error) => {
+          this.savingTemplate = false;
+          this.builderError = error?.error ?? 'Unable to load existing templates.';
+        }
+      });
+  }
+
+  addLineItemForSection(sectionType: LineSectionType): void {
+    this.addLineItem({ sectionType }, sectionType);
+  }
+
+  moveSection(index: number, offset: number): void {
+    const ordered = this.orderedBuilderSections;
+    const target = index + offset;
+    if (target < 0 || target >= ordered.length) {
+      return;
+    }
+
+    const current = ordered[index];
+    ordered[index] = ordered[target];
+    ordered[target] = current;
+    this.builderSections = ordered.map((section, i) => ({ ...section, sortOrder: i + 1 }));
+  }
+
+  toggleSection(sectionKey: string): void {
+    this.builderSections = this.builderSections.map((section) =>
+      section.key === sectionKey
+        ? { ...section, isEnabled: !section.isEnabled }
+        : section);
+  }
+
+  sectionEnabled(sectionKey: string): boolean {
+    return this.builderSections.some((section) => section.key === sectionKey && section.isEnabled);
+  }
+
+  sectionSubtotal(section: LineSectionType): number {
+    return this.builderSectionSubtotals[section] ?? 0;
+  }
+
+  selectedTermsContent(): string {
+    const selectedVersion = this.builderForm.controls.termsVersion.value;
+    if (!selectedVersion) {
+      return 'No terms content available for this version.';
+    }
+
+    const match = this.termsDocuments.find((document) => document.version === selectedVersion);
+    return match?.content ?? 'No terms content available for this version.';
+  }
+
+  onLineDragStart(index: number, event: DragEvent): void {
+    this.draggedLineIndex = index;
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', String(index));
+    }
+  }
+
+  onLineDragOver(event: DragEvent): void {
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  }
+
+  onLineDrop(targetIndex: number, event: DragEvent): void {
+    event.preventDefault();
+    const sourceIndex = this.draggedLineIndex ?? Number(event.dataTransfer?.getData('text/plain'));
+    this.draggedLineIndex = null;
+
+    if (!Number.isFinite(sourceIndex) || sourceIndex < 0 || sourceIndex >= this.lineItemsArray.length) {
+      return;
+    }
+
+    if (sourceIndex === targetIndex) {
+      return;
+    }
+
+    const sourceControl = this.lineItemsArray.at(sourceIndex);
+    this.lineItemsArray.removeAt(sourceIndex);
+    const adjustedTarget = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    this.lineItemsArray.insert(adjustedTarget, sourceControl);
+    this.recalculateBuilderTotals();
   }
 
   openBuilderForCreate(enquiryId?: string): void {
@@ -191,6 +651,8 @@ export class ProposalsComponent implements OnInit {
     this.builderError = '';
     this.builderNotice = '';
     this.comparison = null;
+    this.sendEmailDraft = '';
+    this.builderSections = [...DEFAULT_BUILDER_SECTIONS];
 
     const initialEnquiryId = enquiryId
       ?? this.selectedProposal?.enquiryId
@@ -207,12 +669,19 @@ export class ProposalsComponent implements OnInit {
       introduction: '',
       termsVersion: this.termsDocuments.find((doc) => doc.isActive)?.version ?? '',
       currencyCode: this.resolveDefaultCurrency(initialEnquiryId),
-      serviceChargePercent: 0
+      serviceChargePercent: 0,
+      preparedFor: '',
+      eventDate: '',
+      eventTime: '',
+      guestCount: 0,
+      eventStyle: '',
+      assignedSpace: '',
+      acceptanceSignature: ''
     });
     this.applyingTemplate = false;
 
     this.lineItemsArray.clear();
-    this.addLineItem();
+    this.addLineItem({ sectionType: 'MenuPackage' });
     this.recalculateBuilderTotals();
     this.onBuilderEnquiryChanged(initialEnquiryId);
   }
@@ -232,6 +701,10 @@ export class ProposalsComponent implements OnInit {
     this.builderError = '';
     this.builderNotice = '';
     this.comparison = null;
+    this.sendEmailDraft = this.builderEnquiryDetail?.contactEmail ?? this.sendEmailDraft;
+    this.builderSections = proposal.sections.length > 0
+      ? [...proposal.sections].sort((left, right) => left.sortOrder - right.sortOrder)
+      : [...DEFAULT_BUILDER_SECTIONS];
 
     this.applyingTemplate = true;
     this.builderForm.patchValue({
@@ -242,7 +715,14 @@ export class ProposalsComponent implements OnInit {
       introduction: proposal.introduction ?? '',
       termsVersion: proposal.termsVersion,
       currencyCode: proposal.currencyCode,
-      serviceChargePercent
+      serviceChargePercent,
+      preparedFor: proposal.clientName,
+      eventDate: this.builderEnquiryDetail ? this.toDateOnlyLocal(this.builderEnquiryDetail.eventStartUtc) : '',
+      eventTime: this.builderEnquiryDetail ? this.toTimeOnlyLocal(this.builderEnquiryDetail.eventStartUtc) : '',
+      guestCount: this.builderEnquiryDetail?.guestsExpected ?? 0,
+      eventStyle: this.builderEnquiryDetail?.eventStyle ?? '',
+      assignedSpace: this.builderEnquiryDetail ? this.resolveSpaceFromEnquiry(this.builderEnquiryDetail) : '',
+      acceptanceSignature: proposal.acceptedByName ?? ''
     });
     this.applyingTemplate = false;
 
@@ -257,7 +737,8 @@ export class ProposalsComponent implements OnInit {
         unitPriceExclVat: line.unitPriceExclVat,
         vatRate: line.vatRate,
         discountPercent: line.discountPercent,
-        discountAmount: fixedDiscountAmount
+        discountAmount: fixedDiscountAmount,
+        sectionType: (line.sectionType as LineSectionType) ?? 'MenuPackage'
       }));
     }
 
@@ -269,10 +750,15 @@ export class ProposalsComponent implements OnInit {
   closeBuilder(): void {
     this.isBuilderOpen = false;
     this.builderError = '';
+    this.builderNotice = '';
+    this.draggedLineIndex = null;
   }
 
-  addLineItem(seed?: Partial<CreateProposalLineItemRequest>): void {
+  addLineItem(seed?: Partial<CreateProposalLineItemRequest>, sectionType?: LineSectionType): void {
+    const resolvedSectionType = (seed?.sectionType as LineSectionType | undefined) ?? sectionType ?? 'MenuPackage';
     this.lineItemsArray.push(this.createLineItemGroup(seed));
+    const line = this.lineItemsArray.at(this.lineItemsArray.length - 1);
+    line.patchValue({ sectionType: resolvedSectionType }, { emitEvent: false });
     this.recalculateBuilderTotals();
   }
 
@@ -321,6 +807,7 @@ export class ProposalsComponent implements OnInit {
       termsVersion: this.trimOptional(value.termsVersion),
       currencyCode: (value.currencyCode ?? 'GBP').toUpperCase(),
       serviceChargePercent: Number(value.serviceChargePercent ?? 0),
+      sections: this.orderedBuilderSections,
       lineItems
     };
 
@@ -343,7 +830,11 @@ export class ProposalsComponent implements OnInit {
           this.selectProposal(proposal.id);
 
           if (sendAfterSave) {
-            this.sendProposalByPrompt(proposal.id);
+            this.sendProposalByPrompt(
+              proposal.id,
+              this.trimOptional(this.sendEmailDraft)
+                ?? this.builderEnquiryDetail?.contactEmail
+                ?? undefined);
           }
         },
         error: (error) => {
@@ -409,16 +900,17 @@ export class ProposalsComponent implements OnInit {
     return normalized || 'unknown';
   }
 
-  private sendProposalByPrompt(proposalId: string): void {
-    const email = window.prompt('Send proposal to email address');
-    if (!email) {
+  private sendProposalByPrompt(proposalId: string, suggestedEmail?: string): void {
+    const promptValue = suggestedEmail ?? '';
+    const email = window.prompt('Send proposal to email address', promptValue);
+    if (!email || !email.trim()) {
       return;
     }
 
     this.api
       .sendProposal(proposalId, {
         clientEmail: email.trim(),
-        portalBaseUrl: 'https://portal.creventaflow.com'
+        portalBaseUrl: `${window.location.origin}/portal`
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -429,6 +921,47 @@ export class ProposalsComponent implements OnInit {
         },
         error: (error) => {
           this.lastActionMessage = error?.error ?? 'Unable to send proposal.';
+        }
+      });
+  }
+
+  private sendProposalForSignatureByPrompt(proposalId: string, suggestedEmail?: string): void {
+    const email = window.prompt('Send e-sign request to email address', suggestedEmail ?? '');
+    if (!email || !email.trim()) {
+      return;
+    }
+
+    const clientName = window.prompt('Client full legal name (optional)', this.selectedProposal?.clientName ?? '') ?? '';
+    const clientCompany = window.prompt('Client company (optional)', '') ?? '';
+
+    this.signatureBusy = true;
+    this.api
+      .sendProposalForSignature(proposalId, {
+        clientEmail: email.trim(),
+        clientName: this.trimOptional(clientName),
+        clientCompany: this.trimOptional(clientCompany),
+        provider: null,
+        message: null,
+        publicSigningBaseUrl: `${window.location.origin}/signature`,
+        requireCounterSignature: true,
+        fieldMappings: [
+          { sectionKey: 'termsConditions', requirementType: 'full-signature' },
+          { sectionKey: 'pricingSummary', requirementType: 'initials' },
+          { sectionKey: 'acceptanceBlock', requirementType: 'full-signature' }
+        ]
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          this.signatureBusy = false;
+          this.lastActionMessage = `Signature request sent. Link: ${result.signingUrl}`;
+          this.loadSignatureEnvelope(proposalId);
+          this.loadProposalDetail(proposalId);
+          this.loadProposals(this.listResponse?.page.page ?? 1);
+        },
+        error: (error) => {
+          this.signatureBusy = false;
+          this.lastActionMessage = error?.error?.message ?? error?.error ?? 'Unable to send signature request.';
         }
       });
   }
@@ -533,10 +1066,22 @@ export class ProposalsComponent implements OnInit {
           this.loadingDetail = false;
           this.selectedProposal = proposal;
           this.selectedEnquiryIdFilter = proposal.enquiryId;
+          this.loadSignatureEnvelope(proposal.id);
+
+          this.api
+            .getEnquiry(proposal.enquiryId)
+            .pipe(takeUntilDestroyed(this.destroyRef))
+            .subscribe({
+              next: (detail) => {
+                this.builderEnquiryDetail = detail;
+                this.sendEmailDraft = detail.contactEmail;
+              }
+            });
         },
         error: () => {
           this.loadingDetail = false;
           this.selectedProposal = null;
+          this.signatureEnvelope = null;
         }
       });
   }
@@ -546,6 +1091,27 @@ export class ProposalsComponent implements OnInit {
     if (!venueId) {
       return;
     }
+
+    this.api
+      .getVenueProfile(venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (profile) => {
+          this.venueProfile = profile;
+          if (this.builderMode === 'create') {
+            this.builderForm.patchValue(
+              {
+                currencyCode: profile.currencyCode,
+                serviceChargePercent: Number(this.builderForm.controls.serviceChargePercent.value || 0)
+              },
+              { emitEvent: false }
+            );
+          }
+        },
+        error: () => {
+          this.venueProfile = null;
+        }
+      });
 
     this.api
       .getEnquiries({
@@ -592,6 +1158,11 @@ export class ProposalsComponent implements OnInit {
   private onBuilderEnquiryChanged(enquiryId: string): void {
     if (!enquiryId || !this.venueId) {
       this.templateOptions = [];
+      this.builderEnquiryDetail = null;
+      this.builderEnquirySustainability = null;
+      this.aiPricingRecommendation = null;
+      this.aiPricingLoading = false;
+      this.aiPricingMessage = 'Select an enquiry with a space assignment to unlock AI pricing suggestions.';
       return;
     }
 
@@ -600,11 +1171,48 @@ export class ProposalsComponent implements OnInit {
       this.builderForm.patchValue(
         {
           title: this.builderForm.controls.title.value || `${selected.reference} Proposal`,
-          currencyCode: this.resolveDefaultCurrency(enquiryId)
+          currencyCode: this.resolveDefaultCurrency(enquiryId),
+          eventDate: this.toDateOnlyLocal(selected.eventStartUtc),
+          eventTime: this.toTimeOnlyLocal(selected.eventStartUtc),
+          eventStyle: selected.eventStyle ?? '',
+          guestCount: selected.guestsExpected
         },
         { emitEvent: false }
       );
     }
+
+    this.api
+      .getEnquiry(enquiryId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (detail) => {
+          this.builderEnquiryDetail = detail;
+          this.sendEmailDraft = detail.contactEmail;
+          this.builderForm.patchValue(
+            {
+              preparedFor: `${detail.contactFirstName} ${detail.contactLastName}`.trim(),
+              eventDate: this.toDateOnlyLocal(detail.eventStartUtc),
+              eventTime: this.toTimeOnlyLocal(detail.eventStartUtc),
+              guestCount: detail.guestsExpected,
+              eventStyle: detail.eventStyle ?? '',
+              assignedSpace: this.resolveSpaceFromEnquiry(detail),
+              title: this.builderMode === 'create'
+                ? this.builderForm.controls.title.value || `${detail.reference} Proposal`
+                : this.builderForm.controls.title.value
+            },
+            { emitEvent: false }
+          );
+          this.loadBuilderSustainability(detail.id);
+          this.loadAiPricingRecommendation(detail);
+        },
+        error: () => {
+          this.builderEnquiryDetail = null;
+          this.builderEnquirySustainability = null;
+          this.aiPricingRecommendation = null;
+          this.aiPricingLoading = false;
+          this.aiPricingMessage = 'Unable to load AI pricing guidance for this enquiry.';
+        }
+      });
 
     this.api
       .getProposalTemplateOptions(this.venueId, selected?.eventType)
@@ -619,6 +1227,43 @@ export class ProposalsComponent implements OnInit {
         },
         error: () => {
           this.templateOptions = [];
+        }
+      });
+  }
+
+  private loadBuilderSustainability(enquiryId: string): void {
+    this.builderEnquirySustainability = null;
+    this.api
+      .getEnquirySustainability(enquiryId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (profile) => {
+          this.builderEnquirySustainability = profile;
+        },
+        error: () => {
+          this.builderEnquirySustainability = null;
+        }
+      });
+  }
+
+  private loadSignatureEnvelope(proposalId: string): void {
+    this.signatureLoading = true;
+    this.api
+      .getProposalSignatureEnvelope(proposalId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (envelope) => {
+          this.signatureLoading = false;
+          this.signatureEnvelope = envelope;
+        },
+        error: (error) => {
+          this.signatureLoading = false;
+          if (error?.status === 404) {
+            this.signatureEnvelope = null;
+            return;
+          }
+
+          this.signatureEnvelope = null;
         }
       });
   }
@@ -657,10 +1302,31 @@ export class ProposalsComponent implements OnInit {
     this.recalculateBuilderTotals();
   }
 
+  private fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error ?? new Error('Unable to read file'));
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        const commaIndex = result.indexOf(',');
+        const base64 = commaIndex >= 0 ? result.slice(commaIndex + 1) : result;
+        if (!base64) {
+          reject(new Error('Unable to decode file data'));
+          return;
+        }
+
+        resolve(base64);
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
   private toLineItemPayload(): CreateProposalLineItemRequest[] {
     return this.lineItemsArray.controls
       .map((control) => control.getRawValue())
-      .map((line) => ({
+      .map((line, index) => ({
+        sectionType: this.normalizeLineSectionType(line.sectionType),
+        sortOrder: index,
         category: this.requiredText(line.category, 'Miscellaneous'),
         description: this.requiredText(line.description, 'Untitled item'),
         quantity: this.numberOrDefault(line.quantity, 1),
@@ -675,6 +1341,7 @@ export class ProposalsComponent implements OnInit {
 
   private createLineItemGroup(seed?: Partial<CreateProposalLineItemRequest>) {
     return this.formBuilder.group({
+      sectionType: [this.normalizeLineSectionType(seed?.sectionType), Validators.required],
       category: [seed?.category ?? 'Room Hire', Validators.required],
       description: [seed?.description ?? '', Validators.required],
       quantity: [seed?.quantity ?? 1, [Validators.required, Validators.min(0.01)]],
@@ -688,12 +1355,15 @@ export class ProposalsComponent implements OnInit {
 
   private ensureBuilderHasAtLeastOneLine(): void {
     if (this.lineItemsArray.length === 0) {
-      this.addLineItem();
+      this.addLineItem({ sectionType: 'MenuPackage' });
     }
   }
 
   private recalculateBuilderTotals(): void {
-    const lines = this.toLineItemPayload().map((line) => this.calculateLine(line));
+    const lines = this.toLineItemPayload().map((line) => ({
+      sectionType: this.normalizeLineSectionType(line.sectionType),
+      ...this.calculateLine(line)
+    }));
     const subtotal = this.round2(lines.reduce((acc, line) => acc + line.subtotalExclVat, 0));
     const totalVat = this.round2(lines.reduce((acc, line) => acc + line.vatAmount, 0));
     const serviceChargePercent = this.numberOrDefault(this.builderForm.controls.serviceChargePercent.value, 0);
@@ -713,6 +1383,65 @@ export class ProposalsComponent implements OnInit {
     this.builderVatBreakdown = [...vatMap.entries()]
       .sort(([left], [right]) => left - right)
       .map(([vatRate, vatAmount]) => ({ vatRate, vatAmount }));
+    this.builderSectionSubtotals = {
+      MenuPackage: this.round2(lines
+        .filter((line) => line.sectionType === 'MenuPackage')
+        .reduce((acc, line) => acc + line.subtotalExclVat, 0)),
+      AdditionalServices: this.round2(lines
+        .filter((line) => line.sectionType === 'AdditionalServices')
+        .reduce((acc, line) => acc + line.subtotalExclVat, 0))
+    };
+  }
+
+  private loadAiPricingRecommendation(detail: EnquiryDetailResponse): void {
+    if (!this.venueId) {
+      this.aiPricingRecommendation = null;
+      this.aiPricingLoading = false;
+      this.aiPricingMessage = 'Select a venue to load AI pricing suggestions.';
+      return;
+    }
+
+    const spaceId = this.resolvePrimarySpaceId(detail);
+    if (!spaceId) {
+      this.aiPricingRecommendation = null;
+      this.aiPricingLoading = false;
+      this.aiPricingMessage = 'Assign a space to this enquiry to unlock AI pricing suggestions.';
+      return;
+    }
+
+    const eventDate = this.toDateOnlyLocal(detail.eventStartUtc);
+    if (!eventDate) {
+      this.aiPricingRecommendation = null;
+      this.aiPricingLoading = false;
+      this.aiPricingMessage = 'Event date is required for AI pricing suggestions.';
+      return;
+    }
+
+    this.aiPricingLoading = true;
+    this.aiPricingMessage = '';
+    this.api
+      .getAiPricingRecommendation({
+        venueId: this.venueId,
+        spaceId,
+        date: eventDate,
+        eventType: detail.eventType
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (recommendation) => {
+          this.aiPricingRecommendation = recommendation;
+          this.aiPricingLoading = false;
+          this.aiPricingMessage =
+            recommendation.hasSufficientData
+              ? ''
+              : recommendation.message || 'Gathering data...';
+        },
+        error: () => {
+          this.aiPricingRecommendation = null;
+          this.aiPricingLoading = false;
+          this.aiPricingMessage = 'AI pricing guidance is currently unavailable.';
+        }
+      });
   }
 
   private calculateLine(line: Partial<CreateProposalLineItemRequest>) {
@@ -734,6 +1463,10 @@ export class ProposalsComponent implements OnInit {
       vatAmount,
       totalInclVat
     };
+  }
+
+  private normalizeLineSectionType(value: string | null | undefined): LineSectionType {
+    return value === 'AdditionalServices' ? 'AdditionalServices' : 'MenuPackage';
   }
 
   private resolveFixedDiscountAmount(
@@ -766,7 +1499,7 @@ export class ProposalsComponent implements OnInit {
   private defaultValidUntilDate(): string {
     const date = new Date();
     date.setDate(date.getDate() + 14);
-    return this.toDateOnly(date);
+    return this.toDateOnlyLocal(date.toISOString());
   }
 
   private toDateOnly(date: Date): string {
@@ -776,6 +1509,51 @@ export class ProposalsComponent implements OnInit {
     return `${year}-${month}-${day}`;
   }
 
+  private toDateOnlyLocal(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  private toTimeOnlyLocal(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    const hour = String(date.getHours()).padStart(2, '0');
+    const minute = String(date.getMinutes()).padStart(2, '0');
+    return `${hour}:${minute}`;
+  }
+
+  private resolveSpaceFromEnquiry(detail: EnquiryDetailResponse): string {
+    const firstSubEvent = detail.subEvents[0];
+    if (!firstSubEvent) {
+      return 'To be confirmed';
+    }
+
+    if (firstSubEvent.spaceIds.length > 0) {
+      return `${firstSubEvent.spaceIds.length} space${firstSubEvent.spaceIds.length === 1 ? '' : 's'} selected`;
+    }
+
+    return firstSubEvent.name;
+  }
+
+  private resolvePrimarySpaceId(detail: EnquiryDetailResponse): string | null {
+    const firstWithSpace = detail.subEvents.find((subEvent) => subEvent.spaceIds.length > 0);
+    if (!firstWithSpace) {
+      return null;
+    }
+
+    return firstWithSpace.spaceIds[0] ?? null;
+  }
+
   private numberOrDefault(value: unknown, fallback: number): number {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : fallback;
@@ -783,5 +1561,38 @@ export class ProposalsComponent implements OnInit {
 
   private round2(value: number): number {
     return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  private handleVenueChange(venueId: string | null): void {
+    this.resetVenueScopedState();
+    if (!venueId) {
+      this.lastActionMessage = 'Select a venue to manage proposals.';
+      return;
+    }
+
+    this.loadBuilderSources();
+    this.loadProposals(1);
+  }
+
+  private resetVenueScopedState(): void {
+    this.loadingList = false;
+    this.loadingDetail = false;
+    this.listResponse = null;
+    this.proposals = [];
+    this.selectedProposalId = null;
+    this.selectedProposal = null;
+    this.selectedEnquiryIdFilter = null;
+    this.signatureEnvelope = null;
+    this.comparison = null;
+    this.compareWithProposalId = '';
+    this.enquiryOptions = [];
+    this.templateOptions = [];
+    this.termsDocuments = [];
+    this.venueProfile = null;
+    this.builderEnquiryDetail = null;
+    this.builderEnquirySustainability = null;
+    this.aiPricingRecommendation = null;
+    this.aiPricingMessage = '';
+    this.closeBuilder();
   }
 }

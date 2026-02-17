@@ -13,6 +13,11 @@ export const authInterceptor: HttpInterceptorFn = (request, next) => {
   }
 
   const tenantSubdomain = auth.tenantSubdomain;
+  const tenantId = auth.session?.tenantId;
+  if (tenantId) {
+    headers = headers.set('X-Tenant-Id', tenantId);
+  }
+
   if (tenantSubdomain) {
     headers = headers.set('X-Tenant-Subdomain', tenantSubdomain);
   }
