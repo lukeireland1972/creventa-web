@@ -1,4 +1,3 @@
-import { DatePipe } from '@angular/common';
 import { Component, DestroyRef, EventEmitter, HostListener, Input, OnChanges, Output, SimpleChanges, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { catchError, forkJoin, of } from 'rxjs';
@@ -22,7 +21,7 @@ interface QuickTaskEnquiryOption {
 @Component({
   selector: 'app-task-quick-create-modal',
   standalone: true,
-  imports: [ReactiveFormsModule, DatePipe],
+  imports: [ReactiveFormsModule],
   templateUrl: './task-quick-create-modal.component.html',
   styleUrl: './task-quick-create-modal.component.scss'
 })

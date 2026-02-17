@@ -1,4 +1,4 @@
-import { DatePipe, DecimalPipe, NgClass } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -27,7 +27,7 @@ interface VenueMetricBar {
 @Component({
   selector: 'app-portfolio',
   standalone: true,
-  imports: [FormsModule, DecimalPipe, DatePipe, NgClass],
+  imports: [FormsModule, DecimalPipe, DatePipe],
   templateUrl: './portfolio.component.html',
   styleUrl: './portfolio.component.scss'
 })
