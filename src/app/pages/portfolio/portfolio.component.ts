@@ -187,10 +187,12 @@ export class PortfolioComponent implements OnInit {
           this.dashboardData = response;
           this.loadingDashboard = false;
         },
-        error: () => {
+        error: (error) => {
           this.loadingDashboard = false;
           this.dashboardData = null;
-          this.dashboardError = 'Unable to load portfolio metrics.';
+          this.dashboardError = error?.error?.message
+            ?? error?.error
+            ?? 'Unable to load portfolio metrics.';
         }
       });
   }
@@ -210,10 +212,12 @@ export class PortfolioComponent implements OnInit {
           this.groupReport = response;
           this.loadingReport = false;
         },
-        error: () => {
+        error: (error) => {
           this.groupReport = null;
           this.loadingReport = false;
-          this.reportError = 'Unable to load portfolio report.';
+          this.reportError = error?.error?.message
+            ?? error?.error
+            ?? 'Unable to load portfolio report.';
         }
       });
   }

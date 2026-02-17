@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpEvent, HttpParams, HttpRequest } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, catchError, throwError } from 'rxjs';
 
 export interface HealthStatus {
   status: string;
@@ -2728,6 +2728,85 @@ export interface SnapshotRunResponse {
 export class ApiService {
   constructor(private http: HttpClient) {}
 
+  private getWithApiPathFallback<T>(primaryPath: string, fallbackPath: string, options?: { params?: HttpParams }): Observable<T> {
+    return this.http.get<T>(primaryPath, options).pipe(
+      catchError((error) => {
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.get<T>(fallbackPath, options);
+        }
+
+        return throwError(() => error);
+      })
+    );
+  }
+
+  private postWithApiPathFallback<T>(
+    primaryPath: string,
+    fallbackPath: string,
+    body: unknown,
+    options?: { params?: HttpParams }
+  ): Observable<T> {
+    return this.http.post<T>(primaryPath, body, options).pipe(
+      catchError((error) => {
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.post<T>(fallbackPath, body, options);
+        }
+
+        return throwError(() => error);
+      })
+    );
+  }
+
+  private putWithApiPathFallback<T>(
+    primaryPath: string,
+    fallbackPath: string,
+    body: unknown,
+    options?: { params?: HttpParams }
+  ): Observable<T> {
+    return this.http.put<T>(primaryPath, body, options).pipe(
+      catchError((error) => {
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.put<T>(fallbackPath, body, options);
+        }
+
+        return throwError(() => error);
+      })
+    );
+  }
+
+  private patchWithApiPathFallback<T>(
+    primaryPath: string,
+    fallbackPath: string,
+    body: unknown,
+    options?: { params?: HttpParams }
+  ): Observable<T> {
+    return this.http.patch<T>(primaryPath, body, options).pipe(
+      catchError((error) => {
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.patch<T>(fallbackPath, body, options);
+        }
+
+        return throwError(() => error);
+      })
+    );
+  }
+
+  private deleteWithApiPathFallback(
+    primaryPath: string,
+    fallbackPath: string,
+    options?: { params?: HttpParams }
+  ): Observable<void> {
+    return this.http.delete<void>(primaryPath, options).pipe(
+      catchError((error) => {
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.delete<void>(fallbackPath, options);
+        }
+
+        return throwError(() => error);
+      })
+    );
+  }
+
   getHealth(): Observable<HealthStatus> {
     return this.http.get<HealthStatus>('/api/health');
   }
@@ -2737,7 +2816,11 @@ export class ApiService {
   }
 
   createVenue(payload: CreateVenueRequest): Observable<VenueSummaryDto> {
-    return this.http.post<VenueSummaryDto>('/api/venues', payload);
+    return this.postWithApiPathFallback<VenueSummaryDto>(
+      '/api/v1/venues',
+      '/api/venues',
+      payload
+    );
   }
 
   getVenueProfile(venueId: string): Observable<VenueProfileDto> {
@@ -2801,43 +2884,79 @@ export class ApiService {
       params = params.set('toUtc', toUtc);
     }
 
-    return this.http.get<EventsHubEventDto[]>(`/api/events-hub/venues/${venueId}/events`, { params });
+    return this.getWithApiPathFallback<EventsHubEventDto[]>(
+      `/api/v1/events-hub/venues/${venueId}/events`,
+      `/api/events-hub/venues/${venueId}/events`,
+      { params }
+    );
   }
 
   getEventsHubEvent(venueId: string, eventId: string): Observable<EventsHubEventDto> {
-    return this.http.get<EventsHubEventDto>(`/api/events-hub/venues/${venueId}/events/${eventId}`);
+    return this.getWithApiPathFallback<EventsHubEventDto>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}`
+    );
   }
 
   createEventsHubEvent(venueId: string, payload: UpsertEventsHubEventRequest): Observable<EventsHubEventDto> {
-    return this.http.post<EventsHubEventDto>(`/api/events-hub/venues/${venueId}/events`, payload);
+    return this.postWithApiPathFallback<EventsHubEventDto>(
+      `/api/v1/events-hub/venues/${venueId}/events`,
+      `/api/events-hub/venues/${venueId}/events`,
+      payload
+    );
   }
 
   updateEventsHubEvent(venueId: string, eventId: string, payload: UpsertEventsHubEventRequest): Observable<EventsHubEventDto> {
-    return this.http.put<EventsHubEventDto>(`/api/events-hub/venues/${venueId}/events/${eventId}`, payload);
+    return this.putWithApiPathFallback<EventsHubEventDto>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}`,
+      payload
+    );
   }
 
   deleteEventsHubEvent(venueId: string, eventId: string): Observable<void> {
-    return this.http.delete<void>(`/api/events-hub/venues/${venueId}/events/${eventId}`);
+    return this.deleteWithApiPathFallback(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}`
+    );
   }
 
   publishEventsHubEvent(venueId: string, eventId: string): Observable<EventsHubPublishResponse> {
-    return this.http.post<EventsHubPublishResponse>(`/api/events-hub/venues/${venueId}/events/${eventId}/publish`, {});
+    return this.postWithApiPathFallback<EventsHubPublishResponse>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}/publish`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}/publish`,
+      {}
+    );
   }
 
   syncEventsHubEvent(venueId: string, eventId: string): Observable<EventsHubSyncResponse> {
-    return this.http.post<EventsHubSyncResponse>(`/api/events-hub/venues/${venueId}/events/${eventId}/sync`, {});
+    return this.postWithApiPathFallback<EventsHubSyncResponse>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}/sync`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}/sync`,
+      {}
+    );
   }
 
   getEventsHubAnalytics(venueId: string, eventId: string): Observable<EventsHubAnalyticsDto> {
-    return this.http.get<EventsHubAnalyticsDto>(`/api/events-hub/venues/${venueId}/events/${eventId}/analytics`);
+    return this.getWithApiPathFallback<EventsHubAnalyticsDto>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}/analytics`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}/analytics`
+    );
   }
 
   getEventsHubAttendees(venueId: string, eventId: string): Observable<EventsHubAttendeeDto[]> {
-    return this.http.get<EventsHubAttendeeDto[]>(`/api/events-hub/venues/${venueId}/events/${eventId}/attendees`);
+    return this.getWithApiPathFallback<EventsHubAttendeeDto[]>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}/attendees`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}/attendees`
+    );
   }
 
   addEventsHubAttendee(venueId: string, eventId: string, payload: UpsertEventsHubAttendeeRequest): Observable<EventsHubAttendeeDto> {
-    return this.http.post<EventsHubAttendeeDto>(`/api/events-hub/venues/${venueId}/events/${eventId}/attendees`, payload);
+    return this.postWithApiPathFallback<EventsHubAttendeeDto>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}/attendees`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}/attendees`,
+      payload
+    );
   }
 
   setEventsHubAttendeeCheckIn(
@@ -2846,7 +2965,8 @@ export class ApiService {
     attendeeId: string,
     checkedIn: boolean
   ): Observable<EventsHubAttendeeDto> {
-    return this.http.patch<EventsHubAttendeeDto>(
+    return this.patchWithApiPathFallback<EventsHubAttendeeDto>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}/attendees/${attendeeId}/check-in`,
       `/api/events-hub/venues/${venueId}/events/${eventId}/attendees/${attendeeId}/check-in`,
       { checkedIn });
   }
@@ -2907,12 +3027,20 @@ export class ApiService {
       queryParams = queryParams.set('pageSize', params.pageSize);
     }
 
-    return this.http.get<ContactListResponse>('/api/contacts', { params: queryParams });
+    return this.getWithApiPathFallback<ContactListResponse>(
+      '/api/v1/contacts',
+      '/api/contacts',
+      { params: queryParams }
+    );
   }
 
   getContact(venueId: string, contactId: string): Observable<ContactDetailResponse> {
     const params = new HttpParams().set('venueId', venueId);
-    return this.http.get<ContactDetailResponse>(`/api/contacts/${contactId}`, { params });
+    return this.getWithApiPathFallback<ContactDetailResponse>(
+      `/api/v1/contacts/${contactId}`,
+      `/api/contacts/${contactId}`,
+      { params }
+    );
   }
 
   updateContact(venueId: string, contactId: string, payload: UpdateContactRequest): Observable<ContactDetailResponse> {
@@ -2933,7 +3061,11 @@ export class ApiService {
       queryParams = queryParams.set('pageSize', params.pageSize);
     }
 
-    return this.http.get<ContactTimelineResponse>(`/api/contacts/${contactId}/timeline`, { params: queryParams });
+    return this.getWithApiPathFallback<ContactTimelineResponse>(
+      `/api/v1/contacts/${contactId}/timeline`,
+      `/api/contacts/${contactId}/timeline`,
+      { params: queryParams }
+    );
   }
 
   getContactCompanies(venueId: string, search?: string): Observable<ContactCompanySummaryDto[]> {
@@ -2942,7 +3074,11 @@ export class ApiService {
       params = params.set('search', search);
     }
 
-    return this.http.get<ContactCompanySummaryDto[]>('/api/contacts/companies', { params });
+    return this.getWithApiPathFallback<ContactCompanySummaryDto[]>(
+      '/api/v1/contacts/companies',
+      '/api/contacts/companies',
+      { params }
+    );
   }
 
   getContactCompanyDetail(venueId: string, companyName: string): Observable<ContactCompanyDetailResponse> {
@@ -2950,12 +3086,20 @@ export class ApiService {
       .set('venueId', venueId)
       .set('companyName', companyName);
 
-    return this.http.get<ContactCompanyDetailResponse>('/api/contacts/companies/detail', { params });
+    return this.getWithApiPathFallback<ContactCompanyDetailResponse>(
+      '/api/v1/contacts/companies/detail',
+      '/api/contacts/companies/detail',
+      { params }
+    );
   }
 
   getContactAnalytics(venueId: string): Observable<ContactAnalyticsResponse> {
     const params = new HttpParams().set('venueId', venueId);
-    return this.http.get<ContactAnalyticsResponse>('/api/contacts/analytics', { params });
+    return this.getWithApiPathFallback<ContactAnalyticsResponse>(
+      '/api/v1/contacts/analytics',
+      '/api/contacts/analytics',
+      { params }
+    );
   }
 
   pullContactFromCreventa(venueId: string, contactId: string): Observable<ContactSyncResultDto> {
@@ -2970,7 +3114,11 @@ export class ApiService {
 
   getContactCustomFields(venueId: string): Observable<ContactCustomFieldDefinitionDto[]> {
     const params = new HttpParams().set('venueId', venueId);
-    return this.http.get<ContactCustomFieldDefinitionDto[]>('/api/contacts/settings/custom-fields', { params });
+    return this.getWithApiPathFallback<ContactCustomFieldDefinitionDto[]>(
+      '/api/v1/contacts/settings/custom-fields',
+      '/api/contacts/settings/custom-fields',
+      { params }
+    );
   }
 
   upsertContactCustomFields(
@@ -3873,7 +4021,11 @@ export class ApiService {
     if (venueId) {
       params = params.set('venueId', venueId);
     }
-    return this.http.get<PortfolioDashboardResponse>('/api/portfolio/dashboard', { params });
+    return this.getWithApiPathFallback<PortfolioDashboardResponse>(
+      '/api/v1/portfolio/dashboard',
+      '/api/portfolio/dashboard',
+      { params }
+    );
   }
 
   getPortfolioReport(
@@ -3895,9 +4047,12 @@ export class ApiService {
       queryParams = queryParams.set('eventType', params.eventType);
     }
 
-    return this.http.get<PortfolioReportResponse>(`/api/portfolio/reports/${encodeURIComponent(reportKey)}`, {
-      params: queryParams
-    });
+    const encodedKey = encodeURIComponent(reportKey);
+    return this.getWithApiPathFallback<PortfolioReportResponse>(
+      `/api/v1/portfolio/reports/${encodedKey}`,
+      `/api/portfolio/reports/${encodedKey}`,
+      { params: queryParams }
+    );
   }
 
   getPortfolioSharedAvailability(params: {
@@ -3913,9 +4068,11 @@ export class ApiService {
       queryParams = queryParams.set('sourceVenueId', params.sourceVenueId);
     }
 
-    return this.http.get<PortfolioSharedAvailabilityResponse>('/api/portfolio/availability', {
-      params: queryParams
-    });
+    return this.getWithApiPathFallback<PortfolioSharedAvailabilityResponse>(
+      '/api/v1/portfolio/availability',
+      '/api/portfolio/availability',
+      { params: queryParams }
+    );
   }
 
   getEnquiryRoutingOptions(enquiryId: string): Observable<PortfolioRoutingOptionsResponse> {

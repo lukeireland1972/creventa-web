@@ -1180,6 +1180,40 @@ export class EnquiriesComponent implements OnInit {
               this.auth.setSelectedVenue(fallbackVenueId);
               return;
             }
+
+            this.recoveringVenueContext = true;
+            this.api
+              .getVenues()
+              .pipe(takeUntilDestroyed(this.destroyRef))
+              .subscribe({
+                next: (venues) => {
+                  const fallbackFromLiveVenues =
+                    venues.find((venue) => venue.id !== venueId)?.id
+                    ?? venues[0]?.id
+                    ?? null;
+
+                  if (fallbackFromLiveVenues && fallbackFromLiveVenues !== venueId) {
+                    this.auth.setSelectedVenue(fallbackFromLiveVenues);
+                    return;
+                  }
+
+                  this.recoveringVenueContext = false;
+                  this.loading = false;
+                  this.enquiries = [];
+                  this.listResponse = null;
+                  this.selectedEnquiry = null;
+                  this.enquiryLoadError = this.resolveEnquiryListError(error);
+                },
+                error: () => {
+                  this.recoveringVenueContext = false;
+                  this.loading = false;
+                  this.enquiries = [];
+                  this.listResponse = null;
+                  this.selectedEnquiry = null;
+                  this.enquiryLoadError = this.resolveEnquiryListError(error);
+                }
+              });
+            return;
           }
 
           this.recoveringVenueContext = false;

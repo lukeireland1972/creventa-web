@@ -590,7 +590,7 @@ export class AppShellComponent implements OnInit {
         },
         error: (error) => {
           this.isCreatingVenue = false;
-          this.createVenueError = error?.error?.message ?? error?.error ?? 'Unable to create venue.';
+          this.createVenueError = this.extractCreateVenueError(error);
         }
       });
   }
@@ -1220,6 +1220,48 @@ export class AppShellComponent implements OnInit {
     }
   }
 
+  private extractCreateVenueError(error: unknown): string {
+    const maybeError = error as {
+      status?: number;
+      message?: string;
+      error?: { message?: string; detail?: string; title?: string; errors?: Record<string, string[]> } | string;
+    };
+
+    if (typeof maybeError?.error === 'string' && maybeError.error.trim().length > 0) {
+      return maybeError.error;
+    }
+
+    if (typeof maybeError?.error === 'object' && maybeError.error) {
+      if (typeof maybeError.error.message === 'string' && maybeError.error.message.trim().length > 0) {
+        return maybeError.error.message;
+      }
+      if (typeof maybeError.error.detail === 'string' && maybeError.error.detail.trim().length > 0) {
+        return maybeError.error.detail;
+      }
+      if (typeof maybeError.error.title === 'string' && maybeError.error.title.trim().length > 0) {
+        return maybeError.error.title;
+      }
+
+      const errors = maybeError.error.errors;
+      if (errors && typeof errors === 'object') {
+        const firstError = Object.values(errors).flat().find((value) => typeof value === 'string' && value.trim().length > 0);
+        if (firstError) {
+          return firstError;
+        }
+      }
+    }
+
+    if (maybeError?.status === 403) {
+      return 'You do not have permission to create venues.';
+    }
+
+    if (typeof maybeError?.message === 'string' && maybeError.message.trim().length > 0) {
+      return maybeError.message;
+    }
+
+    return 'Unable to create venue.';
+  }
+
   private setNavItems(): void {
     if (this.operationsOnly) {
       this.navItems = [{ label: 'Operations Dashboard', section: 'primary', route: '/operations', exact: true }];
@@ -1250,6 +1292,7 @@ export class AppShellComponent implements OnInit {
       },
       { label: 'Events Hub', section: 'primary', route: '/events-hub', exact: false },
       { label: 'Reports', section: 'reports', route: '/reports', exact: false },
+      { label: 'Feedback Insights', section: 'reports', route: '/feedback-insights', exact: false },
       { label: 'Admin', section: 'admin', route: '/admin', exact: false },
       { label: 'Settings', section: 'admin', route: '/settings', exact: false }
     ];

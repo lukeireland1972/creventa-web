@@ -35,6 +35,7 @@ export const routes: Routes = [
       { path: 'settings', component: SettingsComponent },
       { path: 'events-hub', loadComponent: () => import('./pages/events-hub/events-hub.component').then((m) => m.EventsHubComponent) },
       { path: 'reports', component: ReportsComponent },
+      { path: 'feedback-insights', loadComponent: () => import('./pages/feedback-insights/feedback-insights.component').then((m) => m.FeedbackInsightsComponent) },
       { path: '', component: DashboardComponent, pathMatch: 'full' }
     ]
   },

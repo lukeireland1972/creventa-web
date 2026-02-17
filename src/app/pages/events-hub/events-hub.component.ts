@@ -150,9 +150,9 @@ export class EventsHubComponent implements OnInit {
           this.loadEvents();
           this.loadUsers();
         },
-        error: () => {
+        error: (error) => {
           this.loading = false;
-          this.errorMessage = 'Unable to load venue spaces for Events Hub.';
+          this.errorMessage = this.extractErrorMessage(error, 'Unable to load venue spaces for Events Hub.');
         }
       });
   }
@@ -183,9 +183,9 @@ export class EventsHubComponent implements OnInit {
             this.startNewEvent();
           }
         },
-        error: () => {
+        error: (error) => {
           this.loading = false;
-          this.errorMessage = 'Unable to load Events Hub events.';
+          this.errorMessage = this.extractErrorMessage(error, 'Unable to load Events Hub events.');
         }
       });
   }
@@ -222,8 +222,8 @@ export class EventsHubComponent implements OnInit {
           this.loadAttendees(event.id);
           this.loadAnalytics(event.id);
         },
-        error: () => {
-          this.errorMessage = 'Unable to load event details.';
+        error: (error) => {
+          this.errorMessage = this.extractErrorMessage(error, 'Unable to load event details.');
         }
       });
   }
@@ -751,5 +751,26 @@ export class EventsHubComponent implements OnInit {
   private trimOrNull(value: string | null | undefined): string | null {
     const normalized = (value ?? '').trim();
     return normalized ? normalized : null;
+  }
+
+  private extractErrorMessage(error: unknown, fallback: string): string {
+    const maybeError = error as { status?: number; error?: { message?: string } | string; message?: string };
+    if (typeof maybeError?.error === 'string' && maybeError.error.trim().length > 0) {
+      return maybeError.error;
+    }
+
+    if (typeof maybeError?.error === 'object' && typeof maybeError.error?.message === 'string' && maybeError.error.message.trim().length > 0) {
+      return maybeError.error.message;
+    }
+
+    if (typeof maybeError?.message === 'string' && maybeError.message.trim().length > 0) {
+      return maybeError.message;
+    }
+
+    if (maybeError?.status === 403) {
+      return 'You do not have permission to access Events Hub for this venue.';
+    }
+
+    return fallback;
   }
 }

@@ -78,7 +78,9 @@ export class AuthService {
       const parsed = JSON.parse(raw) as AuthSessionState;
       if (parsed?.accessToken && parsed.expiresAtUtc) {
         if (new Date(parsed.expiresAtUtc).getTime() > Date.now()) {
-          this.sessionSubject.next(parsed);
+          const normalized = this.normalizeSessionState(parsed);
+          this.sessionSubject.next(normalized);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
         } else {
           localStorage.removeItem(STORAGE_KEY);
         }
@@ -121,10 +123,10 @@ export class AuthService {
       return;
     }
 
-    const next = {
+    const next = this.normalizeSessionState({
       ...current,
       venueId
-    };
+    });
 
     this.sessionSubject.next(next);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
@@ -161,7 +163,7 @@ export class AuthService {
   }
 
   private persistSession(response: LoginResponse, tenantSubdomain: string): void {
-    const state: AuthSessionState = {
+    const state = this.normalizeSessionState({
       accessToken: response.accessToken,
       expiresAtUtc: response.expiresAtUtc,
       userId: response.userId,
@@ -171,9 +173,31 @@ export class AuthService {
       email: response.email,
       venueRoles: response.venueRoles,
       tenantSubdomain
-    };
+    });
 
     this.sessionSubject.next(state);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  private normalizeSessionState(state: AuthSessionState): AuthSessionState {
+    const venueRoles = state.venueRoles ?? [];
+    const venueId = (state.venueId ?? '').trim();
+    if (venueId.length > 0) {
+      // Keep explicit venue selection even if roles are stale in token/session.
+      // Backend remains source of truth for access checks.
+      return {
+        ...state,
+        venueRoles,
+        venueId
+      };
+    }
+
+    return {
+      ...state,
+      venueRoles,
+      venueId: venueRoles.length > 0
+        ? venueRoles[0].venueId
+        : null
+    };
   }
 }

@@ -1,0 +1,370 @@
+<section class="feedback-page">
+  <header class="page-header">
+    <div>
+      <h1>Feedback Insights</h1>
+      <p>Interactive analysis for questionnaire feedback across venues, forms, and service areas.</p>
+    </div>
+  </header>
+
+  <article
+    class="ingest-card"
+    [class.drag-active]="isDropActive"
+    (dragover)="onDragOver($event)"
+    (dragleave)="onDragLeave($event)"
+    (drop)="onDrop($event)">
+    <div class="ingest-copy">
+      <h2>Data Source</h2>
+      <p>Upload a JSON export from <code>questionnaire_results</code>. This runs entirely in your browser.</p>
+      @if (sourceFileName) {
+        <p class="source-meta">
+          Loaded <strong>{{ sourceFileName }}</strong> with {{ totalLoadedSubmissions | number }} submissions.
+        </p>
+      }
+      @if (loadError) {
+        <p class="error">{{ loadError }}</p>
+      }
+    </div>
+    <label class="upload-btn">
+      <input type="file" accept=".json,application/json" (change)="onFileInputChange($event)" [disabled]="isProcessing" />
+      <span>{{ isProcessing ? 'Processing file...' : 'Choose feedback JSON' }}</span>
+    </label>
+  </article>
+
+  @if (!hasData) {
+    <article class="state-card">
+      <h2>No feedback loaded yet</h2>
+      <p>Choose <code>/Users/lukeireland/Desktop/Feedback.json</code> to generate interactive venue insights.</p>
+    </article>
+  } @else {
+    <section class="filters-card">
+      <label>
+        Venue
+        <select [(ngModel)]="selectedVenue" (ngModelChange)="applyFilters()">
+          <option value="all">All Venues</option>
+          @for (venueId of venueOptions; track venueId) {
+            <option [value]="venueId">{{ venueId }}</option>
+          }
+        </select>
+      </label>
+
+      <label>
+        Questionnaire
+        <select [(ngModel)]="selectedQuestionnaire" (ngModelChange)="applyFilters()">
+          <option value="all">All Questionnaires</option>
+          @for (questionnaireId of questionnaireOptions; track questionnaireId) {
+            <option [value]="questionnaireId">{{ questionnaireId }}</option>
+          }
+        </select>
+      </label>
+
+      <label>
+        Category
+        <select [(ngModel)]="selectedCategory" (ngModelChange)="applyFilters()">
+          <option value="all">All Categories</option>
+          @for (category of categoryOptions; track category) {
+            <option [value]="category">{{ category | titlecase }}</option>
+          }
+        </select>
+      </label>
+
+      <label>
+        From
+        <input type="date" [(ngModel)]="fromDate" (ngModelChange)="applyFilters()" />
+      </label>
+
+      <label>
+        To
+        <input type="date" [(ngModel)]="toDate" (ngModelChange)="applyFilters()" />
+      </label>
+
+      <label>
+        Search Event/Feedback
+        <input
+          type="text"
+          [(ngModel)]="searchText"
+          (ngModelChange)="applyFilters()"
+          placeholder="guest, event, issue, keyword..." />
+      </label>
+
+      <label>
+        Min Question Sample
+        <input type="number" min="1" [(ngModel)]="minQuestionSampleSize" (ngModelChange)="applyFilters()" />
+      </label>
+
+      <label>
+        Min Menu Sample
+        <input type="number" min="1" [(ngModel)]="minMenuSampleSize" (ngModelChange)="applyFilters()" />
+      </label>
+
+      <label>
+        Question Sort
+        <select [(ngModel)]="questionSort" (ngModelChange)="applyFilters()">
+          <option value="lowest">Lowest First</option>
+          <option value="highest">Highest First</option>
+        </select>
+      </label>
+
+      <button type="button" class="ghost-btn" (click)="resetFilters()">Reset Filters</button>
+    </section>
+
+    @if (filteredSubmissions.length === 0) {
+      <article class="state-card">
+        <h2>No matching records</h2>
+        <p>Adjust filters to widen the date range or include more categories.</p>
+      </article>
+    } @else {
+      <section class="kpi-grid">
+        <article class="kpi-card">
+          <span>Filtered Submissions</span>
+          <strong>{{ summary.submissions | number }}</strong>
+        </article>
+        <article class="kpi-card">
+          <span>Unique Events</span>
+          <strong>{{ summary.uniqueEvents | number }}</strong>
+        </article>
+        <article class="kpi-card">
+          <span>Unique Guests</span>
+          <strong>{{ summary.uniqueGuests | number }}</strong>
+        </article>
+        <article class="kpi-card">
+          <span>Average Score</span>
+          <strong>{{ summary.averageScore | number: '1.2-2' }}/5</strong>
+          <small>{{ summary.scoredResponses | number }} scored responses</small>
+        </article>
+        <article class="kpi-card">
+          <span>Mailing List Opt-in</span>
+          <strong>{{ summary.mailingListRate | number: '1.1-1' }}%</strong>
+        </article>
+        <article class="kpi-card">
+          <span>Low-score Share (&le;3)</span>
+          <strong>{{ summary.lowScoreShare | number: '1.1-1' }}%</strong>
+          <small>{{ summary.feedbackComments | number }} comments captured</small>
+        </article>
+      </section>
+
+      <section class="chart-grid">
+        <article class="panel panel-wide">
+          <header>
+            <h2>Monthly Sentiment Trend</h2>
+            <p>Average score versus submission volume by month.</p>
+          </header>
+          <div class="canvas-wrap">
+            <canvas #trendCanvas></canvas>
+          </div>
+        </article>
+
+        <article class="panel">
+          <header>
+            <h2>Category Scorecard</h2>
+            <p>Category averages from scored responses.</p>
+          </header>
+          <div class="canvas-wrap">
+            <canvas #categoryCanvas></canvas>
+          </div>
+        </article>
+
+        <article class="panel">
+          <header>
+            <h2>Score Distribution</h2>
+            <p>How responses spread across score bands.</p>
+          </header>
+          <div class="canvas-wrap">
+            <canvas #distributionCanvas></canvas>
+          </div>
+        </article>
+      </section>
+
+      <section class="insight-grid">
+        <article class="panel">
+          <header>
+            <h2>Top Strengths</h2>
+          </header>
+          <ul class="mini-list">
+            @for (row of strengthQuestions; track row.questionId) {
+              <li>
+                <div>
+                  <strong>{{ row.questionId }}</strong>
+                  <small>{{ row.category | titlecase }} · {{ row.responseCount }} responses</small>
+                </div>
+                <span class="pill" [class]="scoreClass(row.averageScore)">{{ row.averageScore | number: '1.2-2' }}</span>
+              </li>
+            }
+            @if (strengthQuestions.length === 0) {
+              <li class="empty">Not enough sample size for strength ranking.</li>
+            }
+          </ul>
+        </article>
+
+        <article class="panel">
+          <header>
+            <h2>Priority Questions</h2>
+          </header>
+          <ul class="mini-list">
+            @for (row of improvementQuestions; track row.questionId) {
+              <li>
+                <div>
+                  <strong>{{ row.questionId }}</strong>
+                  <small>{{ row.category | titlecase }} · {{ row.responseCount }} responses</small>
+                </div>
+                <span class="pill" [class]="scoreClass(row.averageScore)">{{ row.averageScore | number: '1.2-2' }}</span>
+              </li>
+            }
+            @if (improvementQuestions.length === 0) {
+              <li class="empty">Not enough sample size for priority ranking.</li>
+            }
+          </ul>
+        </article>
+
+        <article class="panel">
+          <header>
+            <h2>Frequent Feedback Terms</h2>
+          </header>
+          <div class="keyword-grid">
+            @for (keyword of keywordRows; track keyword.term) {
+              <span>{{ keyword.term }} <em>{{ keyword.count }}</em></span>
+            }
+            @if (keywordRows.length === 0) {
+              <p class="empty">No text feedback captured under current filters.</p>
+            }
+          </div>
+        </article>
+      </section>
+
+      <section class="table-grid">
+        <article class="panel">
+          <header>
+            <h2>Question Performance</h2>
+            <p>Filtered by minimum sample size and sort preference.</p>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Question ID</th>
+                  <th>Category</th>
+                  <th>Avg Score</th>
+                  <th>Responses</th>
+                  <th>Low-score %</th>
+                  <th>Comments</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of questionRows; track row.questionId) {
+                  <tr>
+                    <td>{{ row.questionId }}</td>
+                    <td>{{ row.category | titlecase }}</td>
+                    <td>{{ row.averageScore | number: '1.2-2' }}</td>
+                    <td>{{ row.responseCount | number }}</td>
+                    <td>{{ row.lowScoreShare | number: '1.1-1' }}%</td>
+                    <td>{{ row.commentCount | number }}</td>
+                  </tr>
+                }
+                @if (questionRows.length === 0) {
+                  <tr>
+                    <td colspan="6" class="empty-row">No questions meet the current sample threshold.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article class="panel">
+          <header>
+            <h2>Menu Item Ratings</h2>
+            <p>Lowest scoring menu items first for rapid food quality triage.</p>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Course</th>
+                  <th>Menu Item</th>
+                  <th>Avg Score</th>
+                  <th>Ratings</th>
+                  <th>Comments</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of menuRows; track row.courseName + '-' + row.menuItemName) {
+                  <tr>
+                    <td>{{ row.courseName }}</td>
+                    <td>{{ row.menuItemName }}</td>
+                    <td>{{ row.averageScore | number: '1.2-2' }}</td>
+                    <td>{{ row.ratingCount | number }}</td>
+                    <td>{{ row.commentCount | number }}</td>
+                  </tr>
+                }
+                @if (menuRows.length === 0) {
+                  <tr>
+                    <td colspan="5" class="empty-row">No menu items meet the current sample threshold.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="table-grid">
+        <article class="panel">
+          <header>
+            <h2>Low-score Comment Highlights</h2>
+            <p>Most recent and lowest rated comments first.</p>
+          </header>
+          <ul class="comment-list">
+            @for (row of lowCommentRows; track row.text + '-' + row.createdAt) {
+              <li>
+                <div class="comment-head">
+                  <span class="pill" [class]="scoreClass(row.score)">{{ row.score | number: '1.1-1' }}</span>
+                  <small>{{ row.createdAt | date: 'dd MMM yyyy' }} · {{ row.category | titlecase }} · {{ row.questionId }}</small>
+                </div>
+                <p>{{ row.text }}</p>
+                <small class="meta">{{ row.title }}</small>
+              </li>
+            }
+            @if (lowCommentRows.length === 0) {
+              <li class="empty">No low-score comments in this filter state.</li>
+            }
+          </ul>
+        </article>
+
+        <article class="panel">
+          <header>
+            <h2>At-risk Event Submissions</h2>
+            <p>Lowest submission averages under the current filter set.</p>
+          </header>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Event</th>
+                  <th>Venue</th>
+                  <th>Questionnaire</th>
+                  <th>Avg Score</th>
+                  <th>Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of submissionAlerts; track row.title + '-' + row.createdAt) {
+                  <tr>
+                    <td>{{ row.title }}</td>
+                    <td>{{ row.venueId }}</td>
+                    <td>{{ row.questionnaireId }}</td>
+                    <td>{{ row.averageScore | number: '1.2-2' }}</td>
+                    <td>{{ row.createdAt | date: 'dd MMM yyyy' }}</td>
+                  </tr>
+                }
+                @if (submissionAlerts.length === 0) {
+                  <tr>
+                    <td colspan="5" class="empty-row">No scored submissions found for this filter set.</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    }
+  }
+</section>
