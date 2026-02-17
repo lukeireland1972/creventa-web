@@ -3,20 +3,26 @@ import { DatePipe, NgClass } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { distinctUntilChanged, forkJoin, map } from 'rxjs';
+import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
+import { CdkOverlayOrigin, OverlayModule } from '@angular/cdk/overlay';
 import {
   AiDemandHeatmapCellDto,
   ApiService,
   DiaryEventDto,
+  DiaryMoveAlternativeDto,
   DiaryMoveConflictDto,
   DiaryResponse,
   MoveDiaryEventRequest,
+  OperationsDayColumnDto,
   SpaceCombinationDto,
   SpaceSummaryDto
 } from '../../services/api.service';
+import { ActivityRealtimeService } from '../../services/activity-realtime.service';
 import { AuthService } from '../../services/auth.service';
 import { QuickTaskCreatedEvent, TaskQuickCreateModalComponent } from '../../ui/task-quick-create-modal/task-quick-create-modal.component';
+import { DiaryEventPopoverComponent } from './components/diary-event-popover/diary-event-popover.component';
 
-type DiaryView = 'month' | 'timeline' | 'week' | 'day';
+type DiaryView = 'month' | 'timeline' | 'week' | 'day' | 'operations';
 type WeekLayout = 'merged' | 'space';
 type ResizeEdge = 'start' | 'end';
 type ResizeView = 'week' | 'day';
@@ -108,7 +114,10 @@ interface PendingMove {
   targetSpaceId: string;
   actionLabel: string;
   checkingConflicts: boolean;
+  hasHardConflicts: boolean;
+  hasSoftConflicts: boolean;
   conflicts: DiaryMoveConflictDto[];
+  alternatives: DiaryMoveAlternativeDto[];
   conflictCheckMessage: string;
 }
 
@@ -140,7 +149,7 @@ interface ResizeState {
 
 @Component({
   selector: 'app-event-diary',
-  imports: [NgClass, DatePipe, TaskQuickCreateModalComponent],
+  imports: [NgClass, DatePipe, TaskQuickCreateModalComponent, DragDropModule, OverlayModule, DiaryEventPopoverComponent],
   templateUrl: './event-diary.component.html',
   styleUrl: './event-diary.component.scss'
 })
@@ -155,6 +164,7 @@ export class EventDiaryComponent implements OnInit {
 
   private api = inject(ApiService);
   private auth = inject(AuthService);
+  private activityRealtime = inject(ActivityRealtimeService);
   private destroyRef = inject(DestroyRef);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
@@ -168,7 +178,8 @@ export class EventDiaryComponent implements OnInit {
     { key: 'month', label: 'Month' },
     { key: 'timeline', label: 'Timeline' },
     { key: 'week', label: 'Week' },
-    { key: 'day', label: 'Day' }
+    { key: 'day', label: 'Day' },
+    { key: 'operations', label: 'Operations' }
   ];
 
   diary: DiaryResponse | null = null;
@@ -179,6 +190,7 @@ export class EventDiaryComponent implements OnInit {
   weekSpaceRows: WeekSpaceRow[] = [];
   dayEvents: DiaryEventDto[] = [];
   daySpaceColumns: DaySpaceColumn[] = [];
+  operationsColumns: OperationsDayColumnDto[] = [];
   showDemandHeatmap = false;
   demandHeatmapLoading = false;
   demandHeatmapMessage = '';
@@ -190,7 +202,11 @@ export class EventDiaryComponent implements OnInit {
   selectedSpaceFilterKeys: string[] = [];
   loadingSpaceFilters = false;
   spaceFilterError = '';
-  hoveredEventKey: string | null = null;
+  activePopoverOrigin: CdkOverlayOrigin | null = null;
+  activePopoverEvent: DiaryEventDto | null = null;
+  activePopoverHeadline: string | null = null;
+  popoverExpanded = false;
+  popoverOpen = false;
   draggingEvent: DiaryEventDto | null = null;
   loadError = '';
   exportState: 'xlsx' | 'pdf' | null = null;
@@ -209,12 +225,18 @@ export class EventDiaryComponent implements OnInit {
   private pendingConflictCheckSequence = 0;
   private demandHeatmapRequestSequence = 0;
   private diaryLoadSequence = 0;
+  private popoverOpenTimerHandle: number | null = null;
+  private popoverCloseTimerHandle: number | null = null;
 
   get venueId(): string | null {
     return this.auth.selectedVenueId;
   }
 
   get currentRangeLabel(): string {
+    if (this.selectedView === 'operations') {
+      return 'Yesterday · Today · Tomorrow';
+    }
+
     if (this.selectedView === 'timeline') {
       return this.timelineRangeLabel;
     }
@@ -228,6 +250,44 @@ export class EventDiaryComponent implements OnInit {
     }
 
     return this.monthLabel;
+  }
+
+  get operationsOnly(): boolean {
+    return this.auth.isOperationsOnly();
+  }
+
+  get availableDiaryViews(): Array<{ key: DiaryView; label: string }> {
+    if (this.operationsOnly) {
+      return this.diaryViews.filter((x) => x.key === 'operations');
+    }
+
+    return this.diaryViews;
+  }
+
+  get canConfirmPendingMove(): boolean {
+    if (!this.pendingMove) {
+      return false;
+    }
+
+    return !this.pendingMove.checkingConflicts
+      && !this.pendingMove.hasHardConflicts
+      && !this.pendingMove.hasSoftConflicts
+      && !this.applyingMove;
+  }
+
+  get canProceedSoftConflicts(): boolean {
+    if (!this.pendingMove) {
+      return false;
+    }
+
+    return !this.pendingMove.checkingConflicts
+      && this.pendingMove.hasSoftConflicts
+      && !this.pendingMove.hasHardConflicts
+      && !this.applyingMove;
+  }
+
+  get hasSuggestedAlternatives(): boolean {
+    return (this.pendingMove?.alternatives.length ?? 0) > 0;
   }
 
   get spaceFilterSummaryLabel(): string {
@@ -320,16 +380,13 @@ export class EventDiaryComponent implements OnInit {
     return !!this.pendingMove;
   }
 
-  get canConfirmPendingMove(): boolean {
-    if (!this.pendingMove) {
-      return false;
-    }
-
-    return !this.pendingMove.checkingConflicts && this.pendingMove.conflicts.length === 0 && !this.applyingMove;
-  }
-
   ngOnInit(): void {
     this.restoreStateFromQueryParams();
+    if (this.operationsOnly) {
+      this.selectedView = 'operations';
+      this.monthCursor = this.getUtcDayStart(new Date());
+      this.syncQueryParams();
+    }
 
     this.auth.session$
       .pipe(
@@ -348,6 +405,17 @@ export class EventDiaryComponent implements OnInit {
         this.loadDiary();
       });
 
+    this.activityRealtime.events$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event) => {
+        const action = (event?.actionType ?? '').toLowerCase();
+        if (!action.startsWith('diary.') && !action.startsWith('enquiry.')) {
+          return;
+        }
+
+        this.loadDiary();
+      });
+
     if (this.venueId) {
       this.loadSpaceFilterOptions(this.venueId);
     }
@@ -360,6 +428,7 @@ export class EventDiaryComponent implements OnInit {
         this.refreshIntervalHandle = null;
       }
 
+      this.clearPopoverTimers();
       this.clearMoveUndoState();
     });
   }
@@ -386,6 +455,11 @@ export class EventDiaryComponent implements OnInit {
     if (!target?.closest('.space-filter')) {
       this.showSpaceFilterDropdown = false;
     }
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void {
+    this.closePopover();
   }
 
   @HostListener('document:mousemove', ['$event'])
@@ -453,6 +527,11 @@ export class EventDiaryComponent implements OnInit {
   }
 
   shiftMonth(offset: number): void {
+    if (this.selectedView === 'operations') {
+      this.loadDiary();
+      return;
+    }
+
     if (this.selectedView === 'week') {
       const next = new Date(this.monthCursor);
       next.setUTCDate(next.getUTCDate() + offset * 7);
@@ -472,6 +551,11 @@ export class EventDiaryComponent implements OnInit {
   }
 
   goToToday(): void {
+    if (this.selectedView === 'operations') {
+      this.loadDiary();
+      return;
+    }
+
     const today = new Date();
 
     if (this.selectedView === 'week') {
@@ -510,11 +594,17 @@ export class EventDiaryComponent implements OnInit {
       return;
     }
 
+    if (this.selectedView === 'operations') {
+      this.loadError = 'Export is unavailable in Operations view.';
+      return;
+    }
+
     this.exportState = format;
+    const exportView = this.selectedView as 'day' | 'week' | 'month' | 'timeline';
     this.api
       .exportDiary({
         venueId,
-        view: this.selectedView,
+        view: exportView,
         format,
         startDate: this.toIsoDateUtc(this.monthCursor),
         spaceIds: this.getEffectiveSpaceFilterIds()
@@ -544,6 +634,13 @@ export class EventDiaryComponent implements OnInit {
   }
 
   switchView(view: DiaryView): void {
+    if (this.operationsOnly && view !== 'operations') {
+      this.selectedView = 'operations';
+      this.syncQueryParams();
+      this.loadDiary();
+      return;
+    }
+
     if (this.selectedView === view) {
       return;
     }
@@ -554,6 +651,8 @@ export class EventDiaryComponent implements OnInit {
       this.monthCursor = this.getWeekStart(this.monthCursor);
     } else if (view === 'day') {
       this.monthCursor = this.getUtcDayStart(this.monthCursor);
+    } else if (view === 'operations') {
+      this.monthCursor = this.getUtcDayStart(new Date());
     } else {
       this.monthCursor = this.getUtcMonthStart(this.monthCursor);
     }
@@ -664,6 +763,7 @@ export class EventDiaryComponent implements OnInit {
   }
 
   loadDiary(): void {
+    this.closePopover();
     const venueId = this.venueId;
     if (!venueId) {
       this.diaryLoadSequence += 1;
@@ -675,6 +775,7 @@ export class EventDiaryComponent implements OnInit {
       this.weekSpaceRows = [];
       this.dayEvents = [];
       this.daySpaceColumns = [];
+      this.operationsColumns = [];
       this.demandHeatmapByDate.clear();
       this.demandHeatmapMessage = '';
       this.demandHeatmapLoading = false;
@@ -688,6 +789,11 @@ export class EventDiaryComponent implements OnInit {
 
     if (this.selectedView === 'timeline') {
       this.loadTimelineDiary(venueId, requestSequence);
+      return;
+    }
+
+    if (this.selectedView === 'operations') {
+      this.loadOperationsOverview(venueId, requestSequence);
       return;
     }
 
@@ -714,6 +820,7 @@ export class EventDiaryComponent implements OnInit {
           this.weekSpaceRows = [];
           this.dayEvents = [];
           this.daySpaceColumns = [];
+          this.operationsColumns = [];
 
           if (this.selectedView === 'month') {
             this.monthCursor = this.getUtcMonthStart(this.parseIsoDateUtc(response.windowStart));
@@ -749,6 +856,38 @@ export class EventDiaryComponent implements OnInit {
       });
   }
 
+  private loadOperationsOverview(venueId: string, requestSequence: number): void {
+    this.api
+      .getOperationsOverview(venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          if (requestSequence !== this.diaryLoadSequence) {
+            return;
+          }
+
+          this.diary = null;
+          this.cells = [];
+          this.timelineRows = [];
+          this.roomTimelineRows = [];
+          this.weekColumns = [];
+          this.weekSpaceRows = [];
+          this.dayEvents = [];
+          this.daySpaceColumns = [];
+          this.operationsColumns = response.columns ?? [];
+          this.loadError = '';
+        },
+        error: () => {
+          if (requestSequence !== this.diaryLoadSequence) {
+            return;
+          }
+
+          this.operationsColumns = [];
+          this.loadError = 'Unable to load operations view right now.';
+        }
+      });
+  }
+
   eventGroupsForDisplay(cell: { events: DiaryEventDto[] }): DiaryEventGroup[] {
     return this.groupEventsForCell(cell.events).slice(0, 3);
   }
@@ -763,6 +902,56 @@ export class EventDiaryComponent implements OnInit {
 
   eventKey(event: DiaryEventDto): string {
     return `${event.id}-${event.spaceId}-${event.startUtc}`;
+  }
+
+  onEventMouseEnter(event: DiaryEventDto, origin: CdkOverlayOrigin, headline?: string | null): void {
+    this.clearPopoverCloseTimer();
+    this.clearPopoverOpenTimer();
+
+    this.popoverOpenTimerHandle = window.setTimeout(() => {
+      this.activePopoverEvent = event;
+      this.activePopoverOrigin = origin;
+      this.activePopoverHeadline = headline?.trim() || null;
+      this.popoverExpanded = false;
+      this.popoverOpen = true;
+      this.popoverOpenTimerHandle = null;
+    }, 250);
+  }
+
+  onEventMouseLeave(): void {
+    this.clearPopoverOpenTimer();
+    this.schedulePopoverClose();
+  }
+
+  onPopoverMouseEnter(): void {
+    this.clearPopoverCloseTimer();
+  }
+
+  onPopoverMouseLeave(): void {
+    this.schedulePopoverClose();
+  }
+
+  onPopoverToggleExpanded(): void {
+    this.popoverExpanded = !this.popoverExpanded;
+  }
+
+  onPopoverViewDetails(): void {
+    const event = this.activePopoverEvent;
+    if (!event) {
+      return;
+    }
+
+    this.closePopover();
+    this.openDetails(event);
+  }
+
+  closePopover(): void {
+    this.clearPopoverTimers();
+    this.popoverOpen = false;
+    this.popoverExpanded = false;
+    this.activePopoverEvent = null;
+    this.activePopoverOrigin = null;
+    this.activePopoverHeadline = null;
   }
 
   canDrag(event: DiaryEventDto): boolean {
@@ -821,6 +1010,23 @@ export class EventDiaryComponent implements OnInit {
     this.draggingEvent = null;
   }
 
+  onWeekCdkDrop(dayIso: string, dropEvent: CdkDragDrop<DiaryEventDto[], DiaryEventDto[], DiaryEventDto>, container: HTMLElement): void {
+    const source = dropEvent.item.data;
+    if (!source) {
+      return;
+    }
+
+    const clientY = this.resolveDropClientY(dropEvent, container);
+    this.queueMoveFromVerticalDropPosition(
+      source,
+      dayIso,
+      source.spaceId,
+      clientY,
+      container,
+      'Move event to new time'
+    );
+  }
+
   onDropWeekSpaceColumn(dayIso: string, targetSpaceId: string, dragEvent: DragEvent, container: HTMLElement): void {
     if (!this.draggingEvent) {
       return;
@@ -831,6 +1037,23 @@ export class EventDiaryComponent implements OnInit {
     this.draggingEvent = null;
   }
 
+  onWeekSpaceCdkDrop(dayIso: string, targetSpaceId: string, dropEvent: CdkDragDrop<DiaryEventDto[], DiaryEventDto[], DiaryEventDto>, container: HTMLElement): void {
+    const source = dropEvent.item.data;
+    if (!source) {
+      return;
+    }
+
+    const clientY = this.resolveDropClientY(dropEvent, container);
+    this.queueMoveFromVerticalDropPosition(
+      source,
+      dayIso,
+      targetSpaceId,
+      clientY,
+      container,
+      'Move event to new time/space'
+    );
+  }
+
   onDropDaySpaceColumn(dayIso: string, targetSpaceId: string, dragEvent: DragEvent, container: HTMLElement): void {
     if (!this.draggingEvent) {
       return;
@@ -839,6 +1062,23 @@ export class EventDiaryComponent implements OnInit {
     dragEvent.preventDefault();
     this.queueMoveFromVerticalDrop(this.draggingEvent, dayIso, targetSpaceId, dragEvent, container, 'Move event to new time/space');
     this.draggingEvent = null;
+  }
+
+  onDaySpaceCdkDrop(dayIso: string, targetSpaceId: string, dropEvent: CdkDragDrop<DiaryEventDto[], DiaryEventDto[], DiaryEventDto>, container: HTMLElement): void {
+    const source = dropEvent.item.data;
+    if (!source) {
+      return;
+    }
+
+    const clientY = this.resolveDropClientY(dropEvent, container);
+    this.queueMoveFromVerticalDropPosition(
+      source,
+      dayIso,
+      targetSpaceId,
+      clientY,
+      container,
+      'Move event to new time/space'
+    );
   }
 
   onDropRoomTrack(row: RoomTimelineRow, dragEvent: DragEvent, track: HTMLElement): void {
@@ -938,7 +1178,30 @@ export class EventDiaryComponent implements OnInit {
       return;
     }
 
-    const y = Math.max(0, Math.min(rect.height, dragEvent.clientY - rect.top));
+    this.queueMoveFromVerticalDropPosition(
+      source,
+      dayIso,
+      targetSpaceId,
+      dragEvent.clientY,
+      container,
+      actionLabel
+    );
+  }
+
+  private queueMoveFromVerticalDropPosition(
+    source: DiaryEventDto,
+    dayIso: string,
+    targetSpaceId: string,
+    clientY: number,
+    container: HTMLElement,
+    actionLabel: string
+  ): void {
+    const rect = container.getBoundingClientRect();
+    if (rect.height <= 0) {
+      return;
+    }
+
+    const y = Math.max(0, Math.min(rect.height, clientY - rect.top));
     const minuteOffset = this.roundMinutesToStep((y / rect.height) * this.totalWindowMinutes);
 
     const originalStart = new Date(source.startUtc);
@@ -949,7 +1212,46 @@ export class EventDiaryComponent implements OnInit {
     this.queueMove(source, moved.start, moved.end, targetSpaceId, actionLabel);
   }
 
+  private resolveDropClientY(dropEvent: CdkDragDrop<DiaryEventDto[], DiaryEventDto[], DiaryEventDto>, container: HTMLElement): number {
+    const maybePoint = (dropEvent as CdkDragDrop<DiaryEventDto[], DiaryEventDto[], DiaryEventDto> & { dropPoint?: { x: number; y: number } }).dropPoint;
+    if (maybePoint && typeof maybePoint.y === 'number' && !Number.isNaN(maybePoint.y)) {
+      return maybePoint.y;
+    }
+
+    const maybeMouseEvent = dropEvent.event as MouseEvent | null;
+    if (maybeMouseEvent && typeof maybeMouseEvent.clientY === 'number' && !Number.isNaN(maybeMouseEvent.clientY)) {
+      return maybeMouseEvent.clientY;
+    }
+
+    const rect = container.getBoundingClientRect();
+    return rect.top + rect.height / 2;
+  }
+
   confirmPendingMove(): void {
+    this.applyPendingMove(false);
+  }
+
+  proceedPendingMoveWithSoftConflicts(): void {
+    this.applyPendingMove(true);
+  }
+
+  applySuggestedAlternative(alternative: DiaryMoveAlternativeDto): void {
+    if (!this.pendingMove) {
+      return;
+    }
+
+    const sourceEvent = this.pendingMove.event;
+    this.pendingMove = null;
+    this.queueMove(
+      sourceEvent,
+      new Date(alternative.startUtc),
+      new Date(alternative.endUtc),
+      alternative.spaceId,
+      'Move event to suggested alternative'
+    );
+  }
+
+  private applyPendingMove(allowSoftConflicts: boolean): void {
     if (!this.pendingMove || this.applyingMove) {
       return;
     }
@@ -958,8 +1260,13 @@ export class EventDiaryComponent implements OnInit {
       return;
     }
 
-    if (this.pendingMove.conflicts.length > 0) {
+    if (this.pendingMove.hasHardConflicts) {
       this.loadError = 'Resolve the scheduling conflict before confirming this move.';
+      return;
+    }
+
+    if (this.pendingMove.hasSoftConflicts && !allowSoftConflicts) {
+      this.loadError = 'This move has warnings. Proceed anyway or choose an alternative.';
       return;
     }
 
@@ -972,7 +1279,8 @@ export class EventDiaryComponent implements OnInit {
       eventId: move.event.id,
       targetSpaceId: move.targetSpaceId,
       newStartUtc: move.newStartUtc,
-      newEndUtc: move.newEndUtc
+      newEndUtc: move.newEndUtc,
+      allowSoftConflicts
     };
 
     this.api
@@ -1094,10 +1402,14 @@ export class EventDiaryComponent implements OnInit {
       targetSpaceId,
       actionLabel,
       checkingConflicts: true,
+      hasHardConflicts: false,
+      hasSoftConflicts: false,
       conflicts: [],
+      alternatives: [],
       conflictCheckMessage: 'Checking availability...'
     };
 
+    this.closePopover();
     this.pendingMove = pendingMove;
     this.checkPendingMoveConflicts(pendingMove);
   }
@@ -1160,7 +1472,10 @@ export class EventDiaryComponent implements OnInit {
           this.pendingMove = {
             ...this.pendingMove,
             checkingConflicts: false,
+            hasHardConflicts: response.hasHardConflicts ?? false,
+            hasSoftConflicts: response.hasSoftConflicts ?? false,
             conflicts: response.conflicts ?? [],
+            alternatives: response.alternatives ?? [],
             conflictCheckMessage: response.message || (response.hasConflicts ? 'Move would create a conflict.' : 'No conflicts detected.')
           };
         },
@@ -1172,7 +1487,10 @@ export class EventDiaryComponent implements OnInit {
           this.pendingMove = {
             ...this.pendingMove,
             checkingConflicts: false,
+            hasHardConflicts: false,
+            hasSoftConflicts: false,
             conflicts: [],
+            alternatives: [],
             conflictCheckMessage: 'Conflict check unavailable. You can still try to move the event.'
           };
         }
@@ -1228,6 +1546,32 @@ export class EventDiaryComponent implements OnInit {
     }
 
     this.moveUndoState = null;
+  }
+
+  private schedulePopoverClose(): void {
+    this.clearPopoverCloseTimer();
+    this.popoverCloseTimerHandle = window.setTimeout(() => {
+      this.closePopover();
+    }, 120);
+  }
+
+  private clearPopoverOpenTimer(): void {
+    if (this.popoverOpenTimerHandle) {
+      clearTimeout(this.popoverOpenTimerHandle);
+      this.popoverOpenTimerHandle = null;
+    }
+  }
+
+  private clearPopoverCloseTimer(): void {
+    if (this.popoverCloseTimerHandle) {
+      clearTimeout(this.popoverCloseTimerHandle);
+      this.popoverCloseTimerHandle = null;
+    }
+  }
+
+  private clearPopoverTimers(): void {
+    this.clearPopoverOpenTimer();
+    this.clearPopoverCloseTimer();
   }
 
   private buildMonthCells(events: DiaryEventDto[]): MonthCell[] {
@@ -1470,7 +1814,7 @@ export class EventDiaryComponent implements OnInit {
     const query = this.route.snapshot.queryParamMap;
 
     const viewParam = (query.get('view') || '').trim().toLowerCase();
-    if (viewParam === 'month' || viewParam === 'timeline' || viewParam === 'week' || viewParam === 'day') {
+    if (viewParam === 'month' || viewParam === 'timeline' || viewParam === 'week' || viewParam === 'day' || viewParam === 'operations') {
       this.selectedView = viewParam;
     }
 
@@ -1481,6 +1825,8 @@ export class EventDiaryComponent implements OnInit {
         if (this.selectedView === 'week') {
           this.monthCursor = this.getWeekStart(parsed);
         } else if (this.selectedView === 'day') {
+          this.monthCursor = this.getUtcDayStart(parsed);
+        } else if (this.selectedView === 'operations') {
           this.monthCursor = this.getUtcDayStart(parsed);
         } else {
           this.monthCursor = this.getUtcMonthStart(parsed);

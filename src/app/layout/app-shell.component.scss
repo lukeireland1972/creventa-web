@@ -603,7 +603,16 @@
   padding: 0;
 }
 
-.notifications-menu > button {
+.notifications-group-label {
+  margin: 0.25rem 0.2rem 0.1rem;
+  font-size: 0.64rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.notifications-menu button {
   border: 1px solid var(--cf-border-soft);
   background: #fff;
   border-radius: 10px;
@@ -611,9 +620,10 @@
   padding: 0.45rem 0.55rem;
   display: grid;
   gap: 0.12rem;
+  width: 100%;
 }
 
-.notifications-menu > button.unread {
+.notifications-menu button.unread {
   border-color: #c7d2fe;
   background: #f8faff;
 }

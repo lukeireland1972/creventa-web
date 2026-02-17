@@ -20,14 +20,30 @@
           Loaded <strong>{{ sourceFileName }}</strong> with {{ totalLoadedSubmissions | number }} submissions.
         </p>
       }
+      <p>Optional: upload a venue mapping CSV with columns <code>_id,name</code> to show venue names.</p>
+      <p>Template: <code>/Users/lukeireland/.codex/workspaces/default/client/src/assets/venue-mapping-template.csv</code></p>
+      @if (venueMapFileName) {
+        <p class="source-meta">
+          Venue map loaded from <strong>{{ venueMapFileName }}</strong>.
+        </p>
+      }
       @if (loadError) {
         <p class="error">{{ loadError }}</p>
       }
+      @if (venueMapError) {
+        <p class="error">{{ venueMapError }}</p>
+      }
     </div>
-    <label class="upload-btn">
-      <input type="file" accept=".json,application/json" (change)="onFileInputChange($event)" [disabled]="isProcessing" />
-      <span>{{ isProcessing ? 'Processing file...' : 'Choose feedback JSON' }}</span>
-    </label>
+    <div class="upload-actions">
+      <label class="upload-btn">
+        <input type="file" accept=".json,application/json" (change)="onFileInputChange($event)" [disabled]="isProcessing" />
+        <span>{{ isProcessing ? 'Processing file...' : 'Choose feedback JSON' }}</span>
+      </label>
+      <label class="upload-btn secondary-upload">
+        <input type="file" accept=".csv,text/csv" (change)="onVenueMapInputChange($event)" [disabled]="isVenueMapProcessing" />
+        <span>{{ isVenueMapProcessing ? 'Loading venue CSV...' : 'Choose venues CSV' }}</span>
+      </label>
+    </div>
   </article>
 
   @if (!hasData) {
@@ -42,7 +58,7 @@
         <select [(ngModel)]="selectedVenue" (ngModelChange)="applyFilters()">
           <option value="all">All Venues</option>
           @for (venueId of venueOptions; track venueId) {
-            <option [value]="venueId">{{ venueId }}</option>
+            <option [value]="venueId">{{ venueLabel(venueId) }}</option>
           }
         </select>
       </label>
@@ -320,7 +336,7 @@
                   <small>{{ row.createdAt | date: 'dd MMM yyyy' }} · {{ row.category | titlecase }} · {{ row.questionId }}</small>
                 </div>
                 <p>{{ row.text }}</p>
-                <small class="meta">{{ row.title }}</small>
+                <small class="meta">{{ row.title }} · {{ row.guestName }} · {{ venueLabel(row.venueId) }}</small>
               </li>
             }
             @if (lowCommentRows.length === 0) {
@@ -349,7 +365,7 @@
                 @for (row of submissionAlerts; track row.title + '-' + row.createdAt) {
                   <tr>
                     <td>{{ row.title }}</td>
-                    <td>{{ row.venueId }}</td>
+                    <td>{{ venueLabel(row.venueId) }}</td>
                     <td>{{ row.questionnaireId }}</td>
                     <td>{{ row.averageScore | number: '1.2-2' }}</td>
                     <td>{{ row.createdAt | date: 'dd MMM yyyy' }}</td>
@@ -364,6 +380,118 @@
             </table>
           </div>
         </article>
+      </section>
+
+      <section class="panel comment-drilldown-panel">
+        <header class="panel-header-with-action">
+          <div>
+            <h2>Comments Drill-down</h2>
+            <p>Review each comment with guest, event, venue, and scoring context.</p>
+          </div>
+          <button type="button" class="ghost-btn" (click)="downloadAllCommentsCsv()" [disabled]="allCommentRows.length === 0">
+            Download All Comments CSV
+          </button>
+        </header>
+
+        <div class="comment-drilldown-filters">
+          <label>
+            Search Comments
+            <input
+              type="text"
+              [(ngModel)]="commentSearchText"
+              (ngModelChange)="onCommentDrilldownFiltersChange()"
+              placeholder="guest, venue, event, question, comment..." />
+          </label>
+
+          <label>
+            Source
+            <select [(ngModel)]="commentSourceFilter" (ngModelChange)="onCommentDrilldownFiltersChange()">
+              <option value="all">All</option>
+              <option value="question">Question</option>
+              <option value="menu">Menu Item</option>
+            </select>
+          </label>
+
+          <label>
+            Score
+            <select [(ngModel)]="commentScoreFilter" (ngModelChange)="onCommentDrilldownFiltersChange()">
+              <option value="all">All Scores</option>
+              <option value="low">Low (&le; 3)</option>
+              <option value="high">High (&gt; 3)</option>
+              <option value="unscored">Unscored</option>
+            </select>
+          </label>
+
+          <label>
+            Page Size
+            <select [ngModel]="commentPageSize" (ngModelChange)="setCommentPageSize($event)">
+              <option [ngValue]="25">25</option>
+              <option [ngValue]="50">50</option>
+              <option [ngValue]="100">100</option>
+            </select>
+          </label>
+        </div>
+
+        @if (filteredCommentRows.length === 0) {
+          <p class="empty">No comments match the current drill-down filters.</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Guest</th>
+                  <th>Event</th>
+                  <th>Venue</th>
+                  <th>Questionnaire</th>
+                  <th>Question</th>
+                  <th>Source</th>
+                  <th>Score</th>
+                  <th>Comment</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of pagedCommentRows; track row.text + '-' + row.createdAt + '-' + row.questionId + '-' + row.guestId) {
+                  <tr>
+                    <td>{{ row.createdAt | date: 'dd MMM yyyy' }}</td>
+                    <td>
+                      <div>{{ row.guestName }}</div>
+                      <small class="table-meta">{{ row.guestId }}</small>
+                    </td>
+                    <td>
+                      <div>{{ row.title }}</div>
+                      <small class="table-meta">{{ row.eventId }}</small>
+                    </td>
+                    <td>{{ venueLabel(row.venueId) }}</td>
+                    <td>{{ row.questionnaireId }}</td>
+                    <td>
+                      <div>{{ row.questionId }}</div>
+                      <small class="table-meta">{{ row.category | titlecase }}</small>
+                    </td>
+                    <td>{{ commentSourceLabel(row) }}</td>
+                    <td>
+                      @if (row.score !== null) {
+                        <span class="pill" [class]="scoreClass(row.score)">{{ row.score | number: '1.1-1' }}</span>
+                      } @else {
+                        <span class="table-meta">N/A</span>
+                      }
+                    </td>
+                    <td>{{ row.text }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <div class="comment-pager">
+            <span>Showing {{ commentRangeStart }}-{{ commentRangeEnd }} of {{ filteredCommentRows.length }}</span>
+            <div class="pager-controls">
+              <button type="button" class="ghost-btn" (click)="changeCommentPage(-1)" [disabled]="commentPage <= 1">Previous</button>
+              <span>Page {{ commentPage }} of {{ commentPageCount }}</span>
+              <button type="button" class="ghost-btn" (click)="changeCommentPage(1)" [disabled]="commentPage >= commentPageCount">Next</button>
+            </div>
+          </div>
+        }
       </section>
     }
   }

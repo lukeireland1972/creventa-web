@@ -1,0 +1,28 @@
+<section class="diary-hover-popover" (click)="onToggleDetails($event)">
+  <div class="popover-head">
+    <div class="popover-title-block">
+      <strong>{{ title }}</strong>
+      @if (event.contactName) {
+        <small>{{ event.contactName }}</small>
+      }
+    </div>
+    <span class="status-pill" [class]="statusClass">{{ statusLabel }}</span>
+  </div>
+
+  <div class="popover-line"><b>Covers:</b> {{ event.covers ?? '-' }}</div>
+  <div class="popover-line"><b>Timing:</b> {{ event.startUtc | date: 'HH:mm' }} - {{ event.endUtc | date: 'HH:mm' }}</div>
+  <div class="popover-line"><b>Style:</b> {{ event.eventStyle || '-' }}</div>
+  <div class="popover-line"><b>Space:</b> {{ event.spaceName || 'Unassigned' }}</div>
+  <div class="popover-line"><b>Manager:</b> {{ event.eventManagerName || '-' }}</div>
+
+  @if (expanded) {
+    <div class="popover-expanded">
+      <div class="popover-line"><b>Client:</b> {{ event.contactName || '-' }}</div>
+      <div class="popover-line"><b>Contact:</b> {{ event.contactPhoneNumberE164 || '-' }}</div>
+      <div class="popover-line"><b>Requirements:</b> {{ event.specialRequirements || '-' }}</div>
+      <button type="button" class="view-details-btn" (click)="onViewDetails($event)">View Details</button>
+    </div>
+  } @else {
+    <button type="button" class="toggle-btn" (click)="onToggleDetails($event)">Show full details</button>
+  }
+</section>

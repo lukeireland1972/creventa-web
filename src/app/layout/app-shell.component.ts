@@ -23,6 +23,7 @@ import {
   VenueSummaryDto
 } from '../services/api.service';
 import { AuthService } from '../services/auth.service';
+import { ActivityRealtimeService, NotificationRealtimeEvent } from '../services/activity-realtime.service';
 
 interface NavItem {
   label: string;
@@ -56,6 +57,7 @@ export class AppShellComponent implements OnInit {
   private formBuilder = new FormBuilder();
   private api = inject(ApiService);
   private auth = inject(AuthService);
+  private activityRealtime = inject(ActivityRealtimeService);
   private destroyRef = inject(DestroyRef);
   private router = inject(Router);
 
@@ -96,6 +98,7 @@ export class AppShellComponent implements OnInit {
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private duplicateCheckDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private duplicateCheckRequestId = 0;
+  private realtimeNotificationsSubscribed = false;
 
   navItems: NavItem[] = [];
   isCreateVenueOpen = false;
@@ -238,6 +241,38 @@ export class AppShellComponent implements OnInit {
     return !this.operationsOnly && !!this.selectedVenueId;
   }
 
+  get notificationGroups(): Array<{ key: string; label: string; items: NotificationItemDto[] }> {
+    if (this.notifications.length === 0) {
+      return [];
+    }
+
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    const yesterdayKey = `${yesterday.getFullYear()}-${yesterday.getMonth()}-${yesterday.getDate()}`;
+
+    const groups: Array<{ key: string; label: string; items: NotificationItemDto[] }> = [
+      { key: 'today', label: 'Today', items: [] },
+      { key: 'yesterday', label: 'Yesterday', items: [] },
+      { key: 'older', label: 'Older', items: [] }
+    ];
+
+    for (const item of this.notifications) {
+      const created = new Date(item.createdAtUtc);
+      const itemKey = `${created.getFullYear()}-${created.getMonth()}-${created.getDate()}`;
+      if (itemKey === todayKey) {
+        groups[0].items.push(item);
+      } else if (itemKey === yesterdayKey) {
+        groups[1].items.push(item);
+      } else {
+        groups[2].items.push(item);
+      }
+    }
+
+    return groups.filter((group) => group.items.length > 0);
+  }
+
   get currentEnquiryIdFromUrl(): string | null {
     const tree = this.router.parseUrl(this.router.url);
     const enquiryId = tree.queryParams['enquiry'];
@@ -269,6 +304,7 @@ export class AppShellComponent implements OnInit {
       .subscribe((venueId) => {
         const venueChanged = this.selectedVenueId !== venueId;
         this.selectedVenueId = venueId;
+        this.ensureRealtimeConnection();
         this.setNavItems();
         this.loadRecent();
         this.loadNotifications();
@@ -299,6 +335,8 @@ export class AppShellComponent implements OnInit {
     this.loadRecent();
     this.loadNotifications();
     this.loadTaskBadge();
+    this.ensureRealtimeConnection();
+    this.subscribeRealtimeNotifications();
 
     this.enquiryForm.controls.eventDate.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((date) => {
       if (!date || !this.selectedVenueId) {
@@ -985,6 +1023,68 @@ export class AppShellComponent implements OnInit {
       });
   }
 
+  private ensureRealtimeConnection(): void {
+    const tenantId = this.auth.session?.tenantId ?? '';
+    if (!tenantId) {
+      return;
+    }
+
+    void this.activityRealtime.ensureConnected(tenantId, this.selectedVenueId);
+  }
+
+  private subscribeRealtimeNotifications(): void {
+    if (this.realtimeNotificationsSubscribed) {
+      return;
+    }
+
+    this.realtimeNotificationsSubscribed = true;
+
+    this.activityRealtime.notifications$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event) => {
+        this.mergeRealtimeNotification(event);
+      });
+
+    this.activityRealtime.unreadCounts$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((count) => {
+        this.unreadNotifications = Math.max(0, count);
+        this.setNavItems();
+      });
+  }
+
+  private mergeRealtimeNotification(event: NotificationRealtimeEvent): void {
+    if (!event?.id) {
+      return;
+    }
+
+    if (this.selectedVenueId && event.linkUrl && event.linkUrl.includes('venue=')) {
+      // TODO: CLARIFY: if notification links become venue-scoped query routes, enforce venue filtering here.
+    }
+
+    const mapped: NotificationItemDto = {
+      id: event.id,
+      triggerKey: event.triggerKey,
+      title: event.title,
+      body: event.body,
+      linkUrl: event.linkUrl ?? null,
+      isRead: event.isRead,
+      createdAtUtc: event.createdAtUtc,
+      readAtUtc: event.readAtUtc ?? null
+    };
+
+    const existed = this.notifications.some((item) => item.id === mapped.id);
+    const next = [mapped, ...this.notifications.filter((item) => item.id !== mapped.id)];
+    this.notifications = next
+      .sort((left, right) => right.createdAtUtc.localeCompare(left.createdAtUtc))
+      .slice(0, 40);
+
+    if (!mapped.isRead && !existed) {
+      this.unreadNotifications += 1;
+    }
+    this.setNavItems();
+  }
+
   private loadTaskBadge(): void {
     if (this.operationsOnly || !this.selectedVenueId) {
       this.overdueTaskCount = 0;
@@ -1264,7 +1364,7 @@ export class AppShellComponent implements OnInit {
 
   private setNavItems(): void {
     if (this.operationsOnly) {
-      this.navItems = [{ label: 'Operations Dashboard', section: 'primary', route: '/operations', exact: true }];
+      this.navItems = [{ label: 'Operations View', section: 'primary', route: '/event-diary', exact: false }];
       return;
     }
 
@@ -1292,6 +1392,7 @@ export class AppShellComponent implements OnInit {
       },
       { label: 'Events Hub', section: 'primary', route: '/events-hub', exact: false },
       { label: 'Reports', section: 'reports', route: '/reports', exact: false },
+      { label: 'Ticket Dashboard', section: 'reports', route: '/ticket-dashboard', exact: false },
       { label: 'Feedback Insights', section: 'reports', route: '/feedback-insights', exact: false },
       { label: 'Admin', section: 'admin', route: '/admin', exact: false },
       { label: 'Settings', section: 'admin', route: '/settings', exact: false }

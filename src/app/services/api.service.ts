@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpEvent, HttpParams, HttpRequest } from '@angular/common/http';
+import { HttpClient, HttpEvent, HttpHeaders, HttpParams, HttpRequest } from '@angular/common/http';
 import { Observable, catchError, throwError } from 'rxjs';
 
 export interface HealthStatus {
@@ -376,6 +376,12 @@ export interface PaymentScheduleTemplateSettingDto {
   milestones: PaymentScheduleTemplateMilestoneSettingDto[];
 }
 
+export interface FinancialReferenceSettingsDto {
+  invoicePrefix: string;
+  creditNotePrefix: string;
+  receiptPrefix: string;
+}
+
 export interface TermsDocumentSettingDto {
   id: string;
   title: string;
@@ -384,6 +390,40 @@ export interface TermsDocumentSettingDto {
   content: string;
   isActive: boolean;
   updatedAtUtc: string;
+}
+
+export interface TermsAndConditionsDto {
+  id: string;
+  venueId: string;
+  seriesId: string;
+  name: string;
+  contentHtml: string;
+  version: number;
+  eventTypes: string[];
+  isActive: boolean;
+  isDraft: boolean;
+  createdByUserId?: string | null;
+  createdByName?: string | null;
+  createdAtUtc: string;
+  publishedAtUtc?: string | null;
+}
+
+export interface CreateTermsAndConditionsDraftRequest {
+  name: string;
+  contentHtml: string;
+  eventTypes: string[];
+  sourceTermsAndConditionsId?: string | null;
+}
+
+export interface UpdateTermsAndConditionsDraftRequest {
+  name: string;
+  contentHtml: string;
+  eventTypes: string[];
+  isActive: boolean;
+}
+
+export interface PublishTermsAndConditionsRequest {
+  isActive: boolean;
 }
 
 export interface ProposalTemplateLineItemSettingDto {
@@ -399,10 +439,18 @@ export interface ProposalTemplateLineItemSettingDto {
   discountAmount: number;
 }
 
+export interface ProposalTemplateSectionSettingDto {
+  key: string;
+  title: string;
+  isEnabled: boolean;
+  sortOrder: number;
+}
+
 export interface ProposalTemplateSettingDto {
   key: string;
   label: string;
   eventType: string;
+  defaultSections?: ProposalTemplateSectionSettingDto[] | null;
   defaultLineItems: ProposalTemplateLineItemSettingDto[];
   defaultIntroduction?: string | null;
   defaultTermsVersion?: string | null;
@@ -528,6 +576,11 @@ export interface VenueEmailAccountDto {
   lastSyncedAtUtc?: string | null;
   lastSyncError?: string | null;
   useForOutbound: boolean;
+  nylasGrantId?: string | null;
+  emailAddress?: string | null;
+  displayName?: string | null;
+  connectedAtUtc?: string | null;
+  lastSyncAtUtc?: string | null;
 }
 
 export interface NylasStatusDto {
@@ -553,6 +606,7 @@ export interface VenueEmailTemplateDto {
   name: string;
   subjectTemplate: string;
   bodyHtmlTemplate: string;
+  category?: string | null;
   isActive: boolean;
 }
 
@@ -1342,6 +1396,7 @@ export interface MoveDiaryEventRequest {
   targetSpaceId: string;
   newStartUtc: string;
   newEndUtc: string;
+  allowSoftConflicts?: boolean;
 }
 
 export interface DiaryMoveConflictDto {
@@ -1351,12 +1406,27 @@ export interface DiaryMoveConflictDto {
   startUtc: string;
   endUtc: string;
   statusKey?: string | null;
+  severity: 'Hard' | 'Soft' | string;
+  spaceName?: string | null;
+  turnaroundMinutes?: number | null;
+  description?: string | null;
+}
+
+export interface DiaryMoveAlternativeDto {
+  spaceId: string;
+  spaceName: string;
+  startUtc: string;
+  endUtc: string;
+  reason: string;
 }
 
 export interface DiaryMoveConflictCheckResponse {
   hasConflicts: boolean;
+  hasHardConflicts: boolean;
+  hasSoftConflicts: boolean;
   message: string;
   conflicts: DiaryMoveConflictDto[];
+  alternatives: DiaryMoveAlternativeDto[];
 }
 
 export interface OperationsDiaryItemDto {
@@ -1399,6 +1469,11 @@ export interface ProposalListItemDto {
   lastViewedAtUtc?: string | null;
   createdByName?: string | null;
   isLatestVersion: boolean;
+  versionNumber?: number;
+  totalExclVat?: number;
+  totalVat?: number;
+  totalInclVat?: number;
+  validityDate?: string | null;
 }
 
 export interface ProposalListResponse {
@@ -1426,6 +1501,8 @@ export interface ProposalLineItemDto {
   vatRate: number;
   vatAmount: number;
   totalInclVat: number;
+  discountType?: string | null;
+  discountValue?: number | null;
 }
 
 export interface ProposalVersionSummaryDto {
@@ -1467,6 +1544,7 @@ export interface ProposalDetailResponse {
   title?: string | null;
   validUntilDate?: string | null;
   termsVersion: string;
+  termsAndConditionsId?: string | null;
   introduction?: string | null;
   subtotalExclVat: number;
   serviceChargeAmount: number;
@@ -1486,6 +1564,10 @@ export interface ProposalDetailResponse {
   acceptedByName?: string | null;
   isLatestVersion: boolean;
   isEditable: boolean;
+  versionNumber?: number;
+  totalExclVat?: number;
+  totalInclVat?: number;
+  validityDate?: string | null;
 }
 
 export interface CreateProposalLineItemRequest {
@@ -1499,6 +1581,8 @@ export interface CreateProposalLineItemRequest {
   vatRate: number;
   discountPercent?: number;
   discountAmount?: number;
+  discountType?: string;
+  discountValue?: number;
 }
 
 export interface CreateProposalRequest {
@@ -1506,6 +1590,7 @@ export interface CreateProposalRequest {
   validUntilDate?: string;
   introduction?: string;
   termsVersion?: string;
+  termsAndConditionsId?: string;
   currencyCode: string;
   serviceChargePercent?: number;
   sections?: ProposalSectionDto[];
@@ -1563,6 +1648,49 @@ export interface ProposalTemplateOptionDto {
   defaultIntroduction?: string | null;
   defaultTermsVersion?: string | null;
   defaultValidityDays: number;
+  defaultSections?: ProposalSectionDto[] | null;
+}
+
+export interface CreateProposalFromEnquiryRequest extends CreateProposalRequest {
+  enquiryId: string;
+}
+
+export interface UpdateProposalSectionsRequest {
+  sections: ProposalSectionDto[];
+}
+
+export interface AcceptProposalRequest {
+  fullLegalName?: string | null;
+  email?: string | null;
+  acceptTerms?: boolean | null;
+  company?: string | null;
+  notes?: string | null;
+  signatureType?: string | null;
+  signatureData?: string | null;
+}
+
+export interface AcceptProposalResponse {
+  proposalId: string;
+  version: string;
+  versionNumber: number;
+  status: string;
+  acceptedAtUtc: string;
+  acceptedByName: string;
+  acceptedByEmail: string;
+  signedDocumentId?: string | null;
+}
+
+export interface DeclineProposalRequest {
+  reason?: string | null;
+}
+
+export interface DeclineProposalResponse {
+  proposalId: string;
+  version: string;
+  versionNumber: number;
+  status: string;
+  declinedAtUtc: string;
+  reason?: string | null;
 }
 
 export interface ProposalSignatureFieldMappingDto {
@@ -1818,6 +1946,30 @@ export interface PortalDeclineRequest {
 
 export interface PortalRequestChangesRequest {
   comment: string;
+}
+
+export interface PortalGenerateLinkRequest {
+  enquiryId: string;
+  contactEmail?: string | null;
+  portalBaseUrl?: string | null;
+}
+
+export interface PortalGenerateLinkResponse {
+  token: string;
+  expiresAtUtc: string;
+  portalLink: string;
+}
+
+export interface PortalCreatePaymentLinkRequest {
+  returnUrl?: string | null;
+  cancelUrl?: string | null;
+}
+
+export interface PortalCreatePaymentLinkResponse {
+  milestoneId: string;
+  url: string;
+  expiresAtUtc: string;
+  providerReference: string;
 }
 
 export interface PaymentProgressDto {
@@ -2283,12 +2435,18 @@ export interface ConnectTimelineItemDto {
   isInternal: boolean;
   subject?: string | null;
   preview: string;
+  bodyHtml?: string | null;
   fromAddress?: string | null;
   toAddresses?: string | null;
   ccAddresses?: string | null;
+  bccAddresses?: string | null;
   occurredAtUtc: string;
   attachmentCount: number;
   trackingStatus: string;
+  deliveredAtUtc?: string | null;
+  openedAtUtc?: string | null;
+  threadId?: string | null;
+  nylasMessageId?: string | null;
   createdByUserId?: string | null;
   createdByName?: string | null;
 }
@@ -2304,6 +2462,7 @@ export interface ConnectEmailTemplateDto {
   name: string;
   subjectTemplate: string;
   bodyHtmlTemplate: string;
+  category?: string | null;
   isActive: boolean;
 }
 
@@ -2517,10 +2676,26 @@ export interface NotificationPreferenceDto {
   triggerKey: string;
   inAppEnabled: boolean;
   emailEnabled: boolean;
+  emailClientEnabled: boolean;
+  channel: 'InApp' | 'Email' | 'Both' | 'None' | string;
 }
 
 export interface NotificationPreferencesResponse {
   preferences: NotificationPreferenceDto[];
+}
+
+export interface NotificationPreferenceMatrixRowDto {
+  triggerKey: string;
+  label: string;
+  description: string;
+  inAppEnabled: boolean;
+  emailOperatorEnabled: boolean;
+  emailClientEnabled: boolean;
+  channel: 'InApp' | 'Email' | 'Both' | 'None' | string;
+}
+
+export interface NotificationPreferenceMatrixResponse {
+  rows: NotificationPreferenceMatrixRowDto[];
 }
 
 export interface ReportDefinitionDto {
@@ -2670,6 +2845,45 @@ export interface ReportFilterParams {
   to?: string;
   eventType?: string;
   status?: string;
+}
+
+export interface TicketDashboardVenueDto {
+  id: string;
+  name: string;
+  currency: string;
+  currencySymbol: string;
+  timezone: string;
+}
+
+export interface TicketDashboardRecordDto {
+  id: string;
+  transactionId: string;
+  transactionType: string;
+  venueId: string;
+  eventKey: string;
+  eventId?: string | null;
+  eventShortId?: string | null;
+  eventName: string;
+  guestKey: string;
+  eventGuestId?: string | null;
+  joinerId?: string | null;
+  guestName: string;
+  guestEmail?: string | null;
+  createdUtc?: string | null;
+  dueDateUtc?: string | null;
+  status: string;
+  currency: string;
+  totalTickets: number;
+  unitPrice: number;
+  totalAmount: number;
+  paidToDate: number;
+  amountDue: number;
+}
+
+export interface TicketDashboardDatasetResponse {
+  generatedAtUtc: string;
+  venues: TicketDashboardVenueDto[];
+  records: TicketDashboardRecordDto[];
 }
 
 export interface ReportScheduleDto {
@@ -3168,12 +3382,47 @@ export class ApiService {
     );
   }
 
+  getFinancialReferenceSettings(venueId: string): Observable<FinancialReferenceSettingsDto> {
+    return this.http.get<FinancialReferenceSettingsDto>(`/api/venues/${venueId}/settings/financial-reference`);
+  }
+
+  upsertFinancialReferenceSettings(
+    venueId: string,
+    payload: FinancialReferenceSettingsDto
+  ): Observable<FinancialReferenceSettingsDto> {
+    return this.http.put<FinancialReferenceSettingsDto>(`/api/venues/${venueId}/settings/financial-reference`, payload);
+  }
+
   getTermsDocuments(venueId: string): Observable<TermsDocumentSettingDto[]> {
     return this.http.get<TermsDocumentSettingDto[]>(`/api/venues/${venueId}/settings/terms-documents`);
   }
 
   upsertTermsDocuments(venueId: string, documents: TermsDocumentSettingDto[]): Observable<TermsDocumentSettingDto[]> {
     return this.http.put<TermsDocumentSettingDto[]>(`/api/venues/${venueId}/settings/terms-documents`, { documents });
+  }
+
+  getVenueTerms(venueId: string): Observable<TermsAndConditionsDto[]> {
+    return this.http.get<TermsAndConditionsDto[]>(`/api/venues/${venueId}/terms`);
+  }
+
+  getVenueTermsVersions(venueId: string, termsId: string): Observable<TermsAndConditionsDto[]> {
+    return this.http.get<TermsAndConditionsDto[]>(`/api/venues/${venueId}/terms/${termsId}/versions`);
+  }
+
+  createVenueTermsDraft(venueId: string, payload: CreateTermsAndConditionsDraftRequest): Observable<TermsAndConditionsDto> {
+    return this.http.post<TermsAndConditionsDto>(`/api/venues/${venueId}/terms`, payload);
+  }
+
+  updateVenueTermsDraft(
+    venueId: string,
+    termsId: string,
+    payload: UpdateTermsAndConditionsDraftRequest
+  ): Observable<TermsAndConditionsDto> {
+    return this.http.put<TermsAndConditionsDto>(`/api/venues/${venueId}/terms/${termsId}`, payload);
+  }
+
+  publishVenueTerms(venueId: string, termsId: string, payload: PublishTermsAndConditionsRequest): Observable<TermsAndConditionsDto> {
+    return this.http.post<TermsAndConditionsDto>(`/api/venues/${venueId}/terms/${termsId}/publish`, payload);
   }
 
   getVenueProposalTemplates(venueId: string): Observable<ProposalTemplateSettingDto[]> {
@@ -3771,7 +4020,7 @@ export class ApiService {
 
   getDiary(params: {
     venueId: string;
-    view: 'day' | 'week' | 'month' | 'list' | 'timeline';
+    view: 'day' | 'week' | 'month' | 'list' | 'timeline' | 'operations';
     startDate?: string;
     spaceIds?: string[];
   }): Observable<DiaryResponse> {
@@ -3790,7 +4039,7 @@ export class ApiService {
 
   exportDiary(params: {
     venueId: string;
-    view: 'day' | 'week' | 'month' | 'timeline';
+    view: 'day' | 'week' | 'month' | 'timeline' | 'operations';
     format: 'xlsx' | 'pdf';
     startDate?: string;
     spaceIds?: string[];
@@ -3888,8 +4137,20 @@ export class ApiService {
     return this.http.post<ProposalDetailResponse>(`/api/enquiries/${enquiryId}/proposals`, payload);
   }
 
+  createProposalFromEnquiry(payload: CreateProposalFromEnquiryRequest): Observable<ProposalDetailResponse> {
+    return this.http.post<ProposalDetailResponse>('/api/proposals', payload);
+  }
+
   updateProposal(proposalId: string, payload: CreateProposalRequest): Observable<ProposalDetailResponse> {
     return this.http.put<ProposalDetailResponse>(`/api/proposals/${proposalId}`, payload);
+  }
+
+  updateProposalSections(proposalId: string, payload: UpdateProposalSectionsRequest): Observable<ProposalDetailResponse> {
+    return this.http.put<ProposalDetailResponse>(`/api/proposals/${proposalId}/sections`, payload);
+  }
+
+  acceptProposal(proposalId: string, payload: AcceptProposalRequest): Observable<AcceptProposalResponse> {
+    return this.http.post<AcceptProposalResponse>(`/api/proposals/${proposalId}/accept`, payload);
   }
 
   duplicateProposal(proposalId: string): Observable<DuplicateProposalResponse> {
@@ -3906,6 +4167,14 @@ export class ApiService {
 
   generateProposalPdf(proposalId: string): Observable<GenerateProposalPdfResponse> {
     return this.http.post<GenerateProposalPdfResponse>(`/api/proposals/${proposalId}/generate-pdf`, {});
+  }
+
+  declineProposal(proposalId: string, payload: DeclineProposalRequest): Observable<DeclineProposalResponse> {
+    return this.http.post<DeclineProposalResponse>(`/api/proposals/${proposalId}/decline`, payload);
+  }
+
+  downloadDocument(documentId: string): Observable<Blob> {
+    return this.http.get(`/api/documents/${documentId}`, { responseType: 'blob' });
   }
 
   getProposalSignatureEnvelope(proposalId: string): Observable<ProposalSignatureEnvelopeDto> {
@@ -3942,16 +4211,74 @@ export class ApiService {
     return this.http.post<PublicSignProposalResponse>(`/api/signatures/e/${encodeURIComponent(token)}/sign`, payload);
   }
 
+  generatePortalLink(payload: PortalGenerateLinkRequest): Observable<PortalGenerateLinkResponse> {
+    return this.http.post<PortalGenerateLinkResponse>('/api/portal/generate-link', payload);
+  }
+
+  private portalHeaders(token: string): { headers: HttpHeaders } {
+    return { headers: new HttpHeaders({ 'X-Portal-Token': token }) };
+  }
+
+  getPortalProposal(token: string): Observable<PortalProposalDto> {
+    return this.http.get<PortalProposalDto>('/api/portal/proposal', this.portalHeaders(token));
+  }
+
+  acceptPortalProposalByToken(token: string, payload: PortalAcceptRequest): Observable<PortalViewResponse> {
+    return this.http.post<PortalViewResponse>('/api/portal/proposal/accept', payload, this.portalHeaders(token));
+  }
+
+  declinePortalProposalByToken(token: string, payload: PortalDeclineRequest): Observable<void> {
+    return this.http.post<void>('/api/portal/proposal/decline', payload, this.portalHeaders(token));
+  }
+
+  getPortalPayments(token: string): Observable<PortalPaymentScheduleDto> {
+    return this.http.get<PortalPaymentScheduleDto>('/api/portal/payments', this.portalHeaders(token));
+  }
+
+  createPortalPaymentLink(
+    token: string,
+    milestoneId: string,
+    payload: PortalCreatePaymentLinkRequest
+  ): Observable<PortalCreatePaymentLinkResponse> {
+    return this.http.post<PortalCreatePaymentLinkResponse>(`/api/portal/payments/${milestoneId}/pay`, payload, this.portalHeaders(token));
+  }
+
+  getPortalDocuments(token: string): Observable<PortalDocumentDto[]> {
+    return this.http.get<PortalDocumentDto[]>('/api/portal/documents', this.portalHeaders(token));
+  }
+
+  uploadPortalDocument(token: string, file: File, category?: string): Observable<PortalDocumentDto> {
+    const formData = new FormData();
+    formData.append('file', file, file.name);
+    if (category) {
+      formData.append('category', category);
+    }
+
+    return this.http.post<PortalDocumentDto>('/api/portal/documents/upload', formData, this.portalHeaders(token));
+  }
+
+  getPortalMessages(token: string): Observable<PortalMessageDto[]> {
+    return this.http.get<PortalMessageDto[]>('/api/portal/messages', this.portalHeaders(token));
+  }
+
+  postPortalMessage(token: string, payload: { message: string }): Observable<PortalMessageDto> {
+    return this.http.post<PortalMessageDto>('/api/portal/messages', payload, this.portalHeaders(token));
+  }
+
+  getPortalEventSummary(token: string): Observable<PortalEventSummaryDto> {
+    return this.http.get<PortalEventSummaryDto>('/api/portal/event-summary', this.portalHeaders(token));
+  }
+
   getPortalView(token: string): Observable<PortalViewResponse> {
     return this.http.get<PortalViewResponse>(`/api/portal/e/${encodeURIComponent(token)}`);
   }
 
   acceptPortalProposal(token: string, payload: PortalAcceptRequest): Observable<PortalViewResponse> {
-    return this.http.post<PortalViewResponse>(`/api/portal/e/${encodeURIComponent(token)}/accept`, payload);
+    return this.acceptPortalProposalByToken(token, payload);
   }
 
   declinePortalProposal(token: string, payload: PortalDeclineRequest): Observable<void> {
-    return this.http.post<void>(`/api/portal/e/${encodeURIComponent(token)}/decline`, payload);
+    return this.declinePortalProposalByToken(token, payload);
   }
 
   requestPortalProposalChanges(token: string, payload: PortalRequestChangesRequest): Observable<void> {
@@ -4567,8 +4894,41 @@ export class ApiService {
     return this.http.post<NotificationPreferenceDto>('/api/notifications/preferences', payload);
   }
 
+  getNotificationPreferenceMatrix(venueId?: string): Observable<NotificationPreferenceMatrixResponse> {
+    let params = new HttpParams();
+    if (venueId) {
+      params = params.set('venueId', venueId);
+    }
+
+    return this.http.get<NotificationPreferenceMatrixResponse>('/api/notifications/preferences/matrix', { params });
+  }
+
+  upsertNotificationPreferenceMatrix(
+    rows: Array<{
+      triggerKey: string;
+      inAppEnabled: boolean;
+      emailOperatorEnabled: boolean;
+      emailClientEnabled: boolean;
+    }>,
+    venueId?: string
+  ): Observable<NotificationPreferenceMatrixResponse> {
+    let params = new HttpParams();
+    if (venueId) {
+      params = params.set('venueId', venueId);
+    }
+
+    return this.http.put<NotificationPreferenceMatrixResponse>(
+      '/api/notifications/preferences/matrix',
+      { rows },
+      { params });
+  }
+
   getReportsCatalog(): Observable<ReportsCatalogResponse> {
     return this.http.get<ReportsCatalogResponse>('/api/reports');
+  }
+
+  getTicketDashboardDataset(): Observable<TicketDashboardDatasetResponse> {
+    return this.http.get<TicketDashboardDatasetResponse>('/api/reports/ticket-dashboard');
   }
 
   getReport(reportKey: string, params: ReportFilterParams): Observable<ReportResponse> {

@@ -1373,6 +1373,9 @@
             @if (paymentScheduleError) {
               <p class="payment-error">{{ paymentScheduleError }}</p>
             }
+            @if (paymentScheduleMessage) {
+              <p class="payment-success">{{ paymentScheduleMessage }}</p>
+            }
 
             @if (paymentScheduleLoading) {
               <p class="empty">Loading payment milestones...</p>

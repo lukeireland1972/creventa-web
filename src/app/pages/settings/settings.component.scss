@@ -544,6 +544,10 @@ td small {
   font-size: 0.72rem;
 }
 
+.mono {
+  font-family: 'Fira Code', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
 .toggle {
   display: inline-flex;
   align-items: center;
@@ -612,6 +616,144 @@ td small {
   grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
+}
+
+.card.inset {
+  margin-top: 0.9rem;
+}
+
+.format-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.format-toolbar span {
+  font-size: 0.74rem;
+  color: #475569;
+}
+
+.terms-editor-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.terms-editor-hint {
+  margin-top: -0.15rem;
+  margin-bottom: 0;
+}
+
+:host ::ng-deep .terms-editor .ql-toolbar {
+  border-radius: 10px 10px 0 0;
+  border-color: #dbe5f4;
+  background: #f8fafc;
+}
+
+:host ::ng-deep .terms-editor .ql-container {
+  min-height: 240px;
+  border-radius: 0 0 10px 10px;
+  border-color: #dbe5f4;
+  font-size: 0.9rem;
+}
+
+:host ::ng-deep .terms-editor .ql-editor {
+  min-height: 220px;
+}
+
+.terms-preview,
+.terms-diff {
+  border: 1px solid #dbe5f4;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 0.75rem 0.85rem;
+  min-height: 120px;
+  line-height: 1.5;
+  font-size: 0.86rem;
+  color: #0f172a;
+}
+
+:host ::ng-deep .terms-diff .diff-add {
+  background: #dcfce7;
+  color: #166534;
+  border-radius: 4px;
+  padding: 0 0.2rem;
+}
+
+:host ::ng-deep .terms-diff .diff-remove {
+  background: #fee2e2;
+  color: #991b1b;
+  text-decoration: line-through;
+  border-radius: 4px;
+  padding: 0 0.2rem;
+}
+
+.payment-template-editor {
+  margin-top: 0.35rem;
+}
+
+.drag-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.45rem;
+  height: 1.45rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 700;
+  cursor: grab;
+}
+
+.card-subsection {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+}
+
+.card-subsection h4 {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #1e293b;
+}
+
+.hint {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.75rem;
+}
+
+.merge-field-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.merge-field-toolbar .link {
+  border: 1px solid #dbe5f4;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: #1d4ed8;
+  font-size: 0.71rem;
+  padding: 0.18rem 0.52rem;
+}
+
+.preview-card {
+  border: 1px solid #dbe5f4;
+  border-radius: 12px;
+  background: #f8fafc;
+  padding: 0.65rem 0.75rem;
+  display: grid;
+  gap: 0.4rem;
+  font-size: 0.84rem;
+  color: #0f172a;
+}
+
+.preview-card strong {
+  color: #1e293b;
+  font-size: 0.82rem;
 }
 
 @media (max-width: 1180px) {

@@ -1,0 +1,129 @@
+.diary-hover-popover {
+  width: 290px;
+  border-radius: 12px;
+  border: 1px solid #0f172a;
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 0.6rem 0.64rem;
+  display: grid;
+  gap: 0.24rem;
+  box-shadow: 0 16px 34px rgba(15, 23, 42, 0.35);
+}
+
+.popover-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  align-items: flex-start;
+}
+
+.popover-title-block {
+  display: grid;
+  gap: 0.08rem;
+  min-width: 0;
+}
+
+.popover-head strong {
+  font-size: 0.76rem;
+  line-height: 1.2;
+}
+
+.popover-title-block small {
+  font-size: 0.62rem;
+  color: #cbd5e1;
+  line-height: 1.2;
+}
+
+.status-pill {
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  background: rgba(15, 23, 42, 0.38);
+  color: #e2e8f0;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.08rem 0.34rem;
+  white-space: nowrap;
+}
+
+.status-pill.status-confirmed {
+  border-color: #22c55e;
+  color: #86efac;
+}
+
+.status-pill.status-provisional {
+  border-color: #f59e0b;
+  color: #fcd34d;
+}
+
+.status-pill.status-open-proposal {
+  border-color: #60a5fa;
+  color: #bfdbfe;
+}
+
+.status-pill.status-tentative,
+.status-pill.status-new {
+  border-color: #93c5fd;
+  color: #dbeafe;
+}
+
+.status-pill.status-appointment {
+  border-color: #93c5fd;
+  color: #bfdbfe;
+}
+
+.status-pill.status-venue-event {
+  border-color: #2dd4bf;
+  color: #99f6e4;
+}
+
+.status-pill.status-completed {
+  border-color: #4ade80;
+  color: #bbf7d0;
+}
+
+.status-pill.status-lost {
+  border-color: #f87171;
+  color: #fecaca;
+}
+
+.status-pill.status-archived {
+  border-color: #cbd5e1;
+  color: #cbd5e1;
+}
+
+.popover-line {
+  font-size: 0.68rem;
+  color: #cbd5e1;
+}
+
+.popover-line b {
+  color: #ffffff;
+}
+
+.popover-expanded {
+  border-top: 1px solid rgba(148, 163, 184, 0.3);
+  margin-top: 0.2rem;
+  padding-top: 0.36rem;
+  display: grid;
+  gap: 0.24rem;
+}
+
+.toggle-btn,
+.view-details-btn {
+  justify-self: end;
+  border: 1px solid #475569;
+  background: #1e293b;
+  color: #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  padding: 0.2rem 0.48rem;
+}
+
+.view-details-btn {
+  border-color: #3b82f6;
+  background: #1d4ed8;
+  color: #ffffff;
+}

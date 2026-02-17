@@ -26,6 +26,7 @@ interface RawQuestionResponse {
   responseScore?: number | null;
   responseValue?: string | null;
   furtherFeedbackValue?: string | null;
+  completed?: boolean | null;
   menuRatings?: RawMenuRating[] | null;
 }
 
@@ -126,6 +127,9 @@ interface LowCommentRow {
   questionId: string;
   category: string;
   title: string;
+  guestName: string;
+  venueId: string;
+  questionnaireId: string;
   createdAt: number;
 }
 
@@ -134,6 +138,26 @@ interface SubmissionAlertRow {
   venueId: string;
   questionnaireId: string;
   averageScore: number;
+  createdAt: number;
+}
+
+type CommentSourceType = 'question' | 'menu';
+type CommentScoreFilter = 'all' | 'low' | 'high' | 'unscored';
+
+interface CommentDrilldownRow {
+  text: string;
+  score: number | null;
+  questionId: string;
+  category: string;
+  sourceType: CommentSourceType;
+  courseName: string | null;
+  menuItemName: string | null;
+  title: string;
+  venueId: string;
+  questionnaireId: string;
+  eventId: string;
+  guestId: string;
+  guestName: string;
   createdAt: number;
 }
 
@@ -157,8 +181,11 @@ export class FeedbackInsightsComponent {
 
   isDropActive = false;
   isProcessing = false;
+  isVenueMapProcessing = false;
   loadError = '';
+  venueMapError = '';
   sourceFileName = '';
+  venueMapFileName = '';
 
   allSubmissions: NormalizedFeedbackSubmission[] = [];
   filteredSubmissions: NormalizedFeedbackSubmission[] = [];
@@ -197,6 +224,14 @@ export class FeedbackInsightsComponent {
   submissionAlerts: SubmissionAlertRow[] = [];
   strengthQuestions: QuestionPerformanceRow[] = [];
   improvementQuestions: QuestionPerformanceRow[] = [];
+  allCommentRows: CommentDrilldownRow[] = [];
+  filteredCommentRows: CommentDrilldownRow[] = [];
+  pagedCommentRows: CommentDrilldownRow[] = [];
+  commentSearchText = '';
+  commentSourceFilter: 'all' | CommentSourceType = 'all';
+  commentScoreFilter: CommentScoreFilter = 'all';
+  commentPage = 1;
+  commentPageSize = 25;
 
   totalLoadedSubmissions = 0;
 
@@ -206,6 +241,7 @@ export class FeedbackInsightsComponent {
   private trendChart: ChartJs | null = null;
   private categoryChart: ChartJs | null = null;
   private distributionChart: ChartJs | null = null;
+  private venueNameById = new Map<string, string>();
 
   private readonly scoreDistribution = [0, 0, 0, 0, 0];
   private readonly scoreDistributionLabels = ['0.0-0.9', '1.0-1.9', '2.0-2.9', '3.0-3.9', '4.0-5.0'];
@@ -236,6 +272,20 @@ export class FeedbackInsightsComponent {
     }
 
     void this.loadFromFile(file);
+  }
+
+  onVenueMapInputChange(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.item(0);
+    if (!file) {
+      return;
+    }
+
+    if (input) {
+      input.value = '';
+    }
+
+    void this.loadVenueMapFromFile(file);
   }
 
   onDragOver(event: DragEvent): void {
@@ -271,6 +321,11 @@ export class FeedbackInsightsComponent {
     this.questionSort = 'lowest';
     this.minQuestionSampleSize = 30;
     this.minMenuSampleSize = 20;
+    this.commentSearchText = '';
+    this.commentSourceFilter = 'all';
+    this.commentScoreFilter = 'all';
+    this.commentPage = 1;
+    this.commentPageSize = 25;
     this.fromDate = this.toInputDate(this.minDataTimestamp);
     this.toDate = this.toInputDate(this.maxDataTimestamp);
     this.applyFilters();
@@ -330,6 +385,135 @@ export class FeedbackInsightsComponent {
     return 'good';
   }
 
+  venueLabel(venueId: string): string {
+    const mappedName = this.venueNameById.get(this.normalizeVenueIdLookupKey(venueId));
+    return mappedName ?? venueId;
+  }
+
+  get commentPageCount(): number {
+    const count = Math.ceil(this.filteredCommentRows.length / this.commentPageSize);
+    return Math.max(count, 1);
+  }
+
+  get commentRangeStart(): number {
+    if (this.filteredCommentRows.length === 0) {
+      return 0;
+    }
+
+    return (this.commentPage - 1) * this.commentPageSize + 1;
+  }
+
+  get commentRangeEnd(): number {
+    if (this.filteredCommentRows.length === 0) {
+      return 0;
+    }
+
+    return Math.min(this.commentPage * this.commentPageSize, this.filteredCommentRows.length);
+  }
+
+  onCommentDrilldownFiltersChange(): void {
+    this.commentPage = 1;
+    this.refreshCommentDrilldown();
+  }
+
+  setCommentPageSize(pageSize: number | string): void {
+    const parsedSize = typeof pageSize === 'number' ? pageSize : Number(pageSize);
+    if (!Number.isFinite(parsedSize) || parsedSize < 1) {
+      return;
+    }
+
+    this.commentPageSize = Math.floor(parsedSize);
+    this.commentPage = 1;
+    this.refreshCommentDrilldown();
+  }
+
+  changeCommentPage(delta: number): void {
+    const targetPage = this.commentPage + delta;
+    if (targetPage < 1 || targetPage > this.commentPageCount) {
+      return;
+    }
+
+    this.commentPage = targetPage;
+    this.refreshCommentDrilldown();
+  }
+
+  commentSourceLabel(row: CommentDrilldownRow): string {
+    if (row.sourceType === 'menu') {
+      if (row.courseName && row.menuItemName) {
+        return `Menu (${row.courseName} / ${row.menuItemName})`;
+      }
+
+      if (row.menuItemName) {
+        return `Menu (${row.menuItemName})`;
+      }
+
+      return 'Menu Item';
+    }
+
+    return 'Question';
+  }
+
+  downloadAllCommentsCsv(): void {
+    if (this.allCommentRows.length === 0) {
+      return;
+    }
+
+    const headers = [
+      'Date',
+      'Guest Name',
+      'Event Title',
+      'Venue',
+      'Questionnaire',
+      'Category',
+      'Question ID',
+      'Source',
+      'Course',
+      'Menu Item',
+      'Rating',
+      'Comment',
+      'Event ID',
+      'Guest ID',
+      'Venue ID'
+    ];
+
+    const rows = this.allCommentRows.map((row) => {
+      const scoreText = row.score === null ? 'Unscored' : row.score.toFixed(1);
+      const dateText = new Date(row.createdAt).toISOString();
+      return [
+        dateText,
+        row.guestName,
+        row.title,
+        this.venueLabel(row.venueId),
+        row.questionnaireId,
+        row.category,
+        row.questionId,
+        this.commentSourceLabel(row),
+        row.courseName ?? '',
+        row.menuItemName ?? '',
+        scoreText,
+        row.text,
+        row.eventId,
+        row.guestId,
+        row.venueId
+      ];
+    });
+
+    const csvLines = [headers, ...rows].map((line) => line.map((value) => this.csvCell(value)).join(','));
+    const csvText = `\uFEFF${csvLines.join('\r\n')}`;
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+    const downloadUrl = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    const stamp = new Date().toISOString().replace(/[:]/g, '-').slice(0, 19);
+    link.download = `feedback-comments-ratings-${stamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(downloadUrl);
+  }
+
   private async loadFromFile(file: File): Promise<void> {
     this.isProcessing = true;
     this.loadError = '';
@@ -360,6 +544,27 @@ export class FeedbackInsightsComponent {
     }
   }
 
+  private async loadVenueMapFromFile(file: File): Promise<void> {
+    this.isVenueMapProcessing = true;
+    this.venueMapError = '';
+
+    try {
+      const contents = await file.text();
+      const venueMap = this.parseVenueMapCsv(contents);
+      if (venueMap.size === 0) {
+        throw new Error('The venue CSV had no valid rows. Include `_id` and `name` values.');
+      }
+
+      this.venueNameById = venueMap;
+      this.venueMapFileName = file.name;
+      this.sortVenueOptionsByLabel();
+    } catch (error) {
+      this.venueMapError = this.resolveVenueMapErrorMessage(error);
+    } finally {
+      this.isVenueMapProcessing = false;
+    }
+  }
+
   private initializeFiltersFromData(): void {
     const venues = new Set<string>();
     const questionnaires = new Set<string>();
@@ -379,7 +584,8 @@ export class FeedbackInsightsComponent {
       }
     }
 
-    this.venueOptions = [...venues].sort((left, right) => left.localeCompare(right));
+    this.venueOptions = [...venues];
+    this.sortVenueOptionsByLabel();
     this.questionnaireOptions = [...questionnaires].sort((left, right) => left.localeCompare(right));
     this.categoryOptions = [...categories].sort((left, right) => left.localeCompare(right));
 
@@ -419,6 +625,10 @@ export class FeedbackInsightsComponent {
       let scoreCount = 0;
 
       for (const rawResponse of record.responses ?? []) {
+        if (rawResponse.completed === false) {
+          continue;
+        }
+
         const questionId = this.normalizeIdentifier(rawResponse.questionId, 'unknown-question');
         const category = this.normalizeCategory(rawResponse.contributesTo);
         const score = this.toFiniteNumber(rawResponse.responseScore);
@@ -500,6 +710,10 @@ export class FeedbackInsightsComponent {
       this.submissionAlerts = [];
       this.strengthQuestions = [];
       this.improvementQuestions = [];
+      this.allCommentRows = [];
+      this.filteredCommentRows = [];
+      this.pagedCommentRows = [];
+      this.commentPage = 1;
       this.destroyCharts();
       return;
     }
@@ -524,6 +738,7 @@ export class FeedbackInsightsComponent {
     }>();
     const keywordMap = new Map<string, number>();
     const lowComments: LowCommentRow[] = [];
+    const commentRows: CommentDrilldownRow[] = [];
 
     let mailingListOptInCount = 0;
     let overallScoreSum = 0;
@@ -597,6 +812,22 @@ export class FeedbackInsightsComponent {
           feedbackCommentCount += 1;
           questionAggregate.commentCount += 1;
           this.addKeywords(keywordMap, text);
+          commentRows.push({
+            text,
+            score: response.score,
+            questionId: response.questionId,
+            category: response.category,
+            sourceType: 'question',
+            courseName: null,
+            menuItemName: null,
+            title: submission.title,
+            venueId: submission.venueId,
+            questionnaireId: submission.questionnaireId,
+            eventId: submission.eventId,
+            guestId: submission.guestId,
+            guestName: submission.guestName,
+            createdAt: submission.createdAt
+          });
 
           if ((response.score ?? 5) <= 3) {
             lowComments.push({
@@ -605,6 +836,9 @@ export class FeedbackInsightsComponent {
               questionId: response.questionId,
               category: response.category,
               title: submission.title,
+              guestName: submission.guestName,
+              venueId: submission.venueId,
+              questionnaireId: submission.questionnaireId,
               createdAt: submission.createdAt
             });
           }
@@ -634,6 +868,22 @@ export class FeedbackInsightsComponent {
           for (const text of menuRating.feedbackTexts) {
             feedbackCommentCount += 1;
             this.addKeywords(keywordMap, text);
+            commentRows.push({
+              text,
+              score: menuRating.score,
+              questionId: response.questionId,
+              category: 'food',
+              sourceType: 'menu',
+              courseName: menuRating.courseName,
+              menuItemName: menuRating.menuItemName,
+              title: submission.title,
+              venueId: submission.venueId,
+              questionnaireId: submission.questionnaireId,
+              eventId: submission.eventId,
+              guestId: submission.guestId,
+              guestName: submission.guestName,
+              createdAt: submission.createdAt
+            });
             if ((menuRating.score ?? 5) <= 3) {
               lowComments.push({
                 text,
@@ -641,6 +891,9 @@ export class FeedbackInsightsComponent {
                 questionId: response.questionId,
                 category: 'food',
                 title: submission.title,
+                guestName: submission.guestName,
+                venueId: submission.venueId,
+                questionnaireId: submission.questionnaireId,
                 createdAt: submission.createdAt
               });
             }
@@ -747,7 +1000,63 @@ export class FeedbackInsightsComponent {
       .sort((left, right) => left.averageScore - right.averageScore || right.createdAt - left.createdAt)
       .slice(0, 10);
 
+    this.allCommentRows = commentRows.sort((left, right) => right.createdAt - left.createdAt);
+    this.refreshCommentDrilldown();
+
     this.scheduleChartRender();
+  }
+
+  private refreshCommentDrilldown(): void {
+    const query = this.commentSearchText.trim().toLowerCase();
+
+    this.filteredCommentRows = this.allCommentRows.filter((row) => {
+      if (this.commentSourceFilter !== 'all' && row.sourceType !== this.commentSourceFilter) {
+        return false;
+      }
+
+      if (this.commentScoreFilter === 'low' && ((row.score ?? Number.POSITIVE_INFINITY) > 3)) {
+        return false;
+      }
+
+      if (this.commentScoreFilter === 'high' && ((row.score ?? Number.NEGATIVE_INFINITY) <= 3)) {
+        return false;
+      }
+
+      if (this.commentScoreFilter === 'unscored' && row.score !== null) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      const searchContent = [
+        row.text,
+        row.questionId,
+        row.category,
+        row.guestName,
+        row.title,
+        row.questionnaireId,
+        row.courseName ?? '',
+        row.menuItemName ?? '',
+        this.venueLabel(row.venueId)
+      ].join(' ').toLowerCase();
+
+      return searchContent.includes(query);
+    });
+
+    const pageCount = this.commentPageCount;
+    if (this.commentPage > pageCount) {
+      this.commentPage = pageCount;
+    }
+
+    const pageStart = (this.commentPage - 1) * this.commentPageSize;
+    this.pagedCommentRows = this.filteredCommentRows.slice(pageStart, pageStart + this.commentPageSize);
+  }
+
+  private csvCell(value: string | number | null | undefined): string {
+    const text = String(value ?? '');
+    return `"${text.replace(/"/g, '""')}"`;
   }
 
   private resolveSubmissionAverage(submission: NormalizedFeedbackSubmission): number | null {
@@ -1082,14 +1391,130 @@ export class FeedbackInsightsComponent {
     return 'Could not parse that file. Verify it is valid questionnaire_results JSON.';
   }
 
+  private resolveVenueMapErrorMessage(error: unknown): string {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+
+    return 'Could not parse venue CSV. Ensure it has `_id` and `name` columns.';
+  }
+
+  private parseVenueMapCsv(contents: string): Map<string, string> {
+    const rows = this.parseCsvRows(contents);
+    if (rows.length < 2) {
+      throw new Error('Venue CSV must include a header row and at least one data row.');
+    }
+
+    const header = rows[0].map((value) => this.normalizeCsvHeader(value));
+    const idIndex = header.findIndex((column) => column === '_id' || column === 'id' || column === 'venueid' || column === 'venue_id');
+    const nameIndex = header.findIndex((column) => column === 'name' || column === 'venuename' || column === 'venue_name');
+
+    if (idIndex < 0 || nameIndex < 0) {
+      throw new Error('Venue CSV must include `_id` and `name` columns.');
+    }
+
+    const map = new Map<string, string>();
+
+    for (let index = 1; index < rows.length; index += 1) {
+      const row = rows[index];
+      if (!row || row.length === 0) {
+        continue;
+      }
+
+      const rawId = (row[idIndex] ?? '').trim();
+      const rawName = (row[nameIndex] ?? '').trim();
+      if (!rawId || !rawName) {
+        continue;
+      }
+
+      map.set(this.normalizeVenueIdLookupKey(rawId), rawName);
+    }
+
+    return map;
+  }
+
+  private parseCsvRows(contents: string): string[][] {
+    const normalized = contents.replace(/^\uFEFF/, '');
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    let currentValue = '';
+    let inQuotes = false;
+
+    for (let index = 0; index < normalized.length; index += 1) {
+      const char = normalized[index];
+
+      if (char === '"') {
+        const next = normalized[index + 1];
+        if (inQuotes && next === '"') {
+          currentValue += '"';
+          index += 1;
+        } else {
+          inQuotes = !inQuotes;
+        }
+        continue;
+      }
+
+      if (char === ',' && !inQuotes) {
+        currentRow.push(currentValue);
+        currentValue = '';
+        continue;
+      }
+
+      if ((char === '\n' || char === '\r') && !inQuotes) {
+        if (char === '\r' && normalized[index + 1] === '\n') {
+          index += 1;
+        }
+
+        currentRow.push(currentValue);
+        if (!this.isCsvRowEmpty(currentRow)) {
+          rows.push(currentRow);
+        }
+
+        currentRow = [];
+        currentValue = '';
+        continue;
+      }
+
+      currentValue += char;
+    }
+
+    currentRow.push(currentValue);
+    if (!this.isCsvRowEmpty(currentRow)) {
+      rows.push(currentRow);
+    }
+
+    return rows;
+  }
+
+  private isCsvRowEmpty(row: string[]): boolean {
+    return row.every((cell) => cell.trim().length === 0);
+  }
+
+  private normalizeCsvHeader(rawHeader: string): string {
+    return rawHeader.trim().replace(/[\s-]+/g, '_').toLowerCase();
+  }
+
+  private normalizeVenueIdLookupKey(value: string): string {
+    const trimmed = value.trim().replace(/^"+|"+$/g, '');
+    const oidMatch = trimmed.match(/[a-f0-9]{24}/i);
+    return (oidMatch ? oidMatch[0] : trimmed).toLowerCase();
+  }
+
+  private sortVenueOptionsByLabel(): void {
+    this.venueOptions.sort((left, right) => this.venueLabel(left).localeCompare(this.venueLabel(right), undefined, { sensitivity: 'base' }));
+  }
+
   private resetDataState(): void {
     this.sourceFileName = '';
+    this.venueMapFileName = '';
     this.totalLoadedSubmissions = 0;
     this.allSubmissions = [];
     this.filteredSubmissions = [];
     this.venueOptions = [];
     this.questionnaireOptions = [];
     this.categoryOptions = [];
+    this.venueNameById = new Map<string, string>();
+    this.venueMapError = '';
     this.fromDate = '';
     this.toDate = '';
     this.searchText = '';
@@ -1112,6 +1537,14 @@ export class FeedbackInsightsComponent {
     this.submissionAlerts = [];
     this.strengthQuestions = [];
     this.improvementQuestions = [];
+    this.allCommentRows = [];
+    this.filteredCommentRows = [];
+    this.pagedCommentRows = [];
+    this.commentSearchText = '';
+    this.commentSourceFilter = 'all';
+    this.commentScoreFilter = 'all';
+    this.commentPage = 1;
+    this.commentPageSize = 25;
     this.destroyCharts();
   }
 }

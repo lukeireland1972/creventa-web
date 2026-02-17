@@ -7,6 +7,7 @@ import { EnquiriesComponent } from './pages/enquiries/enquiries.component';
 import { EventDiaryComponent } from './pages/event-diary/event-diary.component';
 import { LoginComponent } from './pages/login/login.component';
 import { OperationsDashboardComponent } from './pages/operations-dashboard/operations-dashboard.component';
+import { MockCardPaymentComponent } from './pages/payments/mock-card-payment.component';
 import { PortalViewComponent } from './pages/portal/portal-view.component';
 import { ProposalsComponent } from './pages/proposals/proposals.component';
 import { ReportsComponent } from './pages/reports/reports.component';
@@ -15,7 +16,10 @@ import { AdminComponent } from './pages/admin/admin.component';
 import { SignaturePortalComponent } from './pages/signature/signature-portal.component';
 
 export const routes: Routes = [
-  { path: 'portal/e/:token', component: PortalViewComponent },
+  { path: 'portal/e/:token', redirectTo: 'portal/:token/proposal', pathMatch: 'full' },
+  { path: 'portal/:token/:tab', component: PortalViewComponent },
+  { path: 'portal/:token', redirectTo: 'portal/:token/proposal', pathMatch: 'full' },
+  { path: 'payments/mock/:milestoneId', component: MockCardPaymentComponent },
   { path: 'signature/e/:token', component: SignaturePortalComponent },
   { path: 'login', component: LoginComponent },
   {
@@ -35,6 +39,7 @@ export const routes: Routes = [
       { path: 'settings', component: SettingsComponent },
       { path: 'events-hub', loadComponent: () => import('./pages/events-hub/events-hub.component').then((m) => m.EventsHubComponent) },
       { path: 'reports', component: ReportsComponent },
+      { path: 'ticket-dashboard', loadComponent: () => import('./pages/ticket-dashboard/ticket-dashboard.component').then((m) => m.TicketDashboardComponent) },
       { path: 'feedback-insights', loadComponent: () => import('./pages/feedback-insights/feedback-insights.component').then((m) => m.FeedbackInsightsComponent) },
       { path: '', component: DashboardComponent, pathMatch: 'full' }
     ]

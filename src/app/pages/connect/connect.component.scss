@@ -155,6 +155,11 @@
   background: #f8fbff;
 }
 
+.timeline-list li.internal-note {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
 .line-top {
   display: flex;
   justify-content: space-between;
@@ -177,6 +182,19 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 0.35rem;
+}
+
+.recipient-meta {
+  margin: 0;
+  display: grid;
+  gap: 0.12rem;
+  font-size: 0.66rem;
+  color: #64748b;
+}
+
+.recipient-meta strong {
+  font-size: 0.66rem;
+  color: #475569;
 }
 
 .type-badge {
@@ -352,6 +370,48 @@
   padding: 0.45rem;
   display: grid;
   gap: 0.08rem;
+}
+
+.merge-preview {
+  border: 1px dashed #d1dbe9;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 0.45rem 0.5rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.merge-preview strong {
+  font-size: 0.68rem;
+  color: #334155;
+}
+
+.merge-preview div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+}
+
+.merge-preview small {
+  font-size: 0.63rem;
+  color: #64748b;
+}
+
+:host ::ng-deep quill-editor {
+  display: block;
+}
+
+:host ::ng-deep quill-editor .ql-toolbar {
+  border-radius: 10px 10px 0 0;
+  border-color: #dbe2ee;
+  background: #f8fafc;
+}
+
+:host ::ng-deep quill-editor .ql-container {
+  border-radius: 0 0 10px 10px;
+  border-color: #dbe2ee;
+  font-size: 0.78rem;
+  color: #334155;
 }
 
 .attachment-dropzone.drag-active {

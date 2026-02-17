@@ -35,18 +35,34 @@
         }
 
         @for (item of timeline; track item.id) {
-          <li [class.selected]="selectedEnquiryId === item.enquiryId" (click)="selectTimelineItem(item)">
+          <li [class.selected]="selectedEnquiryId === item.enquiryId" [class.internal-note]="item.type === 'note'" (click)="selectTimelineItem(item)">
             <div class="line-top">
               <strong>{{ item.enquiryReference }}</strong>
               <span>{{ item.occurredAtUtc | date: 'dd/MM HH:mm' }}</span>
             </div>
             <p>{{ item.subject || item.preview }}</p>
+            @if (item.fromAddress || item.toAddresses) {
+              <small class="recipient-meta">
+                @if (item.fromAddress) {
+                  <span><strong>From:</strong> {{ item.fromAddress }}</span>
+                }
+                @if (item.toAddresses) {
+                  <span><strong>To:</strong> {{ item.toAddresses }}</span>
+                }
+              </small>
+            }
             <div class="line-meta">
               <span class="type-badge" [class]="timelineTypeBadgeClass(item.type)">
                 <i>{{ timelineTypeBadgeIcon(item.type) }}</i>
                 {{ timelineTypeBadgeLabel(item.type) }}
               </span>
               <small>{{ item.contactName }} · {{ item.direction }}</small>
+              @if (item.deliveredAtUtc) {
+                <small>Delivered {{ item.deliveredAtUtc | date: 'dd/MM HH:mm' }}</small>
+              }
+              @if (item.openedAtUtc) {
+                <small>Opened {{ item.openedAtUtc | date: 'dd/MM HH:mm' }}</small>
+              }
               @if (item.attachmentCount > 0) {
                 <small>{{ item.attachmentCount }} attachment{{ item.attachmentCount === 1 ? '' : 's' }}</small>
               }
@@ -84,6 +100,9 @@
             <button type="button" class="toolbar-button" (click)="toggleTemplatePicker()" [disabled]="!canCompose || templatesLoading">
               Templates
             </button>
+            <button type="button" class="toolbar-button" (click)="toggleEmailCopyFields()" [disabled]="!canCompose">
+              {{ showEmailCopyFields ? 'Hide CC/BCC' : 'Show CC/BCC' }}
+            </button>
             <label class="toolbar-button attach-button" [class.disabled]="!canAttachFiles">
               <span>Attach</span>
               <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.csv" (change)="onAttachmentBrowse($event)" [disabled]="!canAttachFiles" />
@@ -98,7 +117,7 @@
                 @for (template of availableTemplates; track template.key) {
                   <button type="button" (click)="applyTemplate(template)">
                     <strong>{{ template.name }}</strong>
-                    <small>{{ template.subjectTemplate }}</small>
+                    <small>{{ template.category || 'Custom' }} · {{ template.subjectTemplate }}</small>
                   </button>
                 }
               } @else {
@@ -108,9 +127,25 @@
           }
 
           <input type="email" [(ngModel)]="emailTo" placeholder="To" />
-          <input type="text" [(ngModel)]="emailCc" placeholder="CC (optional)" />
+          @if (showEmailCopyFields) {
+            <input type="text" [(ngModel)]="emailCc" placeholder="CC (optional)" />
+            <input type="text" [(ngModel)]="emailBcc" placeholder="BCC (optional)" />
+          }
           <input type="text" [(ngModel)]="emailSubject" placeholder="Subject" />
-          <textarea [(ngModel)]="emailBody" rows="6" placeholder="Message"></textarea>
+          <quill-editor
+            [(ngModel)]="emailBody"
+            [modules]="composeEditorModules"
+            [placeholder]="'Write email message...'"
+            [styles]="{ height: '170px' }"></quill-editor>
+
+          <div class="merge-preview">
+            <strong>Merge Preview</strong>
+            <div>
+              @for (preview of mergeFieldPreviewList; track preview) {
+                <small>{{ preview }}</small>
+              }
+            </div>
+          </div>
 
           <div
             class="attachment-dropzone"

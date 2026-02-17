@@ -237,6 +237,7 @@ export class EnquiriesComponent implements OnInit {
   paymentSchedule: PaymentScheduleResponse | null = null;
   paymentScheduleLoading = false;
   paymentScheduleError = '';
+  paymentScheduleMessage = '';
   paymentScheduleName = 'Default';
   paymentMilestonesDraft: PaymentMilestoneDraft[] = [];
   paymentSavingSchedule = false;
@@ -1265,6 +1266,7 @@ export class EnquiriesComponent implements OnInit {
     this.enquiryProposalsLoading = false;
     this.paymentSchedule = null;
     this.paymentScheduleError = '';
+    this.paymentScheduleMessage = '';
     this.paymentMilestonesDraft = [];
     this.enquiryDocuments = [];
     this.enquiryDocumentsLoading = false;
@@ -3665,6 +3667,7 @@ export class EnquiriesComponent implements OnInit {
           this.paymentMilestonesDraft = [];
           this.paymentScheduleLoading = false;
           this.paymentScheduleError = '';
+          this.paymentScheduleMessage = '';
           this.showAddSubEventForm = false;
           this.creatingSubEvent = false;
           this.newSubEventDraft = this.createDefaultSubEventDraft();
@@ -3774,6 +3777,7 @@ export class EnquiriesComponent implements OnInit {
     this.paymentSchedule = null;
     this.paymentScheduleLoading = false;
     this.paymentScheduleError = '';
+    this.paymentScheduleMessage = '';
     this.paymentMilestonesDraft = [];
     this.paymentSavingSchedule = false;
     this.paymentInitializingDefaults = false;
@@ -4187,6 +4191,7 @@ export class EnquiriesComponent implements OnInit {
   private loadPaymentSchedule(enquiryId: string, initializeWhenMissing: boolean): void {
     this.paymentScheduleLoading = true;
     this.paymentScheduleError = '';
+    this.paymentScheduleMessage = '';
 
     this.api
       .getPaymentSchedule(enquiryId)
@@ -4316,19 +4321,41 @@ export class EnquiriesComponent implements OnInit {
   createPaymentLinkForMilestone(milestoneId: string): void {
     this.paymentCreatingLinkMilestoneId = milestoneId;
     this.paymentScheduleError = '';
+    this.paymentScheduleMessage = '';
+    const checkoutWindow = window.open('', '_blank', 'noopener,noreferrer');
+
+    const returnUrl = `${window.location.origin}/enquiries?enquiry=${this.selectedEnquiryId ?? ''}&tab=payments&milestone=${milestoneId}`;
+    const cancelUrl = returnUrl;
 
     this.api
-      .createPaymentLink(milestoneId, {})
+      .createPaymentLink(milestoneId, { returnUrl, cancelUrl })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => {
+        next: (response) => {
           this.paymentCreatingLinkMilestoneId = null;
+          if (response.paymentUrl) {
+            if (checkoutWindow) {
+              checkoutWindow.location.href = response.paymentUrl;
+            } else {
+              window.open(response.paymentUrl, '_blank', 'noopener,noreferrer');
+            }
+            this.paymentScheduleMessage = 'Payment link created and opened in a new tab.';
+          } else {
+            if (checkoutWindow) {
+              checkoutWindow.close();
+            }
+            this.paymentScheduleMessage = 'Payment link created.';
+          }
           if (this.selectedEnquiryId) {
             this.loadPaymentSchedule(this.selectedEnquiryId, false);
           }
         },
         error: (error) => {
           this.paymentCreatingLinkMilestoneId = null;
+          if (checkoutWindow) {
+            checkoutWindow.close();
+          }
+          this.paymentScheduleMessage = '';
           this.paymentScheduleError = typeof error?.error === 'string'
             ? error.error
             : 'Unable to create payment link.';

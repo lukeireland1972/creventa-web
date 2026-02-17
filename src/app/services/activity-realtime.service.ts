@@ -12,6 +12,17 @@ export interface ActivityRealtimeEvent {
   createdAtUtc?: string;
 }
 
+export interface NotificationRealtimeEvent {
+  id: string;
+  triggerKey: string;
+  title: string;
+  body: string;
+  linkUrl?: string | null;
+  isRead: boolean;
+  createdAtUtc: string;
+  readAtUtc?: string | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class ActivityRealtimeService {
   private connection: signalR.HubConnection | null = null;
@@ -19,8 +30,12 @@ export class ActivityRealtimeService {
   private subscribedTenantId: string | null = null;
   private subscribedVenueIds = new Set<string>();
   private eventsSubject = new Subject<ActivityRealtimeEvent>();
+  private notificationsSubject = new Subject<NotificationRealtimeEvent>();
+  private unreadCountSubject = new Subject<number>();
 
   readonly events$ = this.eventsSubject.asObservable();
+  readonly notifications$ = this.notificationsSubject.asObservable();
+  readonly unreadCounts$ = this.unreadCountSubject.asObservable();
 
   constructor(private auth: AuthService) {}
 
@@ -57,6 +72,33 @@ export class ActivityRealtimeService {
 
       this.connection.on('activity.logged', (payload: ActivityRealtimeEvent) => {
         this.eventsSubject.next(payload ?? {});
+      });
+
+      this.connection.on('diary.updated', (payload: { venueId?: string; enquiryId?: string; status?: string; occurredAtUtc?: string } | null) => {
+        if (!payload) {
+          return;
+        }
+
+        this.eventsSubject.next({
+          actionType: 'diary.updated',
+          entityType: 'Enquiry',
+          entityId: payload.enquiryId,
+          createdAtUtc: payload.occurredAtUtc
+        });
+      });
+
+      this.connection.on('notification.received', (payload: NotificationRealtimeEvent) => {
+        if (!payload?.id) {
+          return;
+        }
+        this.notificationsSubject.next(payload);
+      });
+
+      this.connection.on('notification.unreadCount', (payload: number) => {
+        if (typeof payload !== 'number' || Number.isNaN(payload)) {
+          return;
+        }
+        this.unreadCountSubject.next(Math.max(0, Math.round(payload)));
       });
 
       this.connection.onreconnected(() => this.subscribeAsync());

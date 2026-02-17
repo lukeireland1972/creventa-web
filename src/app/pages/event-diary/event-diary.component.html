@@ -12,16 +12,18 @@
     <div class="calendar-toolbar">
       <div class="month-nav">
         <h2>{{ currentRangeLabel }}</h2>
-        <div class="month-arrows">
-          <button type="button" (click)="shiftMonth(-1)" aria-label="Previous range">&#10094;</button>
-          <button type="button" (click)="shiftMonth(1)" aria-label="Next range">&#10095;</button>
-        </div>
-        <button type="button" class="today-btn" (click)="goToToday()">Today</button>
+        @if (selectedView !== 'operations') {
+          <div class="month-arrows">
+            <button type="button" (click)="shiftMonth(-1)" aria-label="Previous range">&#10094;</button>
+            <button type="button" (click)="shiftMonth(1)" aria-label="Next range">&#10095;</button>
+          </div>
+          <button type="button" class="today-btn" (click)="goToToday()">Today</button>
+        }
       </div>
 
       <div class="toolbar-right">
         <div class="view-toggle" role="tablist" aria-label="Diary view">
-          @for (view of diaryViews; track view.key) {
+          @for (view of availableDiaryViews; track view.key) {
             <button
               type="button"
               role="tab"
@@ -33,51 +35,38 @@
           }
         </div>
 
-        <button
-          type="button"
-          class="heatmap-toggle"
-          [class.active]="showDemandHeatmap"
-          (click)="toggleDemandHeatmap()">
-          Demand Heatmap
-        </button>
-
-        <div class="space-filter" (click)="$event.stopPropagation()">
-          <label>Filter by Space</label>
-          <button type="button" class="space-filter-trigger" (click)="toggleSpaceFilterDropdown()">
-            <span>{{ spaceFilterSummaryLabel }}</span>
-            <small>{{ selectedSpaceFilterKeys.length === 0 ? 'All Spaces' : selectedSpaceFilterKeys.length + ' selected' }}</small>
+        @if (selectedView !== 'operations') {
+          <button
+            type="button"
+            class="heatmap-toggle"
+            [class.active]="showDemandHeatmap"
+            (click)="toggleDemandHeatmap()">
+            Demand Heatmap
           </button>
 
-          @if (showSpaceFilterDropdown) {
-            <div class="space-filter-menu">
-              <label class="space-filter-item all-spaces">
-                <input
-                  type="checkbox"
-                  [checked]="selectedSpaceFilterKeys.length === 0"
-                  (change)="selectAllSpaces()" />
-                <span>All Spaces</span>
-              </label>
+          <div class="space-filter" (click)="$event.stopPropagation()">
+            <label>Filter by Space</label>
+            <button type="button" class="space-filter-trigger" (click)="toggleSpaceFilterDropdown()">
+              <span>{{ spaceFilterSummaryLabel }}</span>
+              <small>{{ selectedSpaceFilterKeys.length === 0 ? 'All Spaces' : selectedSpaceFilterKeys.length + ' selected' }}</small>
+            </button>
 
-              @if (spaceFilterOptions.length === 0) {
-                <p class="space-filter-empty">{{ loadingSpaceFilters ? 'Loading spaces...' : (spaceFilterError || 'No spaces available.') }}</p>
-              } @else {
-                <div class="space-filter-group">
-                  <h4>Spaces</h4>
-                  @for (option of standaloneSpaceFilterOptions; track option.key) {
-                    <label class="space-filter-item">
-                      <input
-                        type="checkbox"
-                        [checked]="isSpaceFilterSelected(option.key)"
-                        (change)="toggleSpaceFilter(option.key)" />
-                      <span>{{ option.label }}</span>
-                    </label>
-                  }
-                </div>
+            @if (showSpaceFilterDropdown) {
+              <div class="space-filter-menu">
+                <label class="space-filter-item all-spaces">
+                  <input
+                    type="checkbox"
+                    [checked]="selectedSpaceFilterKeys.length === 0"
+                    (change)="selectAllSpaces()" />
+                  <span>All Spaces</span>
+                </label>
 
-                @if (combinationSpaceFilterOptions.length > 0) {
+                @if (spaceFilterOptions.length === 0) {
+                  <p class="space-filter-empty">{{ loadingSpaceFilters ? 'Loading spaces...' : (spaceFilterError || 'No spaces available.') }}</p>
+                } @else {
                   <div class="space-filter-group">
-                    <h4>Space Combinations</h4>
-                    @for (option of combinationSpaceFilterOptions; track option.key) {
+                    <h4>Spaces</h4>
+                    @for (option of standaloneSpaceFilterOptions; track option.key) {
                       <label class="space-filter-item">
                         <input
                           type="checkbox"
@@ -87,34 +76,49 @@
                       </label>
                     }
                   </div>
-                }
-              }
-            </div>
-          }
-        </div>
 
-        <div class="legend-inline">
-          <span><i class="legend-chip status-confirmed"></i> Confirmed</span>
-          <span><i class="legend-chip status-provisional"></i> Provisional</span>
-          <span><i class="legend-chip status-tentative"></i> New / Tentative</span>
-          <span><i class="legend-chip status-open-proposal"></i> Open Proposal</span>
-          <span><i class="legend-chip status-appointment"></i> Appointment</span>
-          <span><i class="legend-chip status-venue-event"></i> Venue Event</span>
-        </div>
-        <div class="export-actions">
-          <button type="button" class="export-btn" [disabled]="!!exportState" (click)="exportDiary('xlsx')">
-            {{ isExporting('xlsx') ? 'Exporting Excel...' : 'Download Excel' }}
-          </button>
-          <button type="button" class="export-btn" [disabled]="!!exportState" (click)="exportDiary('pdf')">
-            {{ isExporting('pdf') ? 'Exporting PDF...' : 'Download PDF' }}
-          </button>
-        </div>
-        <button type="button" class="add-task-btn" (click)="openAddTask()">+ Add Task</button>
-        <button type="button" class="add-event-btn" (click)="addEvent()">+ Add Event</button>
+                  @if (combinationSpaceFilterOptions.length > 0) {
+                    <div class="space-filter-group">
+                      <h4>Space Combinations</h4>
+                      @for (option of combinationSpaceFilterOptions; track option.key) {
+                        <label class="space-filter-item">
+                          <input
+                            type="checkbox"
+                            [checked]="isSpaceFilterSelected(option.key)"
+                            (change)="toggleSpaceFilter(option.key)" />
+                          <span>{{ option.label }}</span>
+                        </label>
+                      }
+                    </div>
+                  }
+                }
+              </div>
+            }
+          </div>
+
+          <div class="legend-inline">
+            <span><i class="legend-chip status-confirmed"></i> Confirmed</span>
+            <span><i class="legend-chip status-provisional"></i> Provisional</span>
+            <span><i class="legend-chip status-tentative"></i> New / Tentative</span>
+            <span><i class="legend-chip status-open-proposal"></i> Open Proposal</span>
+            <span><i class="legend-chip status-appointment"></i> Appointment</span>
+            <span><i class="legend-chip status-venue-event"></i> Venue Event</span>
+          </div>
+          <div class="export-actions">
+            <button type="button" class="export-btn" [disabled]="!!exportState" (click)="exportDiary('xlsx')">
+              {{ isExporting('xlsx') ? 'Exporting Excel...' : 'Download Excel' }}
+            </button>
+            <button type="button" class="export-btn" [disabled]="!!exportState" (click)="exportDiary('pdf')">
+              {{ isExporting('pdf') ? 'Exporting PDF...' : 'Download PDF' }}
+            </button>
+          </div>
+          <button type="button" class="add-task-btn" (click)="openAddTask()">+ Add Task</button>
+          <button type="button" class="add-event-btn" (click)="addEvent()">+ Add Event</button>
+        }
       </div>
     </div>
 
-    @if (showDemandHeatmap && demandHeatmapMessage) {
+    @if (selectedView !== 'operations' && showDemandHeatmap && demandHeatmapMessage) {
       <p class="heatmap-message">{{ demandHeatmapMessage }}</p>
     }
 
@@ -158,26 +162,16 @@
                               type="button"
                               class="event-chip sub-event-child"
                               [ngClass]="eventChipClass(event)"
+                              cdkOverlayOrigin
+                              #nestedMonthEventOrigin="cdkOverlayOrigin"
                               [attr.draggable]="canDrag(event)"
                               (dragstart)="onDragStart(event, $event)"
                               (dragend)="onDragEnd()"
-                              (mouseenter)="hoveredEventKey = eventKey(event)"
-                              (mouseleave)="hoveredEventKey = null"
+                              (mouseenter)="onEventMouseEnter(event, nestedMonthEventOrigin, parentEventLabel(event) + ' · ' + eventDisplayLabel(event))"
+                              (mouseleave)="onEventMouseLeave()"
                               (click)="openDetails(event)">
                               {{ eventDisplayLabel(event) }}
                             </button>
-
-                            @if (hoveredEventKey === eventKey(event)) {
-                              <div class="event-popover">
-                                <strong>{{ parentEventLabel(event) }} · {{ eventDisplayLabel(event) }}</strong>
-                                <span><b>Covers:</b> {{ event.covers || '-' }}</span>
-                                <span><b>Timing:</b> {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
-                                <span><b>Event style:</b> {{ event.eventStyle || '-' }}</span>
-                                <span><b>Status:</b> {{ event.statusKey || event.enquiryStatus || event.eventType }}</span>
-                                <span><b>Space:</b> {{ event.spaceName }}</span>
-                                <span><b>Event manager:</b> {{ event.eventManagerName || '-' }}</span>
-                              </div>
-                            }
                           </div>
                         }
                       </div>
@@ -188,26 +182,16 @@
                         type="button"
                         class="event-chip"
                         [ngClass]="eventChipClass(group.events[0])"
+                        cdkOverlayOrigin
+                        #singleMonthEventOrigin="cdkOverlayOrigin"
                         [attr.draggable]="canDrag(group.events[0])"
                         (dragstart)="onDragStart(group.events[0], $event)"
                         (dragend)="onDragEnd()"
-                        (mouseenter)="hoveredEventKey = eventKey(group.events[0])"
-                        (mouseleave)="hoveredEventKey = null"
+                        (mouseenter)="onEventMouseEnter(group.events[0], singleMonthEventOrigin)"
+                        (mouseleave)="onEventMouseLeave()"
                         (click)="openDetails(group.events[0])">
                         {{ eventDisplayLabel(group.events[0]) }}
                       </button>
-
-                      @if (hoveredEventKey === eventKey(group.events[0])) {
-                        <div class="event-popover">
-                          <strong>{{ group.events[0].label }}</strong>
-                          <span><b>Covers:</b> {{ group.events[0].covers || '-' }}</span>
-                          <span><b>Timing:</b> {{ group.events[0].startUtc | date: 'HH:mm' }}-{{ group.events[0].endUtc | date: 'HH:mm' }}</span>
-                          <span><b>Event style:</b> {{ group.events[0].eventStyle || '-' }}</span>
-                          <span><b>Status:</b> {{ group.events[0].statusKey || group.events[0].enquiryStatus || group.events[0].eventType }}</span>
-                          <span><b>Space:</b> {{ group.events[0].spaceName }}</span>
-                          <span><b>Event manager:</b> {{ group.events[0].eventManagerName || '-' }}</span>
-                        </div>
-                      }
                     </div>
                   }
                 }
@@ -276,26 +260,16 @@
                                     type="button"
                                     class="event-chip sub-event-child"
                                     [ngClass]="eventChipClass(event)"
+                                    cdkOverlayOrigin
+                                    #nestedTimelineEventOrigin="cdkOverlayOrigin"
                                     [attr.draggable]="canDrag(event)"
                                     (dragstart)="onDragStart(event, $event)"
                                     (dragend)="onDragEnd()"
-                                    (mouseenter)="hoveredEventKey = eventKey(event)"
-                                    (mouseleave)="hoveredEventKey = null"
+                                    (mouseenter)="onEventMouseEnter(event, nestedTimelineEventOrigin, parentEventLabel(event) + ' · ' + eventDisplayLabel(event))"
+                                    (mouseleave)="onEventMouseLeave()"
                                     (click)="openDetails(event)">
                                     {{ eventDisplayLabel(event) }}
                                   </button>
-
-                                  @if (hoveredEventKey === eventKey(event)) {
-                                    <div class="event-popover">
-                                      <strong>{{ parentEventLabel(event) }} · {{ eventDisplayLabel(event) }}</strong>
-                                      <span><b>Covers:</b> {{ event.covers || '-' }}</span>
-                                      <span><b>Timing:</b> {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
-                                      <span><b>Event style:</b> {{ event.eventStyle || '-' }}</span>
-                                      <span><b>Status:</b> {{ event.statusKey || event.enquiryStatus || event.eventType }}</span>
-                                      <span><b>Space:</b> {{ event.spaceName }}</span>
-                                      <span><b>Event manager:</b> {{ event.eventManagerName || '-' }}</span>
-                                    </div>
-                                  }
                                 </div>
                               }
                             </div>
@@ -306,26 +280,16 @@
                               type="button"
                               class="event-chip"
                               [ngClass]="eventChipClass(group.events[0])"
+                              cdkOverlayOrigin
+                              #singleTimelineEventOrigin="cdkOverlayOrigin"
                               [attr.draggable]="canDrag(group.events[0])"
                               (dragstart)="onDragStart(group.events[0], $event)"
                               (dragend)="onDragEnd()"
-                              (mouseenter)="hoveredEventKey = eventKey(group.events[0])"
-                              (mouseleave)="hoveredEventKey = null"
+                              (mouseenter)="onEventMouseEnter(group.events[0], singleTimelineEventOrigin)"
+                              (mouseleave)="onEventMouseLeave()"
                               (click)="openDetails(group.events[0])">
                               {{ eventDisplayLabel(group.events[0]) }}
                             </button>
-
-                            @if (hoveredEventKey === eventKey(group.events[0])) {
-                              <div class="event-popover">
-                                <strong>{{ group.events[0].label }}</strong>
-                                <span><b>Covers:</b> {{ group.events[0].covers || '-' }}</span>
-                                <span><b>Timing:</b> {{ group.events[0].startUtc | date: 'HH:mm' }}-{{ group.events[0].endUtc | date: 'HH:mm' }}</span>
-                                <span><b>Event style:</b> {{ group.events[0].eventStyle || '-' }}</span>
-                                <span><b>Status:</b> {{ group.events[0].statusKey || group.events[0].enquiryStatus || group.events[0].eventType }}</span>
-                                <span><b>Space:</b> {{ group.events[0].spaceName }}</span>
-                                <span><b>Event manager:</b> {{ group.events[0].eventManagerName || '-' }}</span>
-                              </div>
-                            }
                           </div>
                         }
                       }
@@ -365,12 +329,16 @@
                       type="button"
                       class="room-event-bar"
                       [ngClass]="eventChipClass(bar.event)"
+                      cdkOverlayOrigin
+                      #roomTimelineEventOrigin="cdkOverlayOrigin"
                       [style.left.%]="bar.leftPercent"
                       [style.width.%]="bar.widthPercent"
                       [style.top.px]="roomBarTopPx(bar)"
                       [attr.draggable]="canDrag(bar.event)"
                       (dragstart)="onDragStart(bar.event, $event)"
                       (dragend)="onDragEnd()"
+                      (mouseenter)="onEventMouseEnter(bar.event, roomTimelineEventOrigin)"
+                      (mouseleave)="onEventMouseLeave()"
                       (click)="openDetails(bar.event)">
                       {{ eventDisplayLabel(bar.event) }}
                     </button>
@@ -404,7 +372,7 @@
               }
             </aside>
 
-            <div class="week-days-grid">
+            <div class="week-days-grid" cdkDropListGroup>
               @for (day of weekColumns; track day.isoDate) {
                 <section class="week-day-column">
                   <header class="week-day-header">
@@ -416,6 +384,10 @@
                     class="week-day-body"
                     [ngClass]="heatmapClassForDate(day.isoDate)"
                     #weekColumn
+                    cdkDropList
+                    [cdkDropListData]="day.events"
+                    [cdkDropListSortingDisabled]="true"
+                    (cdkDropListDropped)="onWeekCdkDrop(day.isoDate, $event, weekColumn)"
                     (dragover)="$event.preventDefault()"
                     (drop)="onDropWeekColumn(day.isoDate, $event, weekColumn)">
                     @for (hour of timeSlotHours; track hour) {
@@ -426,11 +398,14 @@
                       <article
                         class="week-event-block"
                         [ngClass]="eventChipClass(event)"
+                        cdkDrag
+                        [cdkDragData]="event"
+                        cdkOverlayOrigin
+                        #weekEventOrigin="cdkOverlayOrigin"
                         [style.top.%]="weekEventTopPercent(event)"
                         [style.height.%]="weekEventHeightPercent(event)"
-                        [attr.draggable]="canDrag(event)"
-                        (dragstart)="onDragStart(event, $event)"
-                        (dragend)="onDragEnd()"
+                        (mouseenter)="onEventMouseEnter(event, weekEventOrigin)"
+                        (mouseleave)="onEventMouseLeave()"
                         (click)="openDetails(event)">
                         <button
                           type="button"
@@ -455,7 +430,7 @@
             </div>
           </div>
         } @else {
-          <div class="week-space-grid">
+          <div class="week-space-grid" cdkDropListGroup>
             <div class="week-space-header-row">
               <div class="week-space-header-cell">Space</div>
               @for (day of weekColumns; track day.isoDate) {
@@ -474,6 +449,10 @@
                     class="week-space-day-body"
                     [ngClass]="heatmapClassForDate(dayLane.isoDate)"
                     #weekSpaceColumn
+                    cdkDropList
+                    [cdkDropListData]="dayLane.events"
+                    [cdkDropListSortingDisabled]="true"
+                    (cdkDropListDropped)="onWeekSpaceCdkDrop(dayLane.isoDate, row.spaceId, $event, weekSpaceColumn)"
                     (dragover)="$event.preventDefault()"
                     (drop)="onDropWeekSpaceColumn(dayLane.isoDate, row.spaceId, $event, weekSpaceColumn)">
                     @for (hour of timeSlotHours; track hour) {
@@ -484,11 +463,14 @@
                       <article
                         class="week-event-block compact"
                         [ngClass]="eventChipClass(event)"
+                        cdkDrag
+                        [cdkDragData]="event"
+                        cdkOverlayOrigin
+                        #weekSpaceEventOrigin="cdkOverlayOrigin"
                         [style.top.%]="weekEventTopPercent(event)"
                         [style.height.%]="weekEventHeightPercent(event)"
-                        [attr.draggable]="canDrag(event)"
-                        (dragstart)="onDragStart(event, $event)"
-                        (dragend)="onDragEnd()"
+                        (mouseenter)="onEventMouseEnter(event, weekSpaceEventOrigin)"
+                        (mouseleave)="onEventMouseLeave()"
                         (click)="openDetails(event)">
                         <button
                           type="button"
@@ -513,7 +495,7 @@
           </div>
         }
       </div>
-    } @else {
+    } @else if (selectedView === 'day') {
       <div class="day-wrap">
         <div class="day-grid">
           <aside class="day-time-axis">
@@ -523,7 +505,7 @@
             }
           </aside>
 
-          <div class="day-space-columns">
+          <div class="day-space-columns" cdkDropListGroup>
             @for (column of daySpaceColumns; track column.spaceId) {
               <section class="day-space-column">
                 <header class="day-space-header">
@@ -534,6 +516,10 @@
                   class="day-space-body"
                   [ngClass]="heatmapClassForDate(currentDayIso)"
                   #daySpaceColumn
+                  cdkDropList
+                  [cdkDropListData]="column.events"
+                  [cdkDropListSortingDisabled]="true"
+                  (cdkDropListDropped)="onDaySpaceCdkDrop(currentDayIso, column.spaceId, $event, daySpaceColumn)"
                   (dragover)="$event.preventDefault()"
                   (drop)="onDropDaySpaceColumn(currentDayIso, column.spaceId, $event, daySpaceColumn)">
                   @for (hour of timeSlotHours; track hour) {
@@ -544,11 +530,14 @@
                     <article
                       class="day-event-bar"
                       [ngClass]="eventChipClass(event)"
+                      cdkDrag
+                      [cdkDragData]="event"
+                      cdkOverlayOrigin
+                      #dayEventOrigin="cdkOverlayOrigin"
                       [style.top.%]="dayEventTopPercent(event)"
                       [style.height.%]="dayEventHeightPercent(event)"
-                      [attr.draggable]="canDrag(event)"
-                      (dragstart)="onDragStart(event, $event)"
-                      (dragend)="onDragEnd()"
+                      (mouseenter)="onEventMouseEnter(event, dayEventOrigin)"
+                      (mouseleave)="onEventMouseLeave()"
                       (click)="openDetails(event)">
                       <button
                         type="button"
@@ -581,8 +570,62 @@
           <p class="day-empty">No events scheduled for this day.</p>
         }
       </div>
+    } @else {
+      <section class="operations-wrap">
+        <div class="operations-grid">
+          @for (column of operationsColumns; track column.label) {
+            <article class="operations-column">
+              <header>
+                <h3>{{ column.label }}</h3>
+                <p>{{ column.date | date: 'EEE dd MMM yyyy' }}</p>
+              </header>
+
+              @for (item of column.items; track item.enquiryId + '-' + item.startUtc) {
+                <div class="operations-item">
+                  <strong>{{ item.eventName }}</strong>
+                  <div class="operations-time">{{ item.startUtc | date: 'HH:mm' }} - {{ item.endUtc | date: 'HH:mm' }}</div>
+                  <div class="operations-meta">{{ item.spaceName }} · {{ item.covers }} covers</div>
+                  <div class="operations-meta">{{ item.eventStyle || 'No style set' }}</div>
+                  @if (item.setupRequirements) {
+                    <div class="operations-meta">{{ item.setupRequirements }}</div>
+                  }
+                </div>
+              }
+
+              @if (column.items.length === 0) {
+                <p class="operations-empty">No scheduled events.</p>
+              }
+            </article>
+          }
+        </div>
+        @if (operationsColumns.length === 0) {
+          <p class="operations-empty">No operations data available for this venue.</p>
+        }
+      </section>
     }
   </section>
+
+  @if (activePopoverOrigin; as popoverOrigin) {
+    <ng-template
+      cdkConnectedOverlay
+      [cdkConnectedOverlayOpen]="popoverOpen && !!activePopoverEvent"
+      [cdkConnectedOverlayOrigin]="popoverOrigin"
+      [cdkConnectedOverlayOffsetY]="8"
+      [cdkConnectedOverlayPush]="true"
+      [cdkConnectedOverlayFlexibleDimensions]="false">
+      <div class="diary-popover-overlay" (mouseenter)="onPopoverMouseEnter()" (mouseleave)="onPopoverMouseLeave()">
+        @if (activePopoverEvent) {
+          <app-diary-event-popover
+            [event]="activePopoverEvent"
+            [headline]="activePopoverHeadline || undefined"
+            [expanded]="popoverExpanded"
+            (toggleExpanded)="onPopoverToggleExpanded()"
+            (viewDetails)="onPopoverViewDetails()">
+          </app-diary-event-popover>
+        }
+      </div>
+    </ng-template>
+  }
 
   @if (hasPendingMove && pendingMove; as move) {
     <div class="move-modal-backdrop" (click)="cancelPendingMove()"></div>
@@ -612,10 +655,37 @@
         <div class="move-conflicts">
           <p>{{ move.conflictCheckMessage }}</p>
           <ul>
-            @for (conflict of move.conflicts; track conflict.id) {
+            @for (conflict of move.conflicts; track conflict.type + '-' + conflict.id) {
               <li>
                 <strong>{{ conflict.label }}</strong>
+                <span class="severity-tag" [class.hard]="(conflict.severity || '').toLowerCase() === 'hard'" [class.soft]="(conflict.severity || '').toLowerCase() !== 'hard'">
+                  {{ conflict.severity || 'Soft' }}
+                </span>
                 <span>{{ conflict.startUtc | date: 'dd/MM HH:mm' }} - {{ conflict.endUtc | date: 'dd/MM HH:mm' }}</span>
+                @if (conflict.spaceName) {
+                  <span>Space: {{ conflict.spaceName }}</span>
+                }
+                @if (conflict.description) {
+                  <span>{{ conflict.description }}</span>
+                }
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      @if (hasSuggestedAlternatives) {
+        <div class="move-alternatives">
+          <p>Suggested alternatives</p>
+          <ul>
+            @for (alternative of move.alternatives; track alternative.spaceId + '-' + alternative.startUtc) {
+              <li>
+                <div>
+                  <strong>{{ alternative.spaceName }}</strong>
+                  <span>{{ alternative.startUtc | date: 'dd/MM HH:mm' }} - {{ alternative.endUtc | date: 'HH:mm' }}</span>
+                  <small>{{ alternative.reason }}</small>
+                </div>
+                <button type="button" (click)="applySuggestedAlternative(alternative)" [disabled]="applyingMove">Choose</button>
               </li>
             }
           </ul>
@@ -624,6 +694,11 @@
 
       <div class="move-modal-actions">
         <button type="button" class="ghost" (click)="cancelPendingMove()" [disabled]="applyingMove">Cancel</button>
+        @if (canProceedSoftConflicts) {
+          <button type="button" class="warning" (click)="proceedPendingMoveWithSoftConflicts()" [disabled]="applyingMove">
+            {{ applyingMove ? 'Applying...' : 'Proceed anyway' }}
+          </button>
+        }
         <button type="button" class="primary" (click)="confirmPendingMove()" [disabled]="!canConfirmPendingMove">
           {{ applyingMove ? 'Applying...' : 'Confirm Move' }}
         </button>

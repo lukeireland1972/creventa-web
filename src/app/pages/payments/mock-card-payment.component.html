@@ -1,0 +1,54 @@
+<main class="mock-payment-page">
+  <section class="card">
+    <header>
+      <h1>CreventaPay Demo Checkout</h1>
+      <p>Dummy card payment screen for milestone testing.</p>
+    </header>
+
+    <div class="meta">
+      <span>Milestone: <strong>{{ milestoneId || '-' }}</strong></span>
+      <span>Reference: <strong>{{ providerReference || '-' }}</strong></span>
+      <span>Amount: <strong>{{ amount | number: '1.2-2' }} {{ currency }}</strong></span>
+    </div>
+
+    @if (completed) {
+      <div class="state success">
+        <strong>Payment simulated successfully.</strong>
+        <p>If configured, you are being redirected back now.</p>
+      </div>
+    } @else if (cancelled) {
+      <div class="state warning">
+        <strong>Payment cancelled.</strong>
+      </div>
+    } @else {
+      <form class="form-grid" (ngSubmit)="submitPayment()">
+        <label>
+          Cardholder Name
+          <input type="text" [(ngModel)]="cardholderName" name="cardholderName" required />
+        </label>
+
+        <label>
+          Card Number
+          <input type="text" [(ngModel)]="cardNumber" name="cardNumber" placeholder="4242 4242 4242 4242" required />
+        </label>
+
+        <label>
+          Expiry
+          <input type="text" [(ngModel)]="expiry" name="expiry" placeholder="MM/YY" required />
+        </label>
+
+        <label>
+          CVC
+          <input type="text" [(ngModel)]="cvc" name="cvc" placeholder="123" required />
+        </label>
+
+        <div class="actions">
+          <button type="button" class="ghost" (click)="cancelPayment()">Cancel</button>
+          <button type="submit" class="primary" [disabled]="processing">
+            {{ processing ? 'Processing...' : 'Pay now' }}
+          </button>
+        </div>
+      </form>
+    }
+  </section>
+</main>

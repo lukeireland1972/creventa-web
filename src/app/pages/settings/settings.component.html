@@ -553,7 +553,37 @@
 
               <p class="hint">Templates are stored per venue and used as defaults when events are confirmed.</p>
 
-              <form class="form-grid compact" [formGroup]="paymentTemplateForm" (ngSubmit)="savePaymentScheduleTemplate()">
+              <section class="card inset">
+                <header class="card-header">
+                  <h4>Financial Numbering</h4>
+                  <button
+                    type="button"
+                    class="primary"
+                    [disabled]="sectionStates['payment-schedules'].saving"
+                    (click)="saveFinancialReferenceSettings()">
+                    {{ sectionStates['payment-schedules'].saving ? 'Saving...' : 'Save Prefixes' }}
+                  </button>
+                </header>
+                <form class="form-grid compact" [formGroup]="financialReferenceForm">
+                  <label>
+                    Invoice Prefix
+                    <input type="text" formControlName="invoicePrefix" placeholder="INV-GCM" maxlength="20" />
+                  </label>
+                  <label>
+                    Credit Note Prefix
+                    <input type="text" formControlName="creditNotePrefix" placeholder="CN-GCM" maxlength="20" />
+                  </label>
+                  <label>
+                    Receipt Prefix
+                    <input type="text" formControlName="receiptPrefix" placeholder="RCT-GCM" maxlength="20" />
+                  </label>
+                </form>
+                <p class="hint">Invoice numbers use this pattern: <code>{{ financialReferenceForm.get('invoicePrefix')?.value || 'INV' }}-{{ selectedBudgetYear }}-0001</code></p>
+              </section>
+
+              <form class="form-grid compact payment-template-editor" [formGroup]="paymentTemplateForm" (ngSubmit)="savePaymentScheduleTemplate()">
+                <input type="hidden" formControlName="id" />
+
                 <label>
                   Template Name
                   <input type="text" formControlName="name" />
@@ -564,35 +594,106 @@
                   <input type="text" formControlName="eventType" />
                 </label>
 
-                <label>
-                  Milestone Name
-                  <input type="text" formControlName="milestoneName" />
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="isDefault" />
+                  <span>Set as default for this event type</span>
                 </label>
 
                 <label>
-                  Due Date Rule
-                  <input type="text" formControlName="dueDateRule" />
+                  Clone from event type
+                  <div class="inline-actions">
+                    <select [(ngModel)]="selectedPaymentTemplateCloneEventType" [ngModelOptions]="{ standalone: true }">
+                      <option value="">Select event type</option>
+                      @for (eventType of defaultEventTypes; track eventType) {
+                        <option [value]="eventType">{{ eventType }}</option>
+                      }
+                    </select>
+                    <button type="button" class="ghost" (click)="clonePaymentTemplateFromEventType()">Clone</button>
+                  </div>
                 </label>
 
-                <label>
-                  Amount Type
-                  <select formControlName="amountType">
-                    <option value="Percentage">Percentage</option>
-                    <option value="Fixed">Fixed</option>
-                  </select>
-                </label>
+                <section class="card inset full-width">
+                  <header class="card-header">
+                    <h4>Milestones</h4>
+                    <button type="button" class="ghost" (click)="addPaymentTemplateMilestone()">Add Milestone</button>
+                  </header>
 
-                <label>
-                  Amount
-                  <input type="number" min="0.01" step="0.01" formControlName="amount" />
-                </label>
-
-                <label class="full-width">
-                  Accepted Methods (comma separated)
-                  <input type="text" formControlName="acceptedMethodsCsv" />
-                </label>
+                  <div class="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th style="width: 2.5rem"></th>
+                          <th>Name</th>
+                          <th>Due Rule</th>
+                          <th>Type</th>
+                          <th>Amount</th>
+                          <th>Methods</th>
+                          <th>Auto</th>
+                          <th>Late</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody cdkDropList [cdkDropListData]="paymentTemplateMilestoneDrafts" (cdkDropListDropped)="dropPaymentTemplateMilestone($event)">
+                        @for (milestone of paymentTemplateMilestoneDrafts; track $index) {
+                          <tr cdkDrag>
+                            <td>
+                              <span class="drag-pill" cdkDragHandle>::</span>
+                            </td>
+                            <td>
+                              <input type="text" [(ngModel)]="milestone.name" [ngModelOptions]="{ standalone: true }" />
+                            </td>
+                            <td>
+                              <select [(ngModel)]="milestone.dueDateRule" [ngModelOptions]="{ standalone: true }">
+                                @for (rule of paymentDueDateRuleOptions; track rule) {
+                                  <option [value]="rule">{{ rule }}</option>
+                                }
+                              </select>
+                            </td>
+                            <td>
+                              <select [(ngModel)]="milestone.amountType" [ngModelOptions]="{ standalone: true }">
+                                @for (amountType of paymentAmountTypeOptions; track amountType) {
+                                  <option [value]="amountType">{{ amountType }}</option>
+                                }
+                              </select>
+                            </td>
+                            <td>
+                              <input type="number" min="0" step="0.01" [(ngModel)]="milestone.amount" [ngModelOptions]="{ standalone: true }" />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                [value]="paymentTemplateMilestoneMethodsCsv(milestone)"
+                                (input)="setPaymentTemplateMilestoneMethods($index, $any($event.target).value)" />
+                            </td>
+                            <td>
+                              <label class="toggle">
+                                <input type="checkbox" [(ngModel)]="milestone.autoReminderEnabled" [ngModelOptions]="{ standalone: true }" />
+                                <span>{{ milestone.autoReminderEnabled ? milestone.autoReminderDays : '-' }}</span>
+                              </label>
+                            </td>
+                            <td>
+                              <label class="toggle">
+                                <input type="checkbox" [(ngModel)]="milestone.lateReminderEnabled" [ngModelOptions]="{ standalone: true }" />
+                                <span>{{ milestone.lateReminderEnabled ? milestone.lateReminderDays : '-' }}</span>
+                              </label>
+                            </td>
+                            <td>
+                              <button type="button" class="link danger" (click)="removePaymentTemplateMilestone($index)">Remove</button>
+                            </td>
+                          </tr>
+                        }
+                        @if (paymentTemplateMilestoneDrafts.length === 0) {
+                          <tr>
+                            <td colspan="9" class="empty-row">No milestones configured for this template.</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
 
                 <div class="actions full-width">
+                  <button type="button" class="ghost" (click)="startNewPaymentScheduleTemplate()">New Template</button>
                   <button type="submit" class="primary" [disabled]="sectionStates['payment-schedules'].saving">
                     {{ sectionStates['payment-schedules'].saving ? 'Saving...' : 'Save Template' }}
                   </button>
@@ -606,7 +707,9 @@
                       <th>Name</th>
                       <th>Event Type</th>
                       <th>Milestone</th>
+                      <th>Milestones</th>
                       <th>Amount</th>
+                      <th>Default</th>
                       <th>Updated</th>
                       <th></th>
                     </tr>
@@ -617,6 +720,7 @@
                         <td>{{ template.name }}</td>
                         <td>{{ template.eventType }}</td>
                         <td>{{ template.milestones[0]?.name || '-' }}</td>
+                        <td>{{ template.milestones.length }}</td>
                         <td>
                           @if ((template.milestones[0]?.amountType || '') === 'Percentage') {
                             {{ template.milestones[0]?.amount | number: '1.0-2' }}%
@@ -624,15 +728,18 @@
                             {{ venueForm.get('currencyCode')?.value || 'GBP' }} {{ template.milestones[0]?.amount | number: '1.2-2' }}
                           }
                         </td>
+                        <td>{{ template.isDefault ? 'Yes' : 'No' }}</td>
                         <td>-</td>
                         <td>
+                          <button type="button" class="link" (click)="editPaymentScheduleTemplate(template)">Edit</button>
+                          <button type="button" class="link" (click)="duplicatePaymentScheduleTemplate(template)">Duplicate</button>
                           <button type="button" class="link danger" (click)="deletePaymentScheduleTemplate(template.id)">Delete</button>
                         </td>
                       </tr>
                     }
                     @if (paymentScheduleTemplates.length === 0) {
                       <tr>
-                        <td colspan="6" class="empty-row">No payment schedule templates yet.</td>
+                        <td colspan="8" class="empty-row">No payment schedule templates yet.</td>
                       </tr>
                     }
                   </tbody>
@@ -647,62 +754,166 @@
                 <h3>Terms & Conditions</h3>
               </header>
 
-              <p class="hint">Terms are stored per venue with version history for proposal and contract use.</p>
+              <p class="hint">Draft, review, publish, and compare versioned terms. Published versions are immutable.</p>
 
               <form class="form-grid compact" [formGroup]="termsForm" (ngSubmit)="saveTermsDocument()">
+                <input type="hidden" formControlName="draftId" />
+
                 <label>
-                  Terms Title
+                  Terms Name
                   <input type="text" formControlName="title" placeholder="Wedding Terms" />
                 </label>
 
                 <label>
-                  Event Type
-                  <input type="text" formControlName="eventType" />
+                  Event Types
+                  <input type="text" formControlName="eventTypesCsv" placeholder="Wedding, Corporate Conference" />
                 </label>
 
-                <label class="full-width">
+                <label class="full-width terms-editor-label">
                   Terms Content
-                  <textarea rows="8" formControlName="content"></textarea>
+                  <quill-editor
+                    class="terms-editor"
+                    formControlName="content"
+                    format="html"
+                    [modules]="termsEditorModules"
+                    placeholder="Draft your venue terms and conditions here...">
+                  </quill-editor>
                 </label>
+
+                <p class="hint full-width terms-editor-hint">
+                  Rich text supports numbered clauses, bold, italic, and links.
+                </p>
 
                 <div class="actions full-width">
                   <button type="submit" class="primary" [disabled]="sectionStates.terms.saving">
-                    {{ sectionStates.terms.saving ? 'Saving...' : 'Save Terms Version' }}
+                    {{ sectionStates.terms.saving ? 'Saving...' : (termsForm.get('draftId')?.value ? 'Update Draft' : 'Create Draft') }}
+                  </button>
+                  <button type="button" class="secondary" [disabled]="sectionStates.terms.saving" (click)="publishTermsDraft()">
+                    Publish Draft
                   </button>
                 </div>
               </form>
 
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Title</th>
-                      <th>Version</th>
-                      <th>Event Type</th>
-                      <th>Updated</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (doc of termsDocuments; track doc.id) {
+              <section class="card inset">
+                <header class="card-header">
+                  <h4>Active Published Versions</h4>
+                </header>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
                       <tr>
-                        <td>{{ doc.title }}</td>
-                        <td>{{ doc.version }}</td>
-                        <td>{{ doc.eventType }}</td>
-                        <td>{{ doc.updatedAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
-                        <td>
-                          <button type="button" class="link danger" (click)="deleteTermsDocument(doc.id)">Delete</button>
-                        </td>
+                        <th>Name</th>
+                        <th>Version</th>
+                        <th>Event Types</th>
+                        <th>Published</th>
+                        <th>Author</th>
+                        <th>Actions</th>
                       </tr>
-                    }
-                    @if (termsDocuments.length === 0) {
+                    </thead>
+                    <tbody>
+                      @for (doc of termsDocuments; track doc.id) {
+                        <tr>
+                          <td>{{ doc.name }}</td>
+                          <td>v{{ doc.version }}</td>
+                          <td>{{ (doc.eventTypes || []).join(', ') || 'All' }}</td>
+                          <td>{{ doc.publishedAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+                          <td>{{ doc.createdByName || 'System' }}</td>
+                          <td class="table-actions">
+                            <button type="button" class="link" (click)="loadTermsVersionHistory(doc.id)">View History</button>
+                            <button type="button" class="link" (click)="createTermsDraftFromVersion(doc.id)">New Draft</button>
+                          </td>
+                        </tr>
+                      }
+                      @if (termsDocuments.length === 0) {
+                        <tr>
+                          <td colspan="6" class="empty-row">No published terms yet.</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="card inset">
+                <header class="card-header">
+                  <h4>Version History</h4>
+                </header>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
                       <tr>
-                        <td colspan="5" class="empty-row">No terms documents yet.</td>
+                        <th>Name</th>
+                        <th>Version</th>
+                        <th>Status</th>
+                        <th>Created</th>
+                        <th>Published</th>
+                        <th>Author</th>
+                        <th>Actions</th>
                       </tr>
-                    }
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      @for (version of termsVersionHistory; track version.id) {
+                        <tr>
+                          <td>{{ version.name }}</td>
+                          <td>{{ version.isDraft ? 'Draft' : ('v' + version.version) }}</td>
+                          <td>{{ version.isDraft ? 'Draft' : (version.isActive ? 'Active' : 'Archived') }}</td>
+                          <td>{{ version.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+                          <td>{{ version.publishedAtUtc ? (version.publishedAtUtc | date: 'dd/MM/yyyy HH:mm') : '-' }}</td>
+                          <td>{{ version.createdByName || 'System' }}</td>
+                          <td class="table-actions">
+                            <button type="button" class="link" (click)="selectedTermsViewId = version.id">View</button>
+                            @if (version.isDraft) {
+                              <button type="button" class="link" (click)="editTermsDraft(version.id)">Edit Draft</button>
+                              <button type="button" class="link" (click)="publishTermsDraft(version.id)">Publish</button>
+                            } @else {
+                              <button type="button" class="link" (click)="createTermsDraftFromVersion(version.id)">Create Draft</button>
+                            }
+                          </td>
+                        </tr>
+                      }
+                      @if (termsVersionHistory.length === 0) {
+                        <tr>
+                          <td colspan="7" class="empty-row">Select a terms document to view version history.</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section class="card inset">
+                <header class="card-header">
+                  <h4>Diff View</h4>
+                </header>
+                <div class="form-grid compact">
+                  <label>
+                    Version A
+                    <select [(ngModel)]="selectedTermsDiffLeftId" [ngModelOptions]="{ standalone: true }">
+                      <option [ngValue]="null">Select version</option>
+                      @for (version of termsVersionHistory; track version.id) {
+                        <option [ngValue]="version.id">{{ version.isDraft ? 'Draft' : ('v' + version.version) }} · {{ version.name }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>
+                    Version B
+                    <select [(ngModel)]="selectedTermsDiffRightId" [ngModelOptions]="{ standalone: true }">
+                      <option [ngValue]="null">Select version</option>
+                      @for (version of termsVersionHistory; track version.id) {
+                        <option [ngValue]="version.id">{{ version.isDraft ? 'Draft' : ('v' + version.version) }} · {{ version.name }}</option>
+                      }
+                    </select>
+                  </label>
+                </div>
+                <div class="terms-diff" [innerHTML]="termsDiffHtml"></div>
+              </section>
+
+              <section class="card inset">
+                <header class="card-header">
+                  <h4>Version Preview</h4>
+                </header>
+                <div class="terms-preview" [innerHTML]="selectedTermsPreviewHtml"></div>
+              </section>
             </section>
           }
 
@@ -1198,6 +1409,76 @@
             </section>
           }
 
+          @if (activeSectionKey === 'notifications') {
+            <section class="card">
+              <header class="card-header">
+                <h3>Notification Matrix</h3>
+                <button type="button" class="secondary" [disabled]="sectionStates.notifications.saving" (click)="saveNotificationMatrix()">
+                  {{ sectionStates.notifications.saving ? 'Saving...' : 'Save Matrix' }}
+                </button>
+              </header>
+              <p class="helper-text">
+                Configure channels per trigger. In-App + Email Operator determines the effective channel shown in the final column.
+              </p>
+
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Trigger</th>
+                      <th>Description</th>
+                      <th>In-App</th>
+                      <th>Email Operator</th>
+                      <th>Email Client</th>
+                      <th>Channel</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (row of notificationMatrixRows; track row.triggerKey) {
+                      <tr>
+                        <td>
+                          <strong>{{ row.label }}</strong>
+                          <div class="subtle mono">{{ row.triggerKey }}</div>
+                        </td>
+                        <td>{{ row.description }}</td>
+                        <td>
+                          <label class="toggle">
+                            <input type="checkbox" [(ngModel)]="row.inAppEnabled" [ngModelOptions]="{ standalone: true }" />
+                            <span>{{ row.inAppEnabled ? 'On' : 'Off' }}</span>
+                          </label>
+                        </td>
+                        <td>
+                          <label class="toggle">
+                            <input type="checkbox" [(ngModel)]="row.emailOperatorEnabled" [ngModelOptions]="{ standalone: true }" />
+                            <span>{{ row.emailOperatorEnabled ? 'On' : 'Off' }}</span>
+                          </label>
+                        </td>
+                        <td>
+                          <label class="toggle">
+                            <input type="checkbox" [(ngModel)]="row.emailClientEnabled" [ngModelOptions]="{ standalone: true }" />
+                            <span>{{ row.emailClientEnabled ? 'On' : 'Off' }}</span>
+                          </label>
+                        </td>
+                        <td>
+                          {{
+                            row.inAppEnabled && row.emailOperatorEnabled
+                              ? 'Both'
+                              : (row.inAppEnabled ? 'InApp' : (row.emailOperatorEnabled ? 'Email' : 'None'))
+                          }}
+                        </td>
+                      </tr>
+                    }
+                    @if (notificationMatrixRows.length === 0) {
+                      <tr>
+                        <td colspan="6" class="empty-row">No notification triggers are configured yet.</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+
           @if (activeSectionKey === 'automation') {
             <section class="card">
               <header class="card-header">
@@ -1611,15 +1892,40 @@
                   <input type="text" formControlName="name" placeholder="Proposal Sent" />
                 </label>
 
+                <label>
+                  Category
+                  <select formControlName="category">
+                    @for (category of emailTemplateCategories; track category) {
+                      <option [value]="category">{{ category }}</option>
+                    }
+                  </select>
+                </label>
+
                 <label class="full-width">
                   Subject Template
                   <input type="text" formControlName="subjectTemplate" placeholder="Your proposal for {event_name}" />
                 </label>
 
+                <div class="full-width merge-field-toolbar">
+                  @for (field of emailTemplateMergeFields; track field) {
+                    <button type="button" class="link" (click)="insertEmailTemplateMergeField('subjectTemplate', field)">
+                      + {{ '{' + field + '}' }}
+                    </button>
+                  }
+                </div>
+
                 <label class="full-width">
                   HTML Body Template
                   <textarea rows="5" formControlName="bodyHtmlTemplate"></textarea>
                 </label>
+
+                <div class="full-width merge-field-toolbar">
+                  @for (field of emailTemplateMergeFields; track field) {
+                    <button type="button" class="link" (click)="insertEmailTemplateMergeField('bodyHtmlTemplate', field)">
+                      + {{ '{' + field + '}' }}
+                    </button>
+                  }
+                </div>
 
                 <label class="checkbox">
                   <input type="checkbox" formControlName="isActive" />
@@ -1633,12 +1939,22 @@
                 </div>
               </form>
 
+              <div class="card-subsection">
+                <h4>Template Preview</h4>
+                <p class="hint">Sample data is used to preview merge field output.</p>
+                <div class="preview-card">
+                  <strong>{{ emailTemplatePreviewSubject }}</strong>
+                  <div [innerHTML]="emailTemplatePreviewBodyHtml"></div>
+                </div>
+              </div>
+
               <div class="table-wrap">
                 <table>
                   <thead>
                     <tr>
                       <th>Key</th>
                       <th>Name</th>
+                      <th>Category</th>
                       <th>Subject</th>
                       <th>Active</th>
                       <th></th>
@@ -1649,16 +1965,18 @@
                       <tr>
                         <td>{{ template.key }}</td>
                         <td>{{ template.name }}</td>
+                        <td>{{ template.category || 'Custom' }}</td>
                         <td>{{ template.subjectTemplate }}</td>
                         <td>{{ template.isActive ? 'Yes' : 'No' }}</td>
                         <td>
+                          <button type="button" class="link" (click)="editEmailTemplate(template)">Edit</button>
                           <button type="button" class="link danger" (click)="deleteEmailTemplate(template.key)">Delete</button>
                         </td>
                       </tr>
                     }
                     @if (emailTemplates.length === 0) {
                       <tr>
-                        <td colspan="5" class="empty-row">No email templates configured yet.</td>
+                        <td colspan="6" class="empty-row">No email templates configured yet.</td>
                       </tr>
                     }
                   </tbody>

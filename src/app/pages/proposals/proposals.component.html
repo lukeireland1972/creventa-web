@@ -29,7 +29,13 @@
         <h2>{{ builderMode === 'edit' ? 'Edit Proposal' : 'Create New Proposal' }}</h2>
         <p>Section-based proposal builder with pricing, terms, PDF generation, and portal sending.</p>
       </div>
-      <button type="button" class="btn-close" (click)="closeBuilder()">Close</button>
+      <div class="builder-header-actions">
+        <div class="view-toggle">
+          <button type="button" class="btn-link" [class.active]="builderViewMode === 'edit'" (click)="setBuilderViewMode('edit')">Edit</button>
+          <button type="button" class="btn-link" [class.active]="builderViewMode === 'preview'" (click)="setBuilderViewMode('preview')">Preview</button>
+        </div>
+        <button type="button" class="btn-close" (click)="closeBuilder()">Close</button>
+      </div>
     </header>
 
     @if (builderError) {
@@ -74,10 +80,10 @@
 
         <label>
           <span>Terms Version</span>
-          <select formControlName="termsVersion">
+          <select formControlName="termsAndConditionsId" (change)="onTermsSelectionChanged()">
             <option value="">Select terms</option>
             @for (doc of termsDocuments; track doc.id) {
-              <option [value]="doc.version">{{ doc.title }} · {{ doc.version }}</option>
+              <option [value]="doc.id">{{ doc.name }} · v{{ doc.version }}</option>
             }
           </select>
         </label>
@@ -93,6 +99,14 @@
         </label>
 
         <label>
+          <span>Pricing Mode</span>
+          <select formControlName="pricingMode">
+            <option value="itemised">Itemised</option>
+            <option value="package">Package</option>
+          </select>
+        </label>
+
+        <label>
           <span>Send To Email</span>
           <input type="email" [ngModel]="sendEmailDraft" (ngModelChange)="sendEmailDraft = $event" [ngModelOptions]="{ standalone: true }" />
         </label>
@@ -100,9 +114,10 @@
 
       <section class="builder-sections-layout">
         <h3>Section Layout</h3>
-        <div class="section-layout-list">
+        <div class="section-layout-list" cdkDropList [cdkDropListData]="orderedBuilderSections" (cdkDropListDropped)="onSectionDrop($event)">
           @for (section of orderedBuilderSections; track section.key; let i = $index) {
-            <article>
+            <article cdkDrag>
+              <span class="drag-handle" cdkDragHandle aria-hidden="true">::</span>
               <label>
                 <input type="checkbox" [checked]="section.isEnabled" (change)="toggleSection(section.key)" />
                 <span>{{ section.title }}</span>
@@ -116,33 +131,111 @@
         </div>
       </section>
 
+      <section class="builder-version-history">
+        <h3>Version History</h3>
+        @if (builderVersionHistory.length === 0) {
+          <p class="muted">No previous versions for this enquiry yet.</p>
+        } @else {
+          <div class="version-history-list">
+            @for (version of builderVersionHistory; track version.id) {
+              <button type="button" class="version-history-item" (click)="selectProposal(version.id)">
+                <span class="version-meta">
+                  <strong>{{ version.version }}</strong>
+                  <app-proposal-status-badge [status]="version.status"></app-proposal-status-badge>
+                </span>
+                <span class="version-amount">{{ version.totalAmount | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</span>
+                <span class="version-delta" [attr.data-direction]="versionDeltaToken(version.deltaAmount)">
+                  {{ versionDeltaLabel(version.deltaAmount) }}
+                </span>
+              </button>
+            }
+          </div>
+        }
+      </section>
+
+      @if (builderViewMode === 'preview') {
+        <section class="proposal-preview-card">
+          <h3>Client Preview</h3>
+          <p><strong>{{ builderForm.controls.title.value || builderEnquiryDetail?.eventName || 'Proposal' }}</strong></p>
+          <p>{{ builderForm.controls.introduction.value || 'Thank you for considering our venue. Please review your proposal details below.' }}</p>
+          <div class="preview-grid">
+            <span>Prepared For</span>
+            <strong>{{ builderForm.controls.preparedFor.value || builderEnquiryDetail?.contactFirstName + ' ' + builderEnquiryDetail?.contactLastName }}</strong>
+            <span>Event Date</span>
+            <strong>{{ builderForm.controls.eventDate.value || 'TBC' }}</strong>
+            <span>Guests</span>
+            <strong>{{ builderForm.controls.guestCount.value || 0 }}</strong>
+            <span>Total</span>
+            <strong>{{ builderTotalInclVat | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}</strong>
+            <span>Validity</span>
+            <strong>{{ builderForm.controls.validUntilDate.value }}</strong>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Description</th>
+                <th>Qty</th>
+                <th>Unit</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (lineControl of lineItemControls; track lineControl; let i = $index) {
+                <tr>
+                  <td>{{ lineControl.get('category')?.value }}</td>
+                  <td>{{ lineControl.get('description')?.value }}</td>
+                  <td>{{ lineControl.get('quantity')?.value }}</td>
+                  <td>{{ lineControl.get('unit')?.value }}</td>
+                  <td>{{ lineTotal(i) | number: '1.2-2' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
+      }
+
       @if (sectionEnabled('coverPage')) {
         <section class="builder-card">
-          <h3>Cover Page</h3>
-          <div class="cover-grid">
-            <p><strong>Venue:</strong> {{ venueProfile?.name || 'Venue Name' }}</p>
-            <p><strong>Prepared For:</strong> {{ builderForm.controls.preparedFor.value || 'Client Name' }}</p>
-            <p><strong>Event Title:</strong> {{ builderForm.controls.title.value || builderEnquiryDetail?.eventName || 'Event Proposal' }}</p>
-            <p><strong>Event Date:</strong> {{ builderForm.controls.eventDate.value || 'TBC' }}</p>
-            <p><strong>Reference:</strong> {{ builderEnquiryDetail?.reference || 'ENQ' }}</p>
-            <p><strong>Valid Until:</strong> {{ builderForm.controls.validUntilDate.value }}</p>
-          </div>
-          @if (venueProfile?.logoUrl) {
-            <img class="venue-logo" [src]="venueProfile?.logoUrl || ''" alt="Venue logo" />
+          <header class="section-header collapsible">
+            <h3>Cover Page</h3>
+            <button type="button" class="btn-link" (click)="toggleSectionCollapse('coverPage')">
+              {{ isSectionCollapsed('coverPage') ? 'Expand' : 'Collapse' }}
+            </button>
+          </header>
+          @if (!isSectionCollapsed('coverPage')) {
+            <div class="cover-grid">
+              <p><strong>Venue:</strong> {{ venueProfile?.name || 'Venue Name' }}</p>
+              <p><strong>Prepared For:</strong> {{ builderForm.controls.preparedFor.value || 'Client Name' }}</p>
+              <p><strong>Event Title:</strong> {{ builderForm.controls.title.value || builderEnquiryDetail?.eventName || 'Event Proposal' }}</p>
+              <p><strong>Event Date:</strong> {{ builderForm.controls.eventDate.value || 'TBC' }}</p>
+              <p><strong>Reference:</strong> {{ builderEnquiryDetail?.reference || 'ENQ' }}</p>
+              <p><strong>Valid Until:</strong> {{ builderForm.controls.validUntilDate.value }}</p>
+            </div>
+            @if (venueProfile?.logoUrl) {
+              <img class="venue-logo" [src]="venueProfile?.logoUrl || ''" alt="Venue logo" />
+            }
           }
         </section>
       }
 
       @if (sectionEnabled('eventDetails')) {
         <section class="builder-card">
-          <h3>Event Details</h3>
-          <div class="event-grid">
-            <label><span>Date</span><input type="text" formControlName="eventDate" /></label>
-            <label><span>Time</span><input type="text" formControlName="eventTime" /></label>
-            <label><span>Guest Count</span><input type="number" formControlName="guestCount" /></label>
-            <label><span>Style</span><input type="text" formControlName="eventStyle" /></label>
-            <label class="full-width"><span>Assigned Space</span><input type="text" formControlName="assignedSpace" /></label>
-          </div>
+          <header class="section-header collapsible">
+            <h3>Event Details</h3>
+            <button type="button" class="btn-link" (click)="toggleSectionCollapse('eventDetails')">
+              {{ isSectionCollapsed('eventDetails') ? 'Expand' : 'Collapse' }}
+            </button>
+          </header>
+          @if (!isSectionCollapsed('eventDetails')) {
+            <div class="event-grid">
+              <label><span>Date</span><input type="text" formControlName="eventDate" /></label>
+              <label><span>Time</span><input type="text" formControlName="eventTime" /></label>
+              <label><span>Guest Count</span><input type="number" formControlName="guestCount" /></label>
+              <label><span>Style</span><input type="text" formControlName="eventStyle" /></label>
+              <label class="full-width"><span>Assigned Space</span><input type="text" formControlName="assignedSpace" /></label>
+            </div>
+          }
         </section>
       }
 
@@ -150,11 +243,18 @@
         <section class="builder-card">
           <header class="section-header">
             <h3>Menu / Package Selection</h3>
-            <button type="button" class="btn-secondary" (click)="addLineItemForSection('MenuPackage')">Add Line Item</button>
+            <div class="section-header-actions">
+              <button type="button" class="btn-secondary" (click)="addLineItemForSection('MenuPackage')">Add Line Item</button>
+              <button type="button" class="btn-link" (click)="toggleSectionCollapse('menuPackages')">
+                {{ isSectionCollapsed('menuPackages') ? 'Expand' : 'Collapse' }}
+              </button>
+            </div>
           </header>
-          <p class="section-subtotal">
-            Subtotal: {{ sectionSubtotal('MenuPackage') | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}
-          </p>
+          @if (!isSectionCollapsed('menuPackages')) {
+            <p class="section-subtotal">
+              Subtotal: {{ sectionSubtotal('MenuPackage') | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}
+            </p>
+          }
         </section>
       }
 
@@ -162,96 +262,105 @@
         <section class="builder-card">
           <header class="section-header">
             <h3>Additional Services</h3>
-            <button type="button" class="btn-secondary" (click)="addLineItemForSection('AdditionalServices')">Add Line Item</button>
+            <div class="section-header-actions">
+              <button type="button" class="btn-secondary" (click)="addLineItemForSection('AdditionalServices')">Add Line Item</button>
+              <button type="button" class="btn-link" (click)="toggleSectionCollapse('additionalServices')">
+                {{ isSectionCollapsed('additionalServices') ? 'Expand' : 'Collapse' }}
+              </button>
+            </div>
           </header>
-          <p class="section-subtotal">
-            Subtotal: {{ sectionSubtotal('AdditionalServices') | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}
-          </p>
+          @if (!isSectionCollapsed('additionalServices')) {
+            <p class="section-subtotal">
+              Subtotal: {{ sectionSubtotal('AdditionalServices') | number: '1.2-2' }} {{ builderForm.controls.currencyCode.value }}
+            </p>
+          }
         </section>
       }
 
-      <label class="full-width">
-        <span>Introduction / Welcome Message</span>
-        <textarea formControlName="introduction" rows="3" placeholder="Welcome message shown in proposal section"></textarea>
-      </label>
+      @if (builderViewMode === 'edit') {
+        <label class="full-width">
+          <span>Introduction / Welcome Message</span>
+          <textarea formControlName="introduction" rows="3" placeholder="Welcome message shown in proposal section"></textarea>
+        </label>
 
-      <section class="line-editor" formArrayName="lineItems">
-        <header>
-          <h3>Line Item Editor</h3>
-          <button type="button" class="btn-secondary" (click)="addLineItem()">Add Line Item</button>
-        </header>
+        <section class="line-editor" formArrayName="lineItems">
+          <header>
+            <h3>Line Item Editor</h3>
+            <button type="button" class="btn-secondary" (click)="addLineItem()">Add Line Item</button>
+          </header>
 
-        <table>
-          <thead>
-            <tr>
-              <th>Section</th>
-              <th>Category</th>
-              <th>Description</th>
-              <th>Qty</th>
-              <th>Unit</th>
-              <th>Unit Price (ex VAT)</th>
-              <th>VAT %</th>
-              <th>Discount %</th>
-              <th>Discount Amt</th>
-              <th>Line Total</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (lineControl of lineItemControls; track lineControl; let i = $index) {
-              <tr
-                [formGroupName]="i"
-                draggable="true"
-                (dragstart)="onLineDragStart(i, $event)"
-                (dragover)="onLineDragOver($event)"
-                (drop)="onLineDrop(i, $event)">
-                <td>
-                  <select formControlName="sectionType">
-                    @for (sectionOption of lineSectionOptions; track sectionOption.value) {
-                      <option [value]="sectionOption.value">{{ sectionOption.label }}</option>
-                    }
-                  </select>
-                </td>
-                <td>
-                  <select formControlName="category">
-                    <option value="Room Hire">Room Hire</option>
-                    <option value="Food & Beverage">Food &amp; Beverage</option>
-                    <option value="Equipment">Equipment</option>
-                    <option value="Entertainment">Entertainment</option>
-                    <option value="Staffing">Staffing</option>
-                    <option value="Accommodation">Accommodation</option>
-                    <option value="Miscellaneous">Miscellaneous</option>
-                  </select>
-                </td>
-                <td><input type="text" formControlName="description" placeholder="Description" /></td>
-                <td><input type="number" min="0.01" step="0.01" formControlName="quantity" /></td>
-                <td>
-                  <select formControlName="unit">
-                    <option value="Per person">Per person</option>
-                    <option value="Per item">Per item</option>
-                    <option value="Per hour">Per hour</option>
-                    <option value="Flat rate">Flat rate</option>
-                  </select>
-                </td>
-                <td><input type="number" min="0" step="0.01" formControlName="unitPriceExclVat" /></td>
-                <td>
-                  <select formControlName="vatRate">
-                    <option [value]="20">20</option>
-                    <option [value]="5">5</option>
-                    <option [value]="0">0</option>
-                  </select>
-                </td>
-                <td><input type="number" min="0" max="100" step="0.01" formControlName="discountPercent" /></td>
-                <td><input type="number" min="0" step="0.01" formControlName="discountAmount" /></td>
-                <td>{{ lineTotal(i) | number: '1.2-2' }}</td>
-                <td>
-                  <button type="button" class="btn-link" (click)="removeLineItem(i)">Remove</button>
-                </td>
+          <table>
+            <thead>
+              <tr>
+                <th>Section</th>
+                <th>Category</th>
+                <th>Description</th>
+                <th>Qty</th>
+                <th>Unit</th>
+                <th>Unit Price (ex VAT)</th>
+                <th>VAT %</th>
+                <th>Discount %</th>
+                <th>Discount Amt</th>
+                <th>Line Total</th>
+                <th></th>
               </tr>
-            }
-          </tbody>
-        </table>
-      </section>
+            </thead>
+            <tbody>
+              @for (lineControl of lineItemControls; track lineControl; let i = $index) {
+                <tr
+                  [formGroupName]="i"
+                  draggable="true"
+                  (dragstart)="onLineDragStart(i, $event)"
+                  (dragover)="onLineDragOver($event)"
+                  (drop)="onLineDrop(i, $event)">
+                  <td>
+                    <select formControlName="sectionType">
+                      @for (sectionOption of lineSectionOptions; track sectionOption.value) {
+                        <option [value]="sectionOption.value">{{ sectionOption.label }}</option>
+                      }
+                    </select>
+                  </td>
+                  <td>
+                    <select formControlName="category">
+                      <option value="Room Hire">Room Hire</option>
+                      <option value="Food & Beverage">Food &amp; Beverage</option>
+                      <option value="Equipment">Equipment</option>
+                      <option value="Entertainment">Entertainment</option>
+                      <option value="Staffing">Staffing</option>
+                      <option value="Accommodation">Accommodation</option>
+                      <option value="Miscellaneous">Miscellaneous</option>
+                    </select>
+                  </td>
+                  <td><input type="text" formControlName="description" placeholder="Description" /></td>
+                  <td><input type="number" min="0.01" step="0.01" formControlName="quantity" /></td>
+                  <td>
+                    <select formControlName="unit">
+                      <option value="Per person">Per person</option>
+                      <option value="Per item">Per item</option>
+                      <option value="Per hour">Per hour</option>
+                      <option value="Flat rate">Flat rate</option>
+                    </select>
+                  </td>
+                  <td><input type="number" min="0" step="0.01" formControlName="unitPriceExclVat" /></td>
+                  <td>
+                    <select formControlName="vatRate">
+                      <option [value]="20">20</option>
+                      <option [value]="5">5</option>
+                      <option [value]="0">0</option>
+                    </select>
+                  </td>
+                  <td><input type="number" min="0" max="100" step="0.01" formControlName="discountPercent" /></td>
+                  <td><input type="number" min="0" step="0.01" formControlName="discountAmount" /></td>
+                  <td>{{ lineTotal(i) | number: '1.2-2' }}</td>
+                  <td>
+                    <button type="button" class="btn-link" (click)="removeLineItem(i)">Remove</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </section>
+      }
 
       @if (sectionEnabled('pricingSummary')) {
         <section class="totals-grid">
@@ -383,9 +492,7 @@
         <section class="builder-card">
           <h3>Terms &amp; Conditions</h3>
           <p class="terms-meta">Using version: {{ builderForm.controls.termsVersion.value || 'No version selected' }}</p>
-          <div class="terms-content">
-            {{ selectedTermsContent() }}
-          </div>
+          <div class="terms-content" [innerHTML]="selectedTermsContent()"></div>
         </section>
       }
 
@@ -418,6 +525,44 @@
         </button>
       </footer>
     </form>
+  </section>
+}
+
+@if (previewSendOpen) {
+  <div class="builder-overlay"></div>
+  <section class="preview-send-modal" role="dialog" aria-modal="true" aria-label="Preview and Send Proposal">
+    <header>
+      <div>
+        <h2>Preview &amp; Send</h2>
+        <p>Review the generated PDF, then send the proposal with a portal link.</p>
+      </div>
+      <button type="button" class="btn-close" (click)="closePreviewAndSendModal()">Close</button>
+    </header>
+
+    @if (previewSendError) {
+      <p class="builder-message error">{{ previewSendError }}</p>
+    }
+
+    <div class="preview-send-controls">
+      <label>
+        <span>Send To</span>
+        <input type="email" [(ngModel)]="previewSendTargetEmail" [ngModelOptions]="{ standalone: true }" placeholder="client@email.com" />
+      </label>
+      <button type="button" class="btn-primary" (click)="confirmPreviewAndSend()" [disabled]="previewSendBusy || previewSendLoading">
+        {{ previewSendBusy ? 'Sending…' : 'Confirm & Send' }}
+      </button>
+    </div>
+
+    @if (previewSendLoading) {
+      <p class="loading">Generating PDF preview...</p>
+    } @else if (previewSendPdfUrl) {
+      <div class="pdf-preview-frame-wrap">
+        <iframe [src]="previewSendPdfUrl" title="Proposal PDF preview"></iframe>
+      </div>
+      @if (previewSendDocumentName) {
+        <p class="preview-send-filename">{{ previewSendDocumentName }}</p>
+      }
+    }
   </section>
 }
 
@@ -513,9 +658,7 @@
                 <div class="cell-sub">{{ proposal.eventStartUtc | date: 'dd/MM/yyyy HH:mm' }}</div>
               </td>
               <td>
-                <span class="status" [attr.data-status]="statusToken(proposal.status)">
-                  {{ proposal.status }}
-                </span>
+                <app-proposal-status-badge [status]="proposal.status"></app-proposal-status-badge>
               </td>
               <td>{{ proposal.totalAmount | number: '1.2-2' }} {{ proposal.currencyCode }}</td>
               <td>{{ proposal.sentAtUtc ? (proposal.sentAtUtc | date: 'dd/MM/yyyy HH:mm') : 'Not sent' }}</td>
@@ -524,6 +667,7 @@
                   <button type="button" class="btn-link" (click)="viewProposalFromList(proposal.id, $event)">View</button>
                   <button type="button" class="btn-link" (click)="editProposalFromList(proposal.id, $event)" [disabled]="!proposal.isLatestVersion || proposal.status !== 'Draft'">Edit</button>
                   <button type="button" class="btn-link" (click)="generatePdfFromList(proposal.id, $event)">Generate PDF</button>
+                  <button type="button" class="btn-link" (click)="openPreviewAndSendFromList(proposal.id, $event)" [disabled]="proposal.status === 'Accepted' || proposal.status === 'Declined'">Preview &amp; Send</button>
                   <button type="button" class="btn-link" (click)="duplicateProposalFromList(proposal.id, $event)">Duplicate</button>
                   <button type="button" class="btn-link" (click)="sendProposalFromList(proposal.id, $event)" [disabled]="proposal.status === 'Accepted' || proposal.status === 'Declined'">Send</button>
                   <button type="button" class="btn-link" (click)="sendProposalForSignatureFromList(proposal.id, $event)" [disabled]="proposal.status === 'Accepted' || proposal.status === 'Declined'">Send for Signature</button>
@@ -547,9 +691,7 @@
               <h2>{{ proposal.title || (proposal.enquiryReference + ' ' + proposal.version) }}</h2>
               <p>{{ proposal.clientName }} · {{ proposal.eventType }}</p>
             </div>
-            <span class="status" [attr.data-status]="statusToken(proposal.status)">
-              {{ proposal.status }}
-            </span>
+            <app-proposal-status-badge [status]="proposal.status"></app-proposal-status-badge>
           </header>
 
           <section class="summary-grid">
@@ -565,9 +707,12 @@
 
           <section class="actions">
             <button type="button" (click)="sendSelectedProposal()">Send to Client</button>
+            <button type="button" (click)="openPreviewAndSendForSelectedProposal()" [disabled]="proposal.status === 'Accepted' || proposal.status === 'Declined'">Preview &amp; Send</button>
             <button type="button" (click)="sendSelectedProposalForSignature()" [disabled]="signatureBusy">Send for Signature</button>
             <button type="button" (click)="duplicateSelectedProposal()">Duplicate</button>
             <button type="button" (click)="generatePdfForSelectedProposal()">Generate PDF</button>
+            <button type="button" (click)="downloadSelectedProposalPdf()">Download PDF</button>
+            <button type="button" (click)="downloadSelectedSignedPdf()" [disabled]="!proposal.acceptedAtUtc">Download Signed PDF</button>
             <button type="button" (click)="counterSignSelectedProposal()" [disabled]="!canCounterSignSelectedProposal || signatureBusy">Counter-Sign</button>
             <button type="button" (click)="openManualMarkSignedPicker()" [disabled]="signatureBusy">Mark as Signed (Upload)</button>
             @if (selectedProposalCanEdit) {

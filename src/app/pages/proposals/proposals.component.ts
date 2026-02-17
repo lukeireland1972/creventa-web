@@ -1,10 +1,12 @@
-import { Component, DestroyRef, ElementRef, OnInit, ViewChild, inject } from '@angular/core';
+import { Component, DestroyRef, ElementRef, OnDestroy, OnInit, ViewChild, inject } from '@angular/core';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute, Router } from '@angular/router';
+import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { distinctUntilChanged, map } from 'rxjs';
+import { distinctUntilChanged, map, switchMap } from 'rxjs';
 import {
   AiPricingRecommendationResponse,
   ApiService,
@@ -13,6 +15,7 @@ import {
   EnquirySustainabilityResponse,
   EnquiryListItemDto,
   ProposalComparisonResponse,
+  ProposalDocumentDto,
   ProposalDetailResponse,
   ProposalListItemDto,
   ProposalListResponse,
@@ -20,10 +23,11 @@ import {
   ProposalSignatureEnvelopeDto,
   ProposalTemplateSettingDto,
   ProposalTemplateOptionDto,
-  TermsDocumentSettingDto,
+  TermsAndConditionsDto,
   VenueProfileDto
 } from '../../services/api.service';
 import { AuthService } from '../../services/auth.service';
+import { ProposalStatusBadgeComponent } from '../../ui/proposal-status-badge/proposal-status-badge.component';
 
 const DEFAULT_BUILDER_SECTIONS: ProposalSectionDto[] = [
   { key: 'coverPage', title: 'Cover Page', isEnabled: true, sortOrder: 1 },
@@ -37,20 +41,32 @@ const DEFAULT_BUILDER_SECTIONS: ProposalSectionDto[] = [
 ];
 
 type LineSectionType = 'MenuPackage' | 'AdditionalServices';
+type BuilderPricingMode = 'itemised' | 'package';
+
+interface BuilderVersionHistoryItem {
+  id: string;
+  version: string;
+  status: string;
+  totalAmount: number;
+  createdAtUtc: string;
+  isLatestVersion: boolean;
+  deltaAmount: number;
+}
 
 @Component({
   selector: 'app-proposals',
-  imports: [DatePipe, DecimalPipe, ReactiveFormsModule, FormsModule],
+  imports: [DatePipe, DecimalPipe, ReactiveFormsModule, FormsModule, CdkDropList, CdkDrag, CdkDragHandle, ProposalStatusBadgeComponent],
   templateUrl: './proposals.component.html',
   styleUrl: './proposals.component.scss'
 })
-export class ProposalsComponent implements OnInit {
+export class ProposalsComponent implements OnInit, OnDestroy {
   private api = inject(ApiService);
   private auth = inject(AuthService);
   private router = inject(Router);
   private route = inject(ActivatedRoute);
   private destroyRef = inject(DestroyRef);
   private formBuilder = new FormBuilder();
+  private sanitizer = inject(DomSanitizer);
 
   loadingList = false;
   loadingDetail = false;
@@ -61,6 +77,15 @@ export class ProposalsComponent implements OnInit {
   signatureEnvelope: ProposalSignatureEnvelopeDto | null = null;
   signatureLoading = false;
   signatureBusy = false;
+  previewSendOpen = false;
+  previewSendLoading = false;
+  previewSendBusy = false;
+  previewSendError = '';
+  previewSendProposalId: string | null = null;
+  previewSendDocumentName = '';
+  previewSendTargetEmail = '';
+  previewSendPdfUrl: SafeResourceUrl | null = null;
+  private previewSendBlobUrl: string | null = null;
   comparison: ProposalComparisonResponse | null = null;
   compareWithProposalId = '';
   lastActionMessage = '';
@@ -68,6 +93,7 @@ export class ProposalsComponent implements OnInit {
 
   isBuilderOpen = false;
   builderMode: 'create' | 'edit' = 'create';
+  builderViewMode: 'edit' | 'preview' = 'edit';
   builderSaving = false;
   builderError = '';
   builderNotice = '';
@@ -84,6 +110,8 @@ export class ProposalsComponent implements OnInit {
     AdditionalServices: 0
   };
   builderSections: ProposalSectionDto[] = [...DEFAULT_BUILDER_SECTIONS];
+  builderSectionCollapsed: Record<string, boolean> = {};
+  builderVersionHistory: BuilderVersionHistoryItem[] = [];
   draggedLineIndex: number | null = null;
   savingTemplate = false;
   builderEnquiryDetail: EnquiryDetailResponse | null = null;
@@ -100,7 +128,7 @@ export class ProposalsComponent implements OnInit {
 
   enquiryOptions: EnquiryListItemDto[] = [];
   templateOptions: ProposalTemplateOptionDto[] = [];
-  termsDocuments: TermsDocumentSettingDto[] = [];
+  termsDocuments: TermsAndConditionsDto[] = [];
   private applyingTemplate = false;
 
   statusOptions = [
@@ -130,8 +158,10 @@ export class ProposalsComponent implements OnInit {
     validUntilDate: [this.defaultValidUntilDate(), Validators.required],
     introduction: [''],
     termsVersion: [''],
+    termsAndConditionsId: [''],
     currencyCode: ['GBP', [Validators.required, Validators.maxLength(8)]],
     serviceChargePercent: [0, [Validators.required, Validators.min(0), Validators.max(100)]],
+    pricingMode: ['itemised' as BuilderPricingMode, Validators.required],
     preparedFor: [''],
     eventDate: [''],
     eventTime: [''],
@@ -235,6 +265,10 @@ export class ProposalsComponent implements OnInit {
     });
   }
 
+  ngOnDestroy(): void {
+    this.closePreviewAndSendModal();
+  }
+
   setStatus(status: string): void {
     this.filtersForm.patchValue({ status }, { emitEvent: true });
   }
@@ -272,6 +306,98 @@ export class ProposalsComponent implements OnInit {
 
     const suggestedEmail = this.builderEnquiryDetail?.contactEmail;
     this.sendProposalByPrompt(this.selectedProposalId, suggestedEmail ?? undefined);
+  }
+
+  openPreviewAndSendForSelectedProposal(): void {
+    if (!this.selectedProposalId) {
+      return;
+    }
+
+    this.openPreviewAndSendModal(this.selectedProposalId);
+  }
+
+  openPreviewAndSendFromList(proposalId: string, event: Event): void {
+    event.stopPropagation();
+    this.openPreviewAndSendModal(proposalId);
+  }
+
+  closePreviewAndSendModal(): void {
+    this.previewSendOpen = false;
+    this.previewSendLoading = false;
+    this.previewSendBusy = false;
+    this.previewSendError = '';
+    this.previewSendProposalId = null;
+    this.previewSendDocumentName = '';
+    if (this.previewSendBlobUrl) {
+      URL.revokeObjectURL(this.previewSendBlobUrl);
+      this.previewSendBlobUrl = null;
+    }
+
+    this.previewSendPdfUrl = null;
+  }
+
+  confirmPreviewAndSend(): void {
+    if (!this.previewSendProposalId || this.previewSendBusy) {
+      return;
+    }
+
+    const email = this.trimOptional(this.previewSendTargetEmail);
+    if (!email) {
+      this.previewSendError = 'Client email is required to send the proposal.';
+      return;
+    }
+
+    this.previewSendBusy = true;
+    this.previewSendError = '';
+
+    this.api
+      .sendProposal(this.previewSendProposalId, {
+        clientEmail: email,
+        portalBaseUrl: `${window.location.origin}/portal`
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          this.previewSendBusy = false;
+          this.lastActionMessage = `Proposal sent. Portal link: ${result.portalLink}`;
+          const proposalId = this.previewSendProposalId!;
+          this.closePreviewAndSendModal();
+          this.loadProposalDetail(proposalId);
+          this.loadProposals(this.listResponse?.page.page ?? 1);
+        },
+        error: (error) => {
+          this.previewSendBusy = false;
+          this.previewSendError = error?.error ?? 'Unable to send proposal.';
+        }
+      });
+  }
+
+  downloadSelectedProposalPdf(): void {
+    if (!this.selectedProposal) {
+      return;
+    }
+
+    const latestPdf = this.getLatestUnsignedPdfDocument(this.selectedProposal);
+    if (!latestPdf) {
+      this.lastActionMessage = 'No generated PDF found. Generate PDF first.';
+      return;
+    }
+
+    this.downloadProposalDocument(latestPdf);
+  }
+
+  downloadSelectedSignedPdf(): void {
+    if (!this.selectedProposal) {
+      return;
+    }
+
+    const signedPdf = this.getLatestSignedPdfDocument(this.selectedProposal);
+    if (!signedPdf) {
+      this.lastActionMessage = 'No signed PDF is available for this proposal yet.';
+      return;
+    }
+
+    this.downloadProposalDocument(signedPdf);
   }
 
   sendSelectedProposalForSignature(): void {
@@ -529,6 +655,12 @@ export class ProposalsComponent implements OnInit {
             key,
             label: label.trim(),
             eventType,
+            defaultSections: this.orderedBuilderSections.map((section, index) => ({
+              key: section.key,
+              title: section.title,
+              isEnabled: section.isEnabled,
+              sortOrder: section.sortOrder > 0 ? section.sortOrder : index + 1
+            })),
             defaultLineItems: lineItems.map((line) => ({
               sectionType: line.sectionType,
               sortOrder: line.sortOrder ?? null,
@@ -572,6 +704,23 @@ export class ProposalsComponent implements OnInit {
     this.addLineItem({ sectionType }, sectionType);
   }
 
+  setBuilderViewMode(mode: 'edit' | 'preview'): void {
+    this.builderViewMode = mode;
+  }
+
+  onSectionDrop(event: CdkDragDrop<ProposalSectionDto[]>): void {
+    const ordered = this.orderedBuilderSections;
+    if (event.previousIndex === event.currentIndex) {
+      return;
+    }
+
+    moveItemInArray(ordered, event.previousIndex, event.currentIndex);
+    this.builderSections = ordered.map((section, index) => ({
+      ...section,
+      sortOrder: index + 1
+    }));
+  }
+
   moveSection(index: number, offset: number): void {
     const ordered = this.orderedBuilderSections;
     const target = index + offset;
@@ -592,6 +741,17 @@ export class ProposalsComponent implements OnInit {
         : section);
   }
 
+  toggleSectionCollapse(sectionKey: string): void {
+    this.builderSectionCollapsed = {
+      ...this.builderSectionCollapsed,
+      [sectionKey]: !this.builderSectionCollapsed[sectionKey]
+    };
+  }
+
+  isSectionCollapsed(sectionKey: string): boolean {
+    return this.builderSectionCollapsed[sectionKey] === true;
+  }
+
   sectionEnabled(sectionKey: string): boolean {
     return this.builderSections.some((section) => section.key === sectionKey && section.isEnabled);
   }
@@ -601,13 +761,72 @@ export class ProposalsComponent implements OnInit {
   }
 
   selectedTermsContent(): string {
+    const selectedId = this.builderForm.controls.termsAndConditionsId.value;
     const selectedVersion = this.builderForm.controls.termsVersion.value;
-    if (!selectedVersion) {
+    if (!selectedId && !selectedVersion) {
       return 'No terms content available for this version.';
     }
 
-    const match = this.termsDocuments.find((document) => document.version === selectedVersion);
-    return match?.content ?? 'No terms content available for this version.';
+    const match = this.termsDocuments.find((document) => document.id === selectedId)
+      ?? this.termsDocuments.find((document) => `v${document.version}` === selectedVersion);
+    return match?.contentHtml ?? 'No terms content available for this version.';
+  }
+
+  onTermsSelectionChanged(): void {
+    const selectedId = this.builderForm.controls.termsAndConditionsId.value;
+    if (!selectedId) {
+      this.builderForm.patchValue({ termsVersion: '' }, { emitEvent: false });
+      return;
+    }
+
+    const selected = this.termsDocuments.find((term) => term.id === selectedId);
+    this.builderForm.patchValue(
+      { termsVersion: selected ? `v${selected.version}` : '' },
+      { emitEvent: false });
+  }
+
+  private syncTermsSelectionForEventType(eventType?: string | null): void {
+    if (this.termsDocuments.length === 0) {
+      this.builderForm.patchValue({ termsAndConditionsId: '', termsVersion: '' }, { emitEvent: false });
+      return;
+    }
+
+    const selectedId = this.builderForm.controls.termsAndConditionsId.value;
+    if (selectedId) {
+      const existing = this.termsDocuments.find((term) => term.id === selectedId);
+      if (existing && this.matchesTermsEventType(existing, eventType)) {
+        this.builderForm.patchValue({ termsVersion: `v${existing.version}` }, { emitEvent: false });
+        return;
+      }
+    }
+
+    const preferred = this.termsDocuments.find((term) => term.isActive && this.matchesTermsEventType(term, eventType))
+      ?? this.termsDocuments.find((term) => term.isActive)
+      ?? this.termsDocuments[0];
+
+    this.builderForm.patchValue(
+      {
+        termsAndConditionsId: preferred?.id ?? '',
+        termsVersion: preferred ? `v${preferred.version}` : ''
+      },
+      { emitEvent: false });
+  }
+
+  private matchesTermsEventType(term: TermsAndConditionsDto, eventType?: string | null): boolean {
+    const enquiryEventType = (eventType ?? '').trim();
+    if (!enquiryEventType) {
+      return true;
+    }
+
+    const supported = term.eventTypes ?? [];
+    if (supported.length === 0) {
+      return true;
+    }
+
+    return supported.some((item) => {
+      const value = (item ?? '').trim().toLowerCase();
+      return value === enquiryEventType.toLowerCase() || value === 'all' || value === '*';
+    });
   }
 
   onLineDragStart(index: number, event: DragEvent): void {
@@ -647,6 +866,7 @@ export class ProposalsComponent implements OnInit {
 
   openBuilderForCreate(enquiryId?: string): void {
     this.builderMode = 'create';
+    this.builderViewMode = 'edit';
     this.isBuilderOpen = true;
     this.builderError = '';
     this.builderNotice = '';
@@ -659,6 +879,7 @@ export class ProposalsComponent implements OnInit {
       ?? this.selectedEnquiryIdFilter
       ?? this.enquiryOptions[0]?.id
       ?? '';
+    const defaultActiveTerms = this.termsDocuments.find((doc) => doc.isActive);
 
     this.applyingTemplate = true;
     this.builderForm.reset({
@@ -667,9 +888,11 @@ export class ProposalsComponent implements OnInit {
       title: '',
       validUntilDate: this.defaultValidUntilDate(),
       introduction: '',
-      termsVersion: this.termsDocuments.find((doc) => doc.isActive)?.version ?? '',
+      termsVersion: defaultActiveTerms ? `v${defaultActiveTerms.version}` : '',
+      termsAndConditionsId: defaultActiveTerms?.id ?? '',
       currencyCode: this.resolveDefaultCurrency(initialEnquiryId),
       serviceChargePercent: 0,
+      pricingMode: 'itemised',
       preparedFor: '',
       eventDate: '',
       eventTime: '',
@@ -684,6 +907,7 @@ export class ProposalsComponent implements OnInit {
     this.addLineItem({ sectionType: 'MenuPackage' });
     this.recalculateBuilderTotals();
     this.onBuilderEnquiryChanged(initialEnquiryId);
+    this.resetBuilderSectionCollapse();
   }
 
   openBuilderForEdit(): void {
@@ -697,6 +921,7 @@ export class ProposalsComponent implements OnInit {
       : 0;
 
     this.builderMode = 'edit';
+    this.builderViewMode = 'edit';
     this.isBuilderOpen = true;
     this.builderError = '';
     this.builderNotice = '';
@@ -714,8 +939,10 @@ export class ProposalsComponent implements OnInit {
       validUntilDate: proposal.validUntilDate ?? this.defaultValidUntilDate(),
       introduction: proposal.introduction ?? '',
       termsVersion: proposal.termsVersion,
+      termsAndConditionsId: proposal.termsAndConditionsId ?? '',
       currencyCode: proposal.currencyCode,
       serviceChargePercent,
+      pricingMode: 'itemised',
       preparedFor: proposal.clientName,
       eventDate: this.builderEnquiryDetail ? this.toDateOnlyLocal(this.builderEnquiryDetail.eventStartUtc) : '',
       eventTime: this.builderEnquiryDetail ? this.toTimeOnlyLocal(this.builderEnquiryDetail.eventStartUtc) : '',
@@ -745,6 +972,7 @@ export class ProposalsComponent implements OnInit {
     this.ensureBuilderHasAtLeastOneLine();
     this.onBuilderEnquiryChanged(proposal.enquiryId);
     this.recalculateBuilderTotals();
+    this.resetBuilderSectionCollapse();
   }
 
   closeBuilder(): void {
@@ -752,6 +980,7 @@ export class ProposalsComponent implements OnInit {
     this.builderError = '';
     this.builderNotice = '';
     this.draggedLineIndex = null;
+    this.builderVersionHistory = [];
   }
 
   addLineItem(seed?: Partial<CreateProposalLineItemRequest>, sectionType?: LineSectionType): void {
@@ -805,6 +1034,7 @@ export class ProposalsComponent implements OnInit {
       validUntilDate: this.trimOptional(value.validUntilDate),
       introduction: this.trimOptional(value.introduction),
       termsVersion: this.trimOptional(value.termsVersion),
+      termsAndConditionsId: this.trimOptional(value.termsAndConditionsId),
       currencyCode: (value.currencyCode ?? 'GBP').toUpperCase(),
       serviceChargePercent: Number(value.serviceChargePercent ?? 0),
       sections: this.orderedBuilderSections,
@@ -813,7 +1043,7 @@ export class ProposalsComponent implements OnInit {
 
     const request$ = this.builderMode === 'edit' && this.selectedProposal
       ? this.api.updateProposal(this.selectedProposal.id, payload)
-      : this.api.createProposal(enquiryId, payload);
+      : this.api.createProposalFromEnquiry({ enquiryId, ...payload });
 
     request$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -891,13 +1121,28 @@ export class ProposalsComponent implements OnInit {
     });
   }
 
-  statusToken(status: string | null | undefined): string {
-    const normalized = (status ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-');
+  versionDeltaToken(deltaAmount: number): string {
+    if (deltaAmount > 0) {
+      return 'up';
+    }
 
-    return normalized || 'unknown';
+    if (deltaAmount < 0) {
+      return 'down';
+    }
+
+    return 'flat';
+  }
+
+  versionDeltaLabel(deltaAmount: number): string {
+    if (deltaAmount > 0) {
+      return `+${deltaAmount.toFixed(2)}`;
+    }
+
+    if (deltaAmount < 0) {
+      return deltaAmount.toFixed(2);
+    }
+
+    return '0.00';
   }
 
   private sendProposalByPrompt(proposalId: string, suggestedEmail?: string): void {
@@ -962,6 +1207,79 @@ export class ProposalsComponent implements OnInit {
         error: (error) => {
           this.signatureBusy = false;
           this.lastActionMessage = error?.error?.message ?? error?.error ?? 'Unable to send signature request.';
+        }
+      });
+  }
+
+  private openPreviewAndSendModal(proposalId: string): void {
+    this.closePreviewAndSendModal();
+    this.previewSendOpen = true;
+    this.previewSendLoading = true;
+    this.previewSendProposalId = proposalId;
+    this.previewSendTargetEmail = this.builderEnquiryDetail?.contactEmail ?? this.sendEmailDraft ?? '';
+
+    this.api
+      .generateProposalPdf(proposalId)
+      .pipe(
+        switchMap((result) =>
+          this.api.downloadDocument(result.documentId).pipe(
+            map((blob) => ({ result, blob }))
+          )
+        ),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        next: ({ result, blob }) => {
+          this.previewSendLoading = false;
+          this.previewSendDocumentName = result.fileName;
+          this.previewSendBlobUrl = URL.createObjectURL(blob);
+          this.previewSendPdfUrl = this.sanitizer.bypassSecurityTrustResourceUrl(this.previewSendBlobUrl);
+          this.loadProposalDetail(proposalId);
+          this.loadProposals(this.listResponse?.page.page ?? 1);
+        },
+        error: (error) => {
+          this.previewSendLoading = false;
+          this.previewSendError = error?.error ?? 'Unable to generate preview PDF.';
+        }
+      });
+  }
+
+  private getLatestUnsignedPdfDocument(proposal: ProposalDetailResponse): ProposalDocumentDto | null {
+    const match = [...proposal.documents]
+      .filter((document) =>
+        document.mimeType === 'application/pdf'
+        && !document.fileName.toLowerCase().includes('signed'))
+      .sort((left, right) => new Date(right.createdAtUtc).getTime() - new Date(left.createdAtUtc).getTime())[0];
+    return match ?? null;
+  }
+
+  private getLatestSignedPdfDocument(proposal: ProposalDetailResponse): ProposalDocumentDto | null {
+    const match = [...proposal.documents]
+      .filter((document) =>
+        document.mimeType === 'application/pdf'
+        && document.fileName.toLowerCase().includes('signed'))
+      .sort((left, right) => new Date(right.createdAtUtc).getTime() - new Date(left.createdAtUtc).getTime())[0];
+    return match ?? null;
+  }
+
+  private downloadProposalDocument(document: ProposalDocumentDto): void {
+    this.api
+      .downloadDocument(document.id)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          const anchor = window.document.createElement('a');
+          anchor.href = url;
+          anchor.download = document.fileName;
+          window.document.body.appendChild(anchor);
+          anchor.click();
+          window.document.body.removeChild(anchor);
+          URL.revokeObjectURL(url);
+          this.lastActionMessage = `Downloaded ${document.fileName}.`;
+        },
+        error: (error) => {
+          this.lastActionMessage = error?.error ?? 'Unable to download proposal PDF.';
         }
       });
   }
@@ -1140,17 +1458,27 @@ export class ProposalsComponent implements OnInit {
       });
 
     this.api
-      .getTermsDocuments(venueId)
+      .getVenueTerms(venueId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (documents) => {
           this.termsDocuments = documents;
-          if (!this.builderForm.controls.termsVersion.value) {
+          if (!this.builderForm.controls.termsAndConditionsId.value) {
             const active = documents.find((document) => document.isActive);
             if (active) {
-              this.builderForm.patchValue({ termsVersion: active.version }, { emitEvent: false });
+              this.builderForm.patchValue(
+                {
+                  termsAndConditionsId: active.id,
+                  termsVersion: `v${active.version}`
+                },
+                { emitEvent: false });
             }
+          } else {
+            this.onTermsSelectionChanged();
           }
+        },
+        error: () => {
+          this.termsDocuments = [];
         }
       });
   }
@@ -1163,8 +1491,11 @@ export class ProposalsComponent implements OnInit {
       this.aiPricingRecommendation = null;
       this.aiPricingLoading = false;
       this.aiPricingMessage = 'Select an enquiry with a space assignment to unlock AI pricing suggestions.';
+      this.builderVersionHistory = [];
       return;
     }
+
+    this.loadBuilderVersionHistory(enquiryId);
 
     const selected = this.enquiryOptions.find((enquiry) => enquiry.id === enquiryId);
     if (selected && this.builderMode === 'create') {
@@ -1202,6 +1533,7 @@ export class ProposalsComponent implements OnInit {
             },
             { emitEvent: false }
           );
+          this.syncTermsSelectionForEventType(detail.eventType);
           this.loadBuilderSustainability(detail.id);
           this.loadAiPricingRecommendation(detail);
         },
@@ -1227,6 +1559,46 @@ export class ProposalsComponent implements OnInit {
         },
         error: () => {
           this.templateOptions = [];
+        }
+      });
+  }
+
+  private loadBuilderVersionHistory(enquiryId: string): void {
+    if (!enquiryId) {
+      this.builderVersionHistory = [];
+      return;
+    }
+
+    this.api
+      .getEnquiryProposals(enquiryId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (items) => {
+          const ordered = [...items].sort((left, right) => {
+            const versionDelta = this.parseVersionNumber(right.version) - this.parseVersionNumber(left.version);
+            if (versionDelta !== 0) {
+              return versionDelta;
+            }
+
+            return new Date(right.createdAtUtc).getTime() - new Date(left.createdAtUtc).getTime();
+          });
+
+          this.builderVersionHistory = ordered.map((item, index) => {
+            const previous = ordered[index + 1];
+            const deltaAmount = previous ? this.round2(item.totalAmount - previous.totalAmount) : 0;
+            return {
+              id: item.id,
+              version: item.version,
+              status: item.status,
+              totalAmount: item.totalAmount,
+              createdAtUtc: item.createdAtUtc,
+              isLatestVersion: item.isLatestVersion,
+              deltaAmount
+            };
+          });
+        },
+        error: () => {
+          this.builderVersionHistory = [];
         }
       });
   }
@@ -1280,18 +1652,36 @@ export class ProposalsComponent implements OnInit {
 
     const validUntil = new Date();
     validUntil.setDate(validUntil.getDate() + Math.max(template.defaultValidityDays || 14, 1));
+    const desiredTermsVersion = template.defaultTermsVersion ?? this.builderForm.controls.termsVersion.value ?? '';
+    const matchedTerms = this.termsDocuments.find((term) =>
+      `v${term.version}`.toLowerCase() === desiredTermsVersion.toLowerCase()
+      && this.matchesTermsEventType(term, this.builderEnquiryDetail?.eventType))
+      ?? this.termsDocuments.find((term) => `v${term.version}`.toLowerCase() === desiredTermsVersion.toLowerCase());
 
     this.applyingTemplate = true;
     this.builderForm.patchValue(
       {
         introduction: template.defaultIntroduction ?? this.builderForm.controls.introduction.value ?? '',
-        termsVersion: template.defaultTermsVersion ?? this.builderForm.controls.termsVersion.value ?? '',
+        termsVersion: matchedTerms ? `v${matchedTerms.version}` : desiredTermsVersion,
+        termsAndConditionsId: matchedTerms?.id ?? this.builderForm.controls.termsAndConditionsId.value ?? '',
         validUntilDate: this.toDateOnly(validUntil),
         title: this.builderForm.controls.title.value || `${template.label} Proposal`
       },
       { emitEvent: false }
     );
     this.applyingTemplate = false;
+
+    if (template.defaultSections && template.defaultSections.length > 0) {
+      this.builderSections = [...template.defaultSections]
+        .sort((left, right) => left.sortOrder - right.sortOrder)
+        .map((section, index) => ({
+          key: section.key || `section-${index + 1}`,
+          title: section.title || section.key || `Section ${index + 1}`,
+          isEnabled: section.isEnabled !== false,
+          sortOrder: section.sortOrder > 0 ? section.sortOrder : index + 1
+        }));
+      this.resetBuilderSectionCollapse();
+    }
 
     this.lineItemsArray.clear();
     for (const line of template.defaultLineItems) {
@@ -1322,19 +1712,26 @@ export class ProposalsComponent implements OnInit {
   }
 
   private toLineItemPayload(): CreateProposalLineItemRequest[] {
+    const pricingMode = (this.builderForm.controls.pricingMode.value ?? 'itemised') as BuilderPricingMode;
     return this.lineItemsArray.controls
       .map((control) => control.getRawValue())
       .map((line, index) => ({
-        sectionType: this.normalizeLineSectionType(line.sectionType),
+        sectionType: pricingMode === 'package'
+          ? 'MenuPackage'
+          : this.normalizeLineSectionType(line.sectionType),
         sortOrder: index,
-        category: this.requiredText(line.category, 'Miscellaneous'),
+        category: this.requiredText(line.category, pricingMode === 'package' ? 'Package' : 'Miscellaneous'),
         description: this.requiredText(line.description, 'Untitled item'),
         quantity: this.numberOrDefault(line.quantity, 1),
         unit: this.requiredText(line.unit, 'Flat rate'),
         unitPriceExclVat: this.numberOrDefault(line.unitPriceExclVat, 0),
         vatRate: this.numberOrDefault(line.vatRate, 20),
         discountPercent: this.numberOrDefault(line.discountPercent, 0),
-        discountAmount: this.numberOrDefault(line.discountAmount, 0)
+        discountAmount: this.numberOrDefault(line.discountAmount, 0),
+        discountType: this.numberOrDefault(line.discountPercent, 0) > 0 ? 'Percentage' : 'Fixed',
+        discountValue: this.numberOrDefault(line.discountPercent, 0) > 0
+          ? this.numberOrDefault(line.discountPercent, 0)
+          : this.numberOrDefault(line.discountAmount, 0)
       }))
       .filter((line) => line.quantity > 0 && line.description.trim().length > 0);
   }
@@ -1563,6 +1960,27 @@ export class ProposalsComponent implements OnInit {
     return Math.round((value + Number.EPSILON) * 100) / 100;
   }
 
+  private parseVersionNumber(value: string | null | undefined): number {
+    if (!value) {
+      return 0;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (!normalized.startsWith('v')) {
+      return 0;
+    }
+
+    const parsed = Number(normalized.slice(1));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private resetBuilderSectionCollapse(): void {
+    this.builderSectionCollapsed = this.builderSections.reduce<Record<string, boolean>>((acc, section) => {
+      acc[section.key] = false;
+      return acc;
+    }, {});
+  }
+
   private handleVenueChange(venueId: string | null): void {
     this.resetVenueScopedState();
     if (!venueId) {
@@ -1594,5 +2012,6 @@ export class ProposalsComponent implements OnInit {
     this.aiPricingRecommendation = null;
     this.aiPricingMessage = '';
     this.closeBuilder();
+    this.closePreviewAndSendModal();
   }
 }

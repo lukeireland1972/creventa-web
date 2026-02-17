@@ -1,0 +1,279 @@
+<section class="tickets-page">
+  <header class="page-header">
+    <div>
+      <h1>Ticket Dashboard</h1>
+      <p>Event-level ticket sales and payment visibility with guest drill-down.</p>
+    </div>
+  </header>
+
+  <section class="mode-tabs" role="tablist" aria-label="Ticket dashboard views">
+    <button type="button" [class.active]="isTicketsMode" (click)="selectMode('tickets')">Ticket Orders</button>
+    <button type="button" [class.active]="isDepositsMode" (click)="selectMode('deposits')">Deposits</button>
+  </section>
+
+  @if (isTicketsMode) {
+    <section class="filters-card">
+      <div class="preset-row" role="group" aria-label="Date presets">
+        <button type="button" [class.active]="selectedPreset === 'last-24h'" (click)="applyPreset('last-24h')">Last 24 Hours</button>
+        <button type="button" [class.active]="selectedPreset === 'last-7d'" (click)="applyPreset('last-7d')">Last 7 Days</button>
+        <button type="button" [class.active]="selectedPreset === 'last-30d'" (click)="applyPreset('last-30d')">Last Month</button>
+        <button type="button" [class.active]="selectedPreset === 'last-90d'" (click)="applyPreset('last-90d')">Last 3 Months</button>
+        <button type="button" [class.active]="selectedPreset === 'custom'" (click)="applyPreset('custom')">Custom Date Range</button>
+      </div>
+
+      <div class="filter-row">
+        <label>
+          Venue
+          <select [(ngModel)]="selectedVenueId" (ngModelChange)="onFilterChange()">
+            <option value="all">All Ticket Venues</option>
+            @for (venue of venueOptions; track venue.id) {
+              <option [value]="venue.id">{{ venue.name }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="toggle-field">
+          <input
+            type="checkbox"
+            [(ngModel)]="groupByEventName"
+            (ngModelChange)="onGroupByEventNameChange($event)" />
+          <span>Group by Event Name</span>
+        </label>
+
+        <label class="toggle-field">
+          <input
+            type="checkbox"
+            [(ngModel)]="groupByEventDate"
+            (ngModelChange)="onGroupByEventDateChange($event)" />
+          <span>Group by Event Date</span>
+        </label>
+
+        <label>
+          From
+          <input type="date" [(ngModel)]="fromDate" (ngModelChange)="onManualDateChange()" />
+        </label>
+
+        <label>
+          To
+          <input type="date" [(ngModel)]="toDate" (ngModelChange)="onManualDateChange()" />
+        </label>
+
+        <label class="search-field">
+          Search
+          <input
+            type="text"
+            [(ngModel)]="searchText"
+            (ngModelChange)="onFilterChange()"
+            placeholder="event, guest, email, status..." />
+        </label>
+
+        <button type="button" class="ghost-btn" (click)="clearSearch()" [disabled]="searchText.trim().length === 0">Clear Search</button>
+      </div>
+    </section>
+  } @else {
+    <section class="filters-card deposit-card">
+      <div class="preset-row deposit-preset-row" role="group" aria-label="Deposit status filters">
+        <button type="button" [class.active]="activeDepositFilter === 'all'" (click)="selectDepositFilter('all')">All Deposits</button>
+        <button type="button" [class.active]="activeDepositFilter === 'due-24h'" (click)="selectDepositFilter('due-24h')">Deposits Due (24 Hours)</button>
+        <button type="button" [class.active]="activeDepositFilter === 'overdue'" (click)="selectDepositFilter('overdue')">Deposits Overdue</button>
+      </div>
+
+      <div class="filter-row">
+        <label>
+          Venue
+          <select [(ngModel)]="selectedVenueId" (ngModelChange)="onFilterChange()">
+            <option value="all">All Ticket Venues</option>
+            @for (venue of venueOptions; track venue.id) {
+              <option [value]="venue.id">{{ venue.name }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="toggle-field">
+          <input
+            type="checkbox"
+            [(ngModel)]="groupByEventName"
+            (ngModelChange)="onGroupByEventNameChange($event)" />
+          <span>Group by Event Name</span>
+        </label>
+
+        <label class="toggle-field">
+          <input
+            type="checkbox"
+            [(ngModel)]="groupByEventDate"
+            (ngModelChange)="onGroupByEventDateChange($event)" />
+          <span>Group by Event Date</span>
+        </label>
+
+        <label class="search-field">
+          Search
+          <input
+            type="text"
+            [(ngModel)]="searchText"
+            (ngModelChange)="onFilterChange()"
+            placeholder="event, guest, email, status..." />
+        </label>
+
+        <button type="button" class="ghost-btn" (click)="clearSearch()" [disabled]="searchText.trim().length === 0">Clear Search</button>
+      </div>
+    </section>
+  }
+
+  @if (errorMessage) {
+    <article class="state-card error">
+      <h2>Unable to load ticket dashboard</h2>
+      <p>{{ errorMessage }}</p>
+    </article>
+  } @else if (isLoading) {
+    <article class="state-card">
+      <h2>Loading ticket dashboard</h2>
+      <p>Preparing grouped event and guest records.</p>
+    </article>
+  } @else if (eventRows.length === 0) {
+    <article class="state-card">
+      <h2>No matching ticket records</h2>
+      <p>Adjust the date range, venue, or search terms.</p>
+    </article>
+  } @else {
+    <section class="kpi-grid">
+      <article class="kpi-card">
+        <span>Events</span>
+        <strong>{{ summary.eventCount | number }}</strong>
+      </article>
+      <article class="kpi-card">
+        <span>Guests</span>
+        <strong>{{ summary.guestCount | number }}</strong>
+      </article>
+      <article class="kpi-card">
+        <span>Tickets</span>
+        <strong>{{ summary.ticketCount | number }}</strong>
+      </article>
+      <article class="kpi-card success">
+        <span>Paid to Date</span>
+        <strong>{{ formatCurrency(summary.paidToDate, summaryCurrency) }}</strong>
+      </article>
+      <article class="kpi-card warning">
+        <span>Amount Due</span>
+        <strong>{{ formatCurrency(summary.amountDue, summaryCurrency) }}</strong>
+      </article>
+    </section>
+
+    <article class="table-card">
+      <header class="table-header">
+        <div>
+          <h2>{{ isDepositsMode ? 'Deposits' : 'Ticket Orders' }}</h2>
+          <p>{{ isDepositsMode ? depositsGroupingDescription : ticketsGroupingDescription }}</p>
+        </div>
+        @if (generatedAtUtc) {
+          <small>Snapshot refreshed {{ generatedAtUtc | date: 'dd MMM yyyy HH:mm' }}</small>
+        }
+      </header>
+
+      <div class="table-wrap">
+        <div class="table-row table-head">
+          <div class="cell event-cell">Event / Guest</div>
+          <div class="cell">Purchase Date/Time</div>
+          <div class="cell">Total Tickets</div>
+          <div class="cell">Paid to Date</div>
+          <div class="cell">Amount Due</div>
+          <div class="cell">Status</div>
+          <div class="cell">Due</div>
+          <div class="cell actions-cell">Actions</div>
+        </div>
+
+        @for (event of eventRows; track event.key) {
+          <section class="event-block">
+            <button type="button" class="table-row event-row" (click)="toggleEvent(event.key)">
+              <div class="cell event-cell">
+                <span class="chevron">{{ isExpanded(event.key) ? '▾' : '▸' }}</span>
+                <div class="title-wrap">
+                  <strong>{{ event.name }} ({{ event.guestCount }})</strong>
+                  @if (isDepositsMode) {
+                    <small>
+                      {{ event.venueName }}
+                      ·
+                      @if (event.nextDueDateMs) {
+                        Next due {{ event.nextDueDateMs | date: 'dd MMM yyyy HH:mm' }}
+                      } @else {
+                        Due date not set
+                      }
+                    </small>
+                  } @else {
+                    <small>{{ event.venueName }} · Last purchase {{ event.latestPurchaseAtMs | date: 'dd MMM yyyy HH:mm' }}</small>
+                  }
+                </div>
+              </div>
+
+              <div class="cell muted">-</div>
+              <div class="cell total-cell">
+                <strong>{{ event.totalTickets | number: '1.0-2' }}</strong>
+                <small>{{ formatCurrency(event.totalAmount, event.currency) }}</small>
+              </div>
+              <div class="cell money paid">{{ formatCurrency(event.paidToDate, event.currency) }}</div>
+              <div class="cell money" [class.zero]="event.amountDue === 0" [class.due-highlight]="event.amountDue > 0">{{ formatCurrency(event.amountDue, event.currency) }}</div>
+              <div class="cell">
+                <div class="status-list">
+                  @for (status of event.statusLabels; track status) {
+                    <span class="status-chip">{{ status }}</span>
+                  }
+                </div>
+              </div>
+              <div class="cell muted">
+                @if (event.nextDueDateMs) {
+                  {{ event.nextDueDateMs | date: 'dd MMM yyyy HH:mm' }}
+                } @else {
+                  -
+                }
+              </div>
+              <div class="cell actions-cell">
+                <span class="link-chip">View Ticketed Event</span>
+              </div>
+            </button>
+
+            @if (isExpanded(event.key)) {
+              @for (guest of event.guests; track guest.key) {
+                <div class="table-row guest-row" [class.settled]="guest.amountDue === 0">
+                  <div class="cell event-cell guest-cell">
+                    <span class="info-chip">Info</span>
+                    <div class="title-wrap">
+                      <strong>{{ guest.name }}</strong>
+                      @if (guest.email) {
+                        <small>{{ guest.email }}</small>
+                      }
+                    </div>
+                  </div>
+
+                  <div class="cell muted">{{ guest.purchaseAtMs | date: 'dd MMM yyyy HH:mm' }}</div>
+                  <div class="cell total-cell">
+                    <strong>{{ formatTicketFigure(guest.totalTickets, guest.averageTicketPrice, guest.currency) }}</strong>
+                    <small>{{ formatCurrency(guest.totalAmount, guest.currency) }}</small>
+                  </div>
+                  <div class="cell money paid">{{ formatCurrency(guest.paidToDate, guest.currency) }}</div>
+                  <div class="cell money" [class.zero]="guest.amountDue === 0" [class.due-highlight]="guest.amountDue > 0">{{ formatCurrency(guest.amountDue, guest.currency) }}</div>
+                  <div class="cell">
+                    <div class="status-list">
+                      @for (status of guest.statusLabels; track status) {
+                        <span class="status-chip">{{ status }}</span>
+                      }
+                    </div>
+                  </div>
+                  <div class="cell muted">
+                    @if (guest.dueDateMs) {
+                      {{ guest.dueDateMs | date: 'dd MMM yyyy HH:mm' }}
+                    } @else {
+                      -
+                    }
+                  </div>
+                  <div class="cell actions-cell">
+                    <span class="dark-chip">Logs</span>
+                    <span class="manage-chip">Manage</span>
+                  </div>
+                </div>
+              }
+            }
+          </section>
+        }
+      </div>
+    </article>
+  }
+</section>

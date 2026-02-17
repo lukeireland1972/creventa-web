@@ -1,8 +1,12 @@
 <div class="portal-shell" [style.--brand-primary]="model?.branding?.primaryColor || '#0B5FFF'" [style.--brand-secondary]="model?.branding?.secondaryColor || '#0F172A'">
+  @if (showConfetti) {
+    <div class="confetti" aria-hidden="true"></div>
+  }
+
   @if (loading) {
     <section class="state-card">
       <h1>Loading proposal...</h1>
-      <p>Please wait while we fetch your proposal details.</p>
+      <p>Please wait while we fetch your portal information.</p>
     </section>
   } @else if (errorMessage) {
     <section class="state-card error">
@@ -16,186 +20,331 @@
           <img [src]="vm.branding.logoUrl || ''" alt="Venue logo" />
         }
         <div>
-          <h1>{{ vm.branding.venueName }}</h1>
-          <p>{{ vm.proposal.title || (vm.eventSummary.eventName || vm.eventSummary.eventType) }}</p>
+          <p class="breadcrumbs">Client Portal / {{ vm.branding.venueName }} / {{ activeTabLabel }}</p>
+          <h1>{{ vm.proposal.title || (vm.eventSummary.eventName || vm.eventSummary.eventType) }}</h1>
+          <p>{{ vm.eventSummary.reference }}</p>
         </div>
       </div>
       <div class="status-wrap">
         <span class="status-badge" [attr.data-status]="vm.proposal.status.toLowerCase()">{{ vm.proposal.status }}</span>
-        <small>Link expires: {{ resolvedTokenExpiry | date: 'dd/MM/yyyy HH:mm' }}</small>
+        <small>Secure link valid until: {{ resolvedTokenExpiry | date: 'dd/MM/yyyy HH:mm' }}</small>
       </div>
     </header>
+
+    <nav class="portal-tabs" aria-label="Portal sections">
+      @for (tab of tabs; track tab.key) {
+        <button
+          type="button"
+          class="tab-button"
+          [class.active]="activeTab === tab.key"
+          (click)="navigateTab(tab.key)">
+          {{ tab.label }}
+        </button>
+      }
+    </nav>
 
     @if (successMessage) {
       <p class="alert success">{{ successMessage }}</p>
     }
 
     @if (vm.proposal.hasUpdatedVersion) {
-      <p class="alert info">This proposal has a newer version available.</p>
+      <p class="alert info">A newer proposal version is available in this portal.</p>
     }
 
     <main class="portal-grid">
-      <section class="panel proposal-overview">
-        <h2>Proposal Overview</h2>
-        <div class="summary-grid">
-          <p><strong>Client</strong><span>{{ vm.proposal.clientName }}</span></p>
-          <p><strong>Event date</strong><span>{{ vm.proposal.eventDateUtc | date: 'dd/MM/yyyy' }}</span></p>
-          <p><strong>Event type</strong><span>{{ vm.eventSummary.eventType }}</span></p>
-          <p><strong>Guest count</strong><span>{{ vm.eventSummary.guestsExpected }}</span></p>
-          <p><strong>Reference</strong><span>{{ vm.eventSummary.reference }}</span></p>
-          <p><strong>Valid until</strong><span>{{ vm.proposal.validUntilDate || 'Not set' }}</span></p>
-        </div>
-
-        <div class="totals">
-          <strong>Total: {{ vm.proposal.totalAmount | number: '1.2-2' }} {{ vm.proposal.currencyCode }}</strong>
-        </div>
-
-        <div class="downloads">
-          <button type="button" (click)="openDownload(vm.proposal.pdfDownloadUrl)">Download Proposal PDF</button>
-          <button type="button" (click)="openDownload(vm.proposal.signedPdfDownloadUrl)" [disabled]="!vm.proposal.signedPdfDownloadUrl">Download Signed PDF</button>
-        </div>
-      </section>
-
-      <section class="panel line-items">
-        <h2>Pricing</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>Description</th>
-              <th>Qty</th>
-              <th>Unit Price</th>
-              <th>VAT</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (line of vm.proposal.lines; track line) {
-              <tr>
-                <td>{{ line.category }}</td>
-                <td>{{ line.description }}</td>
-                <td>{{ line.quantity }}</td>
-                <td>{{ line.unitPriceExclVat | number: '1.2-2' }}</td>
-                <td>{{ line.vatRate }}%</td>
-                <td>{{ line.totalInclVat | number: '1.2-2' }}</td>
-              </tr>
-            }
-          </tbody>
-        </table>
-
-        <div class="vat-breakdown">
-          @for (vat of vm.proposal.vatBreakdown; track vat.vatRate) {
-            <span>VAT {{ vat.vatRate }}%: {{ vat.vatAmount | number: '1.2-2' }} {{ vm.proposal.currencyCode }}</span>
-          }
-        </div>
-      </section>
-
-      <section class="panel terms">
-        <h2>Terms &amp; Conditions ({{ vm.proposal.termsVersion }})</h2>
-        <div class="terms-content">{{ vm.proposal.termsContent }}</div>
-      </section>
-
-      <section class="panel acceptance">
-        <h2>Accept Proposal</h2>
-        <label class="check">
-          <input type="checkbox" [(ngModel)]="acceptTerms" />
-          <span>I have read and accept the Terms &amp; Conditions</span>
-        </label>
-
-        <label>
-          <span>Full legal name</span>
-          <input type="text" [(ngModel)]="fullLegalName" />
-        </label>
-
-        <div class="signature-mode">
-          <button type="button" [class.active]="signatureMode === 'typed'" (click)="useSignatureMode('typed')">Type signature</button>
-          <button type="button" [class.active]="signatureMode === 'drawn'" (click)="useSignatureMode('drawn')">Draw signature</button>
-        </div>
-
-        @if (signatureMode === 'typed') {
-          <label>
-            <span>Typed signature</span>
-            <input type="text" [(ngModel)]="typedSignature" placeholder="Type your signature" />
-          </label>
-        } @else {
-          <div class="drawn-signature-wrap">
-            <canvas
-              #signatureCanvas
-              width="480"
-              height="160"
-              (pointerdown)="onCanvasPointerDown($event)"
-              (pointermove)="onCanvasPointerMove($event)"
-              (pointerup)="onCanvasPointerUp($event)"
-              (pointerleave)="onCanvasPointerUp($event)"></canvas>
-            <button type="button" class="link" (click)="clearDrawnSignature()">Clear signature</button>
+      @if (activeTab === 'proposal') {
+        <section class="panel proposal-overview">
+          <h2>Proposal Overview</h2>
+          <div class="summary-grid">
+            <p><strong>Client</strong><span>{{ vm.proposal.clientName }}</span></p>
+            <p><strong>Event date</strong><span>{{ vm.proposal.eventDateUtc | date: 'dd/MM/yyyy' }}</span></p>
+            <p><strong>Event type</strong><span>{{ vm.eventSummary.eventType }}</span></p>
+            <p><strong>Guest count</strong><span>{{ vm.eventSummary.guestsExpected }}</span></p>
+            <p><strong>Reference</strong><span>{{ vm.eventSummary.reference }}</span></p>
+            <p><strong>Valid until</strong><span>{{ vm.proposal.validUntilDate || 'Not set' }}</span></p>
           </div>
-        }
 
-        <button type="button" class="primary" (click)="onAccept()" [disabled]="!canSubmitAccept || submittingAccept || !canPerformPortalActions">
-          {{ submittingAccept ? 'Submitting...' : 'Accept Proposal' }}
-        </button>
-      </section>
+          <div class="totals">
+            <strong>Total: {{ vm.proposal.totalAmount | number: '1.2-2' }} {{ vm.proposal.currencyCode }}</strong>
+          </div>
 
-      <section class="panel responses">
-        <h2>Other Options</h2>
-        <label>
-          <span>Decline reason (optional)</span>
-          <textarea rows="3" [(ngModel)]="declineReason" placeholder="Tell us why this proposal isn't suitable"></textarea>
-        </label>
-        <button type="button" class="danger" (click)="onDecline()" [disabled]="submittingDecline || !canPerformPortalActions">
-          {{ submittingDecline ? 'Submitting...' : 'Decline Proposal' }}
-        </button>
+          <div class="downloads">
+            <button type="button" (click)="openDownload(vm.proposal.pdfDownloadUrl)">Download Proposal PDF</button>
+            <button type="button" (click)="openDownload(vm.proposal.signedPdfDownloadUrl)" [disabled]="!vm.proposal.signedPdfDownloadUrl">Download Signed PDF</button>
+          </div>
+        </section>
 
-        <label>
-          <span>Request changes</span>
-          <textarea rows="3" [(ngModel)]="requestChangesComment" placeholder="Explain what you would like to change"></textarea>
-        </label>
-        <button type="button" (click)="onRequestChanges()" [disabled]="submittingRequestChanges || !canPerformPortalActions">
-          {{ submittingRequestChanges ? 'Submitting...' : 'Request Changes' }}
-        </button>
-      </section>
-
-      <section class="panel payments">
-        <h2>Payment Schedule</h2>
-        @if (vm.payments.milestones.length === 0) {
-          <p>No payment milestones are available yet.</p>
-        } @else {
+        <section class="panel line-items">
+          <h2>Pricing</h2>
           <table>
             <thead>
               <tr>
-                <th>Milestone</th>
-                <th>Due date</th>
-                <th>Amount</th>
-                <th>Paid</th>
-                <th>Status</th>
-                <th></th>
+                <th>Category</th>
+                <th>Description</th>
+                <th>Qty</th>
+                <th>Unit Price</th>
+                <th>VAT</th>
+                <th>Total</th>
               </tr>
             </thead>
             <tbody>
-              @for (milestone of vm.payments.milestones; track milestone.id) {
+              @for (line of vm.proposal.lines; track line) {
                 <tr>
-                  <td>{{ milestone.label }}</td>
-                  <td>{{ milestone.dueDate | date: 'dd/MM/yyyy' }}</td>
-                  <td>{{ milestone.amount | number: '1.2-2' }} {{ milestone.currencyCode }}</td>
-                  <td>{{ milestone.amountPaid | number: '1.2-2' }} {{ milestone.currencyCode }}</td>
-                  <td>
-                    <span class="status-inline" [attr.data-status]="milestone.status.toLowerCase()">{{ milestone.status }}</span>
-                  </td>
-                  <td>
-                    @if (milestone.payNowUrl) {
-                      <a [href]="milestone.payNowUrl" target="_blank" rel="noopener">Pay now</a>
-                    }
-                  </td>
+                  <td>{{ line.category }}</td>
+                  <td>{{ line.description }}</td>
+                  <td>{{ line.quantity }}</td>
+                  <td>{{ line.unitPriceExclVat | number: '1.2-2' }}</td>
+                  <td>{{ line.vatRate }}%</td>
+                  <td>{{ line.totalInclVat | number: '1.2-2' }}</td>
                 </tr>
               }
             </tbody>
           </table>
-          <p class="payments-summary">
-            Total paid: {{ vm.payments.totalPaid | number: '1.2-2' }} {{ vm.proposal.currencyCode }} ·
-            Outstanding: {{ vm.payments.totalOutstanding | number: '1.2-2' }} {{ vm.proposal.currencyCode }}
-          </p>
-        }
-      </section>
+
+          <div class="vat-breakdown">
+            @for (vat of vm.proposal.vatBreakdown; track vat.vatRate) {
+              <span>VAT {{ vat.vatRate }}%: {{ vat.vatAmount | number: '1.2-2' }} {{ vm.proposal.currencyCode }}</span>
+            }
+          </div>
+        </section>
+
+        <section class="panel terms">
+          <h2>Terms &amp; Conditions ({{ vm.proposal.termsVersion }})</h2>
+          <div class="terms-content" (scroll)="onTermsScrolled($event)" [innerHTML]="vm.proposal.termsContent || ''"></div>
+          @if (!termsScrolledToBottom) {
+            <p class="hint">Scroll to the bottom of the terms before accepting.</p>
+          }
+        </section>
+
+        <section class="panel acceptance">
+          <h2>Accept Proposal</h2>
+          <label class="check">
+            <input type="checkbox" [(ngModel)]="acceptTerms" [disabled]="!termsScrolledToBottom" />
+            <span>I have read and agree to the Terms &amp; Conditions</span>
+          </label>
+
+          <label>
+            <span>Full legal name</span>
+            <input type="text" [(ngModel)]="fullLegalName" />
+          </label>
+
+          <div class="signature-mode">
+            <button type="button" [class.active]="signatureMode === 'typed'" (click)="useSignatureMode('typed')">Type signature</button>
+            <button type="button" [class.active]="signatureMode === 'drawn'" (click)="useSignatureMode('drawn')">Draw signature</button>
+          </div>
+
+          @if (signatureMode === 'typed') {
+            <label>
+              <span>Typed signature</span>
+              <input type="text" [(ngModel)]="typedSignature" placeholder="Type your signature" />
+            </label>
+          } @else {
+            <div class="drawn-signature-wrap">
+              <canvas
+                #signatureCanvas
+                width="480"
+                height="160"
+                (pointerdown)="onCanvasPointerDown($event)"
+                (pointermove)="onCanvasPointerMove($event)"
+                (pointerup)="onCanvasPointerUp($event)"
+                (pointerleave)="onCanvasPointerUp($event)"></canvas>
+              <button type="button" class="link" (click)="clearDrawnSignature()">Clear signature</button>
+            </div>
+          }
+
+          <button type="button" class="primary" (click)="onAccept()" [disabled]="!canSubmitAccept || submittingAccept || !canPerformPortalActions">
+            {{ submittingAccept ? 'Submitting...' : 'Confirm Acceptance' }}
+          </button>
+        </section>
+
+        <section class="panel responses">
+          <h2>Decline or Request Changes</h2>
+          <label>
+            <span>Decline reason (optional)</span>
+            <textarea rows="3" [(ngModel)]="declineReason" placeholder="Tell us why this proposal is not suitable"></textarea>
+          </label>
+          <button type="button" class="danger" (click)="onDecline()" [disabled]="submittingDecline || !canPerformPortalActions">
+            {{ submittingDecline ? 'Submitting...' : 'Decline Proposal' }}
+          </button>
+
+          <label>
+            <span>Request changes</span>
+            <textarea rows="3" [(ngModel)]="requestChangesComment" placeholder="Explain what you would like changed"></textarea>
+          </label>
+          <button type="button" (click)="onRequestChanges()" [disabled]="submittingRequestChanges || !canPerformPortalActions">
+            {{ submittingRequestChanges ? 'Submitting...' : 'Request Changes' }}
+          </button>
+        </section>
+      }
+
+      @if (activeTab === 'payments') {
+        <section class="panel single-panel">
+          <h2>Payment Schedule</h2>
+          @if (vm.payments.milestones.length === 0) {
+            <p>No payment milestones are available yet.</p>
+          } @else {
+            <table>
+              <thead>
+                <tr>
+                  <th>Milestone</th>
+                  <th>Due date</th>
+                  <th>Amount</th>
+                  <th>Paid</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (milestone of vm.payments.milestones; track milestone.id) {
+                  <tr>
+                    <td>{{ milestone.label }}</td>
+                    <td>{{ milestone.dueDate | date: 'dd/MM/yyyy' }}</td>
+                    <td>{{ milestone.amount | number: '1.2-2' }} {{ milestone.currencyCode }}</td>
+                    <td>{{ milestone.amountPaid | number: '1.2-2' }} {{ milestone.currencyCode }}</td>
+                    <td>
+                      <span class="status-inline" [attr.data-status]="milestone.status.toLowerCase()">{{ milestone.status }}</span>
+                    </td>
+                    <td>
+                      @if (milestone.payNowUrl) {
+                        <a [href]="milestone.payNowUrl" target="_blank" rel="noopener">Pay now</a>
+                      } @else if (milestone.balanceRemaining > 0) {
+                        <button type="button" class="link-button" (click)="onCreatePaymentLink(milestone.id)" [disabled]="creatingPaymentLinkId === milestone.id">
+                          {{ creatingPaymentLinkId === milestone.id ? 'Creating...' : 'Create payment link' }}
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+            <p class="payments-summary">
+              Total paid: {{ vm.payments.totalPaid | number: '1.2-2' }} {{ vm.proposal.currencyCode }} ·
+              Outstanding: {{ vm.payments.totalOutstanding | number: '1.2-2' }} {{ vm.proposal.currencyCode }}
+            </p>
+          }
+        </section>
+      }
+
+      @if (activeTab === 'documents') {
+        <section class="panel single-panel">
+          <h2>Documents</h2>
+          <div class="upload-row">
+            <label>
+              <span>Category</span>
+              <select [(ngModel)]="uploadCategory">
+                @for (category of documentCategories; track category) {
+                  <option [value]="category">{{ category }}</option>
+                }
+              </select>
+            </label>
+            <label class="file-picker">
+              <span>Upload file</span>
+              <input type="file" (change)="onDocumentChosen($event)" [disabled]="uploadingDocument" />
+            </label>
+          </div>
+
+          @if (documentErrorMessage) {
+            <p class="alert error-inline">{{ documentErrorMessage }}</p>
+          }
+
+          @if (portalDocuments.length === 0) {
+            <p>No documents uploaded yet.</p>
+          } @else {
+            <table>
+              <thead>
+                <tr>
+                  <th>File</th>
+                  <th>Type</th>
+                  <th>Size</th>
+                  <th>Date</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (document of portalDocuments; track document.id) {
+                  <tr>
+                    <td>{{ document.fileName }}</td>
+                    <td>{{ document.mimeType }}</td>
+                    <td>{{ document.fileSizeBytes / 1024 | number: '1.0-0' }} KB</td>
+                    <td>{{ document.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+                    <td><button type="button" class="link-button" (click)="openDocument(document.id)">Download</button></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </section>
+      }
+
+      @if (activeTab === 'messages') {
+        <section class="panel single-panel">
+          <h2>Messages</h2>
+          <div class="message-thread">
+            @if (portalMessages.length === 0) {
+              <p>No messages yet. Start the conversation below.</p>
+            } @else {
+              @for (message of portalMessages; track message.id) {
+                <article class="message-bubble" [class.client]="message.isFromClient">
+                  <header>
+                    <strong>{{ message.author }}</strong>
+                    <small>{{ message.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</small>
+                  </header>
+                  <p>{{ message.body }}</p>
+                </article>
+              }
+            }
+          </div>
+
+          <label>
+            <span>New message</span>
+            <textarea rows="4" [(ngModel)]="messageDraft" placeholder="Write your message"></textarea>
+          </label>
+          <button type="button" class="primary" (click)="onSendMessage()" [disabled]="sendingMessage || !messageDraft.trim()">
+            {{ sendingMessage ? 'Sending...' : 'Send Message' }}
+          </button>
+        </section>
+      }
+
+      @if (activeTab === 'event-summary') {
+        <section class="panel single-panel">
+          <h2>Event Summary</h2>
+          <div class="summary-grid">
+            <p><strong>Event</strong><span>{{ vm.eventSummary.eventName || vm.eventSummary.eventType }}</span></p>
+            <p><strong>Type</strong><span>{{ vm.eventSummary.eventType }}</span></p>
+            <p><strong>Start</strong><span>{{ vm.eventSummary.eventStartUtc | date: 'dd/MM/yyyy HH:mm' }}</span></p>
+            <p><strong>End</strong><span>{{ vm.eventSummary.eventEndUtc ? (vm.eventSummary.eventEndUtc | date: 'dd/MM/yyyy HH:mm') : 'TBC' }}</span></p>
+            <p><strong>Expected guests</strong><span>{{ vm.eventSummary.guestsExpected }}</span></p>
+            <p><strong>Confirmed guests</strong><span>{{ vm.eventSummary.guestsConfirmed ?? 'TBC' }}</span></p>
+            <p><strong>Event style</strong><span>{{ vm.eventSummary.eventStyle || 'Not specified' }}</span></p>
+            <p><strong>Setup style</strong><span>{{ vm.eventSummary.setupStyle || 'Not specified' }}</span></p>
+          </div>
+          <p class="special-requirements"><strong>Special requirements:</strong> {{ vm.eventSummary.specialRequirements || 'None provided.' }}</p>
+
+          @if (vm.eventSummary.subEvents.length > 0) {
+            <h3>Sub-events</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Time</th>
+                  <th>Guests</th>
+                  <th>Space</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (subEvent of vm.eventSummary.subEvents; track subEvent.name + subEvent.startUtc) {
+                  <tr>
+                    <td>{{ subEvent.name }}</td>
+                    <td>{{ subEvent.startUtc | date: 'dd/MM HH:mm' }} - {{ subEvent.endUtc | date: 'HH:mm' }}</td>
+                    <td>{{ subEvent.guestCount }}</td>
+                    <td>{{ subEvent.spaceNames || 'TBC' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </section>
+      }
     </main>
   }
 </div>

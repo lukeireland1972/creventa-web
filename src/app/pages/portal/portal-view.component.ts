@@ -1,14 +1,16 @@
 import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, DestroyRef, ElementRef, ViewChild, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ApiService, PortalViewResponse } from '../../services/api.service';
+import { ApiService, PortalDocumentDto, PortalMessageDto, PortalViewResponse } from '../../services/api.service';
+
+type PortalTab = 'proposal' | 'payments' | 'documents' | 'messages' | 'event-summary';
 
 @Component({
   selector: 'app-portal-view',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterModule],
   templateUrl: './portal-view.component.html',
   styleUrl: './portal-view.component.scss'
 })
@@ -25,37 +27,76 @@ export class PortalViewComponent implements AfterViewInit {
   submittingAccept = false;
   submittingDecline = false;
   submittingRequestChanges = false;
+  creatingPaymentLinkId: string | null = null;
+  uploadingDocument = false;
+  sendingMessage = false;
   errorMessage = '';
   successMessage = '';
+  documentErrorMessage = '';
+  showConfetti = false;
 
   rawToken = '';
   activeToken = '';
+  activeTab: PortalTab = 'proposal';
   model: PortalViewResponse | null = null;
 
   acceptTerms = false;
+  termsScrolledToBottom = false;
   fullLegalName = '';
   signatureMode: 'typed' | 'drawn' = 'typed';
   typedSignature = '';
 
   declineReason = '';
   requestChangesComment = '';
+  messageDraft = '';
+  uploadCategory = 'Other';
 
   private signatureContext: CanvasRenderingContext2D | null = null;
   private isDrawing = false;
   private hasDrawnSignature = false;
 
+  readonly tabs: ReadonlyArray<{ key: PortalTab; label: string }> = [
+    { key: 'proposal', label: 'Proposal' },
+    { key: 'payments', label: 'Payments' },
+    { key: 'documents', label: 'Documents' },
+    { key: 'messages', label: 'Messages' },
+    { key: 'event-summary', label: 'Event Summary' }
+  ];
+
+  readonly documentCategories = ['Contract', 'Floor Plan', 'Menu', 'BEO', 'Invoice', 'Other'];
+  readonly supportedDocumentMimeTypes = new Set([
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/jpeg',
+    'image/png',
+    'text/csv'
+  ]);
+
   constructor() {
     this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const token = params.get('token') ?? '';
+      const tab = this.normalizeTab(params.get('tab'));
+
       if (!token) {
         this.loading = false;
         this.errorMessage = 'Portal link is invalid.';
         return;
       }
 
+      const tokenChanged = token !== this.rawToken;
       this.rawToken = token;
       this.activeToken = token;
-      this.loadPortal();
+      this.activeTab = tab;
+
+      if (tokenChanged) {
+        this.termsScrolledToBottom = false;
+        this.acceptTerms = false;
+      }
+
+      if (tokenChanged || !this.model) {
+        this.loadPortal();
+      }
     });
   }
 
@@ -64,7 +105,7 @@ export class PortalViewComponent implements AfterViewInit {
   }
 
   get canSubmitAccept(): boolean {
-    if (!this.acceptTerms || !this.fullLegalName.trim()) {
+    if (!this.termsScrolledToBottom || !this.acceptTerms || !this.fullLegalName.trim()) {
       return false;
     }
 
@@ -84,6 +125,26 @@ export class PortalViewComponent implements AfterViewInit {
     return status === 'sent' || status === 'viewed';
   }
 
+  get activeTabLabel(): string {
+    return this.tabs.find((x) => x.key === this.activeTab)?.label ?? 'Proposal';
+  }
+
+  get portalMessages(): PortalMessageDto[] {
+    return this.model?.messages ?? [];
+  }
+
+  get portalDocuments(): PortalDocumentDto[] {
+    return this.model?.documents ?? [];
+  }
+
+  navigateTab(tab: PortalTab): void {
+    if (this.activeToken === '') {
+      return;
+    }
+
+    this.router.navigate(['/portal', this.activeToken, tab]);
+  }
+
   onAccept(): void {
     if (!this.model || !this.canSubmitAccept || this.submittingAccept) {
       return;
@@ -97,7 +158,7 @@ export class PortalViewComponent implements AfterViewInit {
       ? this.signatureCanvas?.nativeElement.toDataURL('image/png') ?? ''
       : this.typedSignature.trim();
 
-    this.api.acceptPortalProposal(this.activeToken, {
+    this.api.acceptPortalProposalByToken(this.activeToken, {
       acceptTerms: true,
       fullLegalName: this.fullLegalName.trim(),
       signatureType: this.signatureMode,
@@ -107,6 +168,10 @@ export class PortalViewComponent implements AfterViewInit {
       next: (response) => {
         this.submittingAccept = false;
         this.successMessage = 'Proposal accepted successfully.';
+        this.showConfetti = true;
+        window.setTimeout(() => {
+          this.showConfetti = false;
+        }, 4000);
         this.bindPortalResponse(response);
       },
       error: (error) => {
@@ -125,7 +190,7 @@ export class PortalViewComponent implements AfterViewInit {
     this.errorMessage = '';
     this.submittingDecline = true;
 
-    this.api.declinePortalProposal(this.activeToken, {
+    this.api.declinePortalProposalByToken(this.activeToken, {
       reason: this.declineReason.trim() || null
     }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
@@ -168,6 +233,95 @@ export class PortalViewComponent implements AfterViewInit {
         this.errorMessage = this.resolvePortalError(error, 'Unable to request changes.');
       }
     });
+  }
+
+  onCreatePaymentLink(milestoneId: string): void {
+    if (!milestoneId || this.creatingPaymentLinkId) {
+      return;
+    }
+
+    this.creatingPaymentLinkId = milestoneId;
+    this.errorMessage = '';
+    const returnUrl = window.location.href;
+    this.api.createPortalPaymentLink(this.activeToken, milestoneId, { returnUrl, cancelUrl: returnUrl })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (result) => {
+          this.creatingPaymentLinkId = null;
+          window.open(result.url, '_blank', 'noopener');
+          this.loadPortal();
+        },
+        error: (error) => {
+          this.creatingPaymentLinkId = null;
+          this.errorMessage = this.resolvePortalError(error, 'Unable to create payment link.');
+        }
+      });
+  }
+
+  onDocumentChosen(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+
+    if (!file) {
+      return;
+    }
+
+    this.documentErrorMessage = '';
+    if (file.size <= 0 || file.size > 25 * 1024 * 1024) {
+      this.documentErrorMessage = 'Document must be between 1 byte and 25MB.';
+      return;
+    }
+
+    if (!this.supportedDocumentMimeTypes.has(file.type)) {
+      this.documentErrorMessage = 'Unsupported file type. Allowed: PDF, DOCX, XLSX, JPG, PNG, CSV.';
+      return;
+    }
+
+    this.uploadingDocument = true;
+    this.api.uploadPortalDocument(this.activeToken, file, this.uploadCategory)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.uploadingDocument = false;
+          this.successMessage = 'Document uploaded successfully.';
+          this.loadPortal();
+        },
+        error: (error) => {
+          this.uploadingDocument = false;
+          this.documentErrorMessage = this.resolvePortalError(error, 'Unable to upload document.');
+        }
+      });
+  }
+
+  onSendMessage(): void {
+    const message = this.messageDraft.trim();
+    if (!message || this.sendingMessage) {
+      return;
+    }
+
+    this.sendingMessage = true;
+    this.errorMessage = '';
+    this.api.postPortalMessage(this.activeToken, { message })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.sendingMessage = false;
+          this.messageDraft = '';
+          this.successMessage = 'Message sent to the venue team.';
+          this.loadPortal();
+        },
+        error: (error) => {
+          this.sendingMessage = false;
+          this.errorMessage = this.resolvePortalError(error, 'Unable to send message.');
+        }
+      });
+  }
+
+  onTermsScrolled(event: Event): void {
+    const target = event.target as HTMLElement;
+    const threshold = 16;
+    this.termsScrolledToBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - threshold;
   }
 
   onCanvasPointerDown(event: PointerEvent): void {
@@ -240,6 +394,11 @@ export class PortalViewComponent implements AfterViewInit {
     window.open(resolved, '_blank', 'noopener');
   }
 
+  openDocument(documentId: string): void {
+    const url = `/api/portal/documents/${documentId}?token=${encodeURIComponent(this.activeToken)}`;
+    window.open(url, '_blank', 'noopener');
+  }
+
   private loadPortal(): void {
     if (!this.activeToken) {
       this.loading = false;
@@ -269,7 +428,7 @@ export class PortalViewComponent implements AfterViewInit {
     const refreshed = response.refreshedToken?.trim();
     if (refreshed && refreshed !== this.activeToken) {
       this.activeToken = refreshed;
-      this.router.navigate(['/portal/e', refreshed], { replaceUrl: true });
+      this.router.navigate(['/portal', refreshed, this.activeTab], { replaceUrl: true });
     }
 
     if (!this.fullLegalName.trim()) {
@@ -315,11 +474,21 @@ export class PortalViewComponent implements AfterViewInit {
       ? url
       : `${window.location.origin}${url}`;
 
-    if (!this.activeToken) {
+    if (!this.activeToken || normalized.includes('token=')) {
       return normalized;
     }
 
-    return normalized.replace(/\/api\/portal\/e\/[^/]+\//, `/api/portal/e/${encodeURIComponent(this.activeToken)}/`);
+    const separator = normalized.includes('?') ? '&' : '?';
+    return `${normalized}${separator}token=${encodeURIComponent(this.activeToken)}`;
+  }
+
+  private normalizeTab(rawTab: string | null): PortalTab {
+    const value = (rawTab ?? '').trim().toLowerCase();
+    if (value === 'proposal' || value === 'payments' || value === 'documents' || value === 'messages' || value === 'event-summary') {
+      return value;
+    }
+
+    return 'proposal';
   }
 
   private resolvePortalError(error: unknown, fallback: string): string {

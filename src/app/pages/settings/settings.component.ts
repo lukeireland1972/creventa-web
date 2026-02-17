@@ -3,6 +3,8 @@ import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
+import { QuillModule } from 'ngx-quill';
 import { forkJoin } from 'rxjs';
 import {
   AutomationActionDto,
@@ -13,10 +15,12 @@ import {
   AutomationTriggerDto,
   CalendarAccountSettingDto,
   ContactCustomFieldDefinitionDto,
+  FinancialReferenceSettingsDto,
   ApiService,
   BudgetByEventTypeDto,
   BudgetMonthDto,
   LostReasonSettingDto,
+  NotificationPreferenceMatrixRowDto,
   ReportScheduleDto,
   ReportDefinitionDto,
   ReportScheduleExecutionLogDto,
@@ -32,7 +36,7 @@ import {
   SpaceCombinationDto,
   SpacePricingDto,
   SpaceSummaryDto,
-  TermsDocumentSettingDto,
+  TermsAndConditionsDto,
   TaskTemplateDto,
   UpdateVenueProfileRequest,
   UserActivityItemDto,
@@ -56,6 +60,7 @@ type SettingsSectionKey =
   | 'sustainability'
   | 'lost-reasons'
   | 'report-configuration'
+  | 'notifications'
   | 'automation'
   | 'guest-profiles'
   | 'email-templates'
@@ -82,7 +87,7 @@ interface SectionState {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [ReactiveFormsModule, FormsModule, DatePipe, DecimalPipe],
+  imports: [ReactiveFormsModule, FormsModule, DatePipe, DecimalPipe, QuillModule, CdkDropList, CdkDrag, CdkDragHandle],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss'
 })
@@ -144,6 +149,11 @@ export class SettingsComponent implements OnInit {
       key: 'report-configuration',
       title: 'Report Configuration',
       description: 'Set pace/forecast conversion weights used by pipeline and pace reporting.'
+    },
+    {
+      key: 'notifications',
+      title: 'Notifications',
+      description: 'Configure trigger-based delivery channels for in-app, operator email, and client email notifications.'
     },
     {
       key: 'automation',
@@ -210,6 +220,7 @@ export class SettingsComponent implements OnInit {
   readonly enquiryStatuses = ['New', 'Tentative', 'OpenProposal', 'Provisional', 'Confirmed', 'Completed', 'Lost', 'Archived'];
   readonly automationTriggerOptions = [
     { value: 'EnquiryCreated', label: 'Enquiry created' },
+    { value: 'WebFormSubmission', label: 'Website form submission' },
     { value: 'StatusChanged', label: 'Status changed to' },
     { value: 'DaysSinceLastActivity', label: 'Days since last activity = N' },
     { value: 'PaymentMilestoneOverdue', label: 'Payment milestone overdue' },
@@ -234,6 +245,7 @@ export class SettingsComponent implements OnInit {
     { value: 'ChangeStatus', label: 'Change status' },
     { value: 'SendEmailTemplate', label: 'Send email template' },
     { value: 'CreateTask', label: 'Create task' },
+    { value: 'AssignUser', label: 'Assign user' },
     { value: 'AddInternalNote', label: 'Add internal note' },
     { value: 'SendNotification', label: 'Send notification' },
     { value: 'ArchiveEnquiry', label: 'Archive enquiry' }
@@ -254,6 +266,22 @@ export class SettingsComponent implements OnInit {
     'communication',
     'internal',
     'other'
+  ];
+  readonly emailTemplateCategories = ['Acknowledgement', 'Proposal', 'Payment', 'Follow-up', 'Custom'];
+  readonly emailTemplateMergeFields = [
+    'client_name',
+    'client_first_name',
+    'event_date',
+    'venue_name',
+    'proposal_link',
+    'payment_link',
+    'portal_link',
+    'enquiry_ref',
+    'operator_name',
+    'total_value',
+    'deposit_amount',
+    'hold_expiry_date',
+    'guest_count'
   ];
   readonly taskTemplateAssigneeRoleOptions = [
     'owner',
@@ -283,6 +311,15 @@ export class SettingsComponent implements OnInit {
     { value: 6, label: 'Saturday' },
     { value: 0, label: 'Sunday' }
   ];
+  readonly termsEditorModules = {
+    toolbar: [
+      [{ header: [2, 3, false] }],
+      ['bold', 'italic', 'underline'],
+      [{ list: 'ordered' }, { list: 'bullet' }],
+      ['link'],
+      ['clean']
+    ]
+  };
   readonly sustainabilityEnergyRatings = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
   activeSectionKey: SettingsSectionKey = 'venue-profile';
@@ -298,6 +335,7 @@ export class SettingsComponent implements OnInit {
     sustainability: { loading: false, saving: false, error: '', success: '' },
     'lost-reasons': { loading: false, saving: false, error: '', success: '' },
     'report-configuration': { loading: false, saving: false, error: '', success: '' },
+    notifications: { loading: false, saving: false, error: '', success: '' },
     automation: { loading: false, saving: false, error: '', success: '' },
     'guest-profiles': { loading: false, saving: false, error: '', success: '' },
     'email-templates': { loading: false, saving: false, error: '', success: '' },
@@ -326,7 +364,31 @@ export class SettingsComponent implements OnInit {
   inviteDebugToken = '';
 
   paymentScheduleTemplates: PaymentScheduleTemplateSettingDto[] = [];
-  termsDocuments: TermsDocumentSettingDto[] = [];
+  paymentTemplateMilestoneDrafts: PaymentScheduleTemplateSettingDto['milestones'] = [];
+  selectedPaymentTemplateCloneEventType = '';
+  financialReferenceSettings: FinancialReferenceSettingsDto = {
+    invoicePrefix: 'INV',
+    creditNotePrefix: 'CN',
+    receiptPrefix: 'RCT'
+  };
+  readonly paymentDueDateRuleOptions = [
+    'On confirmation',
+    '7 days after confirmation',
+    '14 days after confirmation',
+    '30 days before event',
+    '14 days before event',
+    '7 days before event',
+    'On event date',
+    '7 days after event'
+  ];
+  readonly paymentAmountTypeOptions = ['Percentage', 'Fixed'];
+  termsDocuments: TermsAndConditionsDto[] = [];
+  termsVersionHistory: TermsAndConditionsDto[] = [];
+  selectedTermsSeriesId: string | null = null;
+  selectedTermsViewId: string | null = null;
+  selectedTermsDiffLeftId: string | null = null;
+  selectedTermsDiffRightId: string | null = null;
+  termsDraftSourceId: string | null = null;
   proposalTemplates: ProposalTemplateSettingDto[] = [];
   proposalPdfSettings: ProposalPdfSettingsDto = { paperSize: 'A4' };
   planningMilestones: PlanningMilestoneSettingDto[] = [];
@@ -335,6 +397,7 @@ export class SettingsComponent implements OnInit {
   lostReasons: LostReasonSettingDto[] = [];
   automationRules: AutomationRuleDto[] = [];
   automationExecutionLog: AutomationExecutionLogDto[] = [];
+  notificationMatrixRows: NotificationPreferenceMatrixRowDto[] = [];
   editingAutomationRuleId: string | null = null;
   guestProfileCustomFields: ContactCustomFieldDefinitionDto[] = [];
   emailTemplates: VenueEmailTemplateDto[] = [];
@@ -412,18 +475,22 @@ export class SettingsComponent implements OnInit {
   });
 
   readonly paymentTemplateForm = this.formBuilder.group({
+    id: [''],
     name: ['', Validators.required],
     eventType: ['Wedding', Validators.required],
-    milestoneName: ['Booking Deposit', Validators.required],
-    dueDateRule: ['X days after confirmation', Validators.required],
-    amountType: ['Percentage', Validators.required],
-    amount: [25, [Validators.required, Validators.min(0.01)]],
-    acceptedMethodsCsv: ['Online (card), Bank transfer']
+    isDefault: [false]
+  });
+
+  readonly financialReferenceForm = this.formBuilder.group({
+    invoicePrefix: ['INV', [Validators.required, Validators.maxLength(20)]],
+    creditNotePrefix: ['CN', [Validators.required, Validators.maxLength(20)]],
+    receiptPrefix: ['RCT', [Validators.required, Validators.maxLength(20)]]
   });
 
   readonly termsForm = this.formBuilder.group({
+    draftId: [''],
     title: ['', Validators.required],
-    eventType: ['Wedding', Validators.required],
+    eventTypesCsv: ['Wedding', Validators.required],
     content: ['', [Validators.required, Validators.minLength(40)]]
   });
 
@@ -513,6 +580,7 @@ export class SettingsComponent implements OnInit {
     name: ['', Validators.required],
     subjectTemplate: ['', Validators.required],
     bodyHtmlTemplate: ['', Validators.required],
+    category: ['Custom', Validators.required],
     isActive: [true]
   });
 
@@ -684,6 +752,21 @@ export class SettingsComponent implements OnInit {
       this.reportSchedules = [];
       this.reportCatalog = [];
       this.scheduleExecutionLogs = [];
+      this.termsDocuments = [];
+      this.termsVersionHistory = [];
+      this.selectedTermsSeriesId = null;
+      this.selectedTermsViewId = null;
+      this.selectedTermsDiffLeftId = null;
+      this.selectedTermsDiffRightId = null;
+      this.termsDraftSourceId = null;
+      this.termsForm.patchValue(
+        {
+          draftId: '',
+          title: '',
+          eventTypesCsv: 'Wedding',
+          content: ''
+        },
+        { emitEvent: false });
       this.activeExecutionScheduleId = null;
       this.runningScheduleId = null;
       this.startNewAutomationRule();
@@ -1161,6 +1244,104 @@ export class SettingsComponent implements OnInit {
     return role?.role ?? 'Not assigned';
   }
 
+  startNewPaymentScheduleTemplate(): void {
+    this.paymentTemplateForm.reset({
+      id: '',
+      name: '',
+      eventType: 'Wedding',
+      isDefault: this.paymentScheduleTemplates.length === 0
+    });
+    this.paymentTemplateMilestoneDrafts = [this.createDefaultPaymentTemplateMilestone()];
+  }
+
+  editPaymentScheduleTemplate(template: PaymentScheduleTemplateSettingDto): void {
+    this.paymentTemplateForm.reset({
+      id: template.id,
+      name: template.name,
+      eventType: template.eventType,
+      isDefault: template.isDefault
+    });
+    this.paymentTemplateMilestoneDrafts = template.milestones.map((milestone) => ({
+      name: milestone.name,
+      dueDateRule: milestone.dueDateRule,
+      amountType: milestone.amountType,
+      amount: milestone.amount,
+      paymentMethodsAccepted: [...milestone.paymentMethodsAccepted],
+      autoReminderEnabled: milestone.autoReminderEnabled,
+      autoReminderDays: milestone.autoReminderDays,
+      lateReminderEnabled: milestone.lateReminderEnabled,
+      lateReminderDays: milestone.lateReminderDays
+    }));
+  }
+
+  clonePaymentTemplateFromEventType(): void {
+    const eventType = this.requiredText(this.selectedPaymentTemplateCloneEventType);
+    if (!eventType) {
+      this.setSectionError('payment-schedules', 'Select an event type to clone from.');
+      return;
+    }
+
+    const source = this.paymentScheduleTemplates.find((template) => template.eventType === eventType);
+    if (!source) {
+      this.setSectionError('payment-schedules', `No template found for ${eventType}.`);
+      return;
+    }
+
+    this.paymentTemplateForm.patchValue({
+      id: '',
+      name: `${source.name} Copy`,
+      eventType: source.eventType,
+      isDefault: false
+    });
+    this.paymentTemplateMilestoneDrafts = source.milestones.map((milestone) => ({
+      ...milestone,
+      paymentMethodsAccepted: [...milestone.paymentMethodsAccepted]
+    }));
+    this.setSectionSuccess('payment-schedules', `Cloned template from ${eventType}.`);
+  }
+
+  duplicatePaymentScheduleTemplate(template: PaymentScheduleTemplateSettingDto): void {
+    const duplicate: PaymentScheduleTemplateSettingDto = {
+      id: crypto.randomUUID(),
+      name: `${template.name} (Copy)`,
+      eventType: template.eventType,
+      isDefault: false,
+      milestones: template.milestones.map((milestone) => ({
+        ...milestone,
+        paymentMethodsAccepted: [...milestone.paymentMethodsAccepted]
+      }))
+    };
+
+    this.paymentScheduleTemplates = [duplicate, ...this.paymentScheduleTemplates].slice(0, 50);
+    this.persistPaymentScheduleTemplates('Payment schedule template duplicated.');
+  }
+
+  addPaymentTemplateMilestone(): void {
+    this.paymentTemplateMilestoneDrafts = [...this.paymentTemplateMilestoneDrafts, this.createDefaultPaymentTemplateMilestone()];
+  }
+
+  removePaymentTemplateMilestone(index: number): void {
+    this.paymentTemplateMilestoneDrafts = this.paymentTemplateMilestoneDrafts.filter((_, current) => current !== index);
+  }
+
+  dropPaymentTemplateMilestone(event: CdkDragDrop<PaymentScheduleTemplateSettingDto['milestones']>): void {
+    const reordered = [...this.paymentTemplateMilestoneDrafts];
+    moveItemInArray(reordered, event.previousIndex, event.currentIndex);
+    this.paymentTemplateMilestoneDrafts = reordered;
+  }
+
+  setPaymentTemplateMilestoneMethods(index: number, rawMethodsCsv: string): void {
+    const methods = rawMethodsCsv
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0);
+    this.paymentTemplateMilestoneDrafts[index].paymentMethodsAccepted = methods;
+  }
+
+  paymentTemplateMilestoneMethodsCsv(milestone: PaymentScheduleTemplateSettingDto['milestones'][number]): string {
+    return (milestone.paymentMethodsAccepted ?? []).join(', ');
+  }
+
   savePaymentScheduleTemplate(): void {
     if (this.paymentTemplateForm.invalid || !this.selectedVenueId) {
       this.paymentTemplateForm.markAllAsTouched();
@@ -1169,89 +1350,354 @@ export class SettingsComponent implements OnInit {
     }
 
     const value = this.paymentTemplateForm.getRawValue();
-    const methods = this.requiredText(value.acceptedMethodsCsv)
-      .split(',')
-      .map((item) => item.trim())
-      .filter((item) => item.length > 0);
+    const templateId = this.optionalText(value.id) ?? crypto.randomUUID();
+    const eventType = this.requiredText(value.eventType);
+    const milestones = this.paymentTemplateMilestoneDrafts
+      .map((milestone) => ({
+        name: this.requiredText(milestone.name),
+        dueDateRule: this.requiredText(milestone.dueDateRule) || 'On confirmation',
+        amountType: this.requiredText(milestone.amountType) || 'Percentage',
+        amount: Number(milestone.amount ?? 0),
+        paymentMethodsAccepted: (milestone.paymentMethodsAccepted ?? []).filter((method) => !!method.trim()),
+        autoReminderEnabled: Boolean(milestone.autoReminderEnabled),
+        autoReminderDays: Number.isFinite(milestone.autoReminderDays) ? Number(milestone.autoReminderDays) : 2,
+        lateReminderEnabled: Boolean(milestone.lateReminderEnabled),
+        lateReminderDays: Number.isFinite(milestone.lateReminderDays) ? Number(milestone.lateReminderDays) : 2
+      }))
+      .filter((milestone) => milestone.name.length > 0);
 
-    const template: PaymentScheduleTemplateSettingDto = {
-      id: crypto.randomUUID(),
+    if (milestones.length === 0) {
+      this.setSectionError('payment-schedules', 'Add at least one milestone.');
+      return;
+    }
+
+    if (milestones.some((milestone) => milestone.amount < 0)) {
+      this.setSectionError('payment-schedules', 'Milestone amounts must be zero or greater.');
+      return;
+    }
+
+    const candidate: PaymentScheduleTemplateSettingDto = {
+      id: templateId,
       name: this.requiredText(value.name),
-      eventType: this.requiredText(value.eventType),
-      isDefault: this.paymentScheduleTemplates.length === 0,
-      milestones: [
-        {
-          name: this.requiredText(value.milestoneName),
-          dueDateRule: this.requiredText(value.dueDateRule),
-          amountType: this.requiredText(value.amountType) || 'Percentage',
-          amount: Number(value.amount ?? 0),
-          paymentMethodsAccepted: methods.length > 0 ? methods : ['Online (card)', 'Bank transfer'],
-          autoReminderEnabled: true,
-          autoReminderDays: 2,
-          lateReminderEnabled: true,
-          lateReminderDays: 2
-        }
-      ]
+      eventType,
+      isDefault: Boolean(value.isDefault),
+      milestones: milestones.map((milestone) => ({
+        ...milestone,
+        paymentMethodsAccepted: milestone.paymentMethodsAccepted.length > 0
+          ? milestone.paymentMethodsAccepted
+          : ['Online (card)', 'Bank transfer']
+      }))
     };
 
-    this.paymentScheduleTemplates = [template, ...this.paymentScheduleTemplates].slice(0, 20);
-    this.persistPaymentScheduleTemplates('Payment schedule template saved.');
+    const existingIndex = this.paymentScheduleTemplates.findIndex((template) => template.id === candidate.id);
+    const templates = [...this.paymentScheduleTemplates];
+    if (existingIndex >= 0) {
+      templates[existingIndex] = candidate;
+    } else {
+      templates.unshift(candidate);
+    }
 
-    this.paymentTemplateForm.reset({
-      name: '',
-      eventType: 'Wedding',
-      milestoneName: 'Booking Deposit',
-      dueDateRule: 'X days after confirmation',
-      amountType: 'Percentage',
-      amount: 25,
-      acceptedMethodsCsv: 'Online (card), Bank transfer'
-    });
+    if (candidate.isDefault) {
+      for (const template of templates) {
+        if (template.id !== candidate.id && template.eventType === candidate.eventType) {
+          template.isDefault = false;
+        }
+      }
+    } else if (!templates.some((template) => template.eventType === candidate.eventType && template.isDefault)) {
+      candidate.isDefault = true;
+    }
+
+    this.paymentScheduleTemplates = templates.slice(0, 50);
+    this.persistPaymentScheduleTemplates('Payment schedule template saved.');
+    this.editPaymentScheduleTemplate(candidate);
   }
 
   deletePaymentScheduleTemplate(id: string): void {
-    this.paymentScheduleTemplates = this.paymentScheduleTemplates.filter((item) => item.id !== id);
+    const removed = this.paymentScheduleTemplates.find((item) => item.id === id) ?? null;
+    const remaining = this.paymentScheduleTemplates.filter((item) => item.id !== id);
+
+    if (removed?.isDefault) {
+      const replacement = remaining.find((item) => item.eventType === removed.eventType);
+      if (replacement) {
+        replacement.isDefault = true;
+      }
+    }
+
+    this.paymentScheduleTemplates = remaining;
     this.persistPaymentScheduleTemplates('Payment schedule template removed.');
+
+    if (this.paymentTemplateForm.get('id')?.value === id) {
+      this.startNewPaymentScheduleTemplate();
+    }
+  }
+
+  saveFinancialReferenceSettings(): void {
+    if (!this.selectedVenueId || this.financialReferenceForm.invalid) {
+      this.financialReferenceForm.markAllAsTouched();
+      this.setSectionError('payment-schedules', 'Enter valid prefixes before saving numbering settings.');
+      return;
+    }
+
+    const form = this.financialReferenceForm.getRawValue();
+    const payload: FinancialReferenceSettingsDto = {
+      invoicePrefix: this.sanitizeFinancialPrefix(form.invoicePrefix, 'INV'),
+      creditNotePrefix: this.sanitizeFinancialPrefix(form.creditNotePrefix, 'CN'),
+      receiptPrefix: this.sanitizeFinancialPrefix(form.receiptPrefix, 'RCT')
+    };
+
+    this.setSectionSaving('payment-schedules', true);
+    this.api
+      .upsertFinancialReferenceSettings(this.selectedVenueId, payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (settings) => {
+          this.financialReferenceSettings = settings;
+          this.financialReferenceForm.patchValue(settings);
+          this.setSectionSuccess('payment-schedules', 'Financial numbering settings saved.');
+          this.setSectionSaving('payment-schedules', false);
+        },
+        error: (error) => {
+          this.setSectionError('payment-schedules', this.resolveError(error, 'Unable to save financial numbering settings.'));
+          this.setSectionSaving('payment-schedules', false);
+        }
+      });
   }
 
   saveTermsDocument(): void {
     if (this.termsForm.invalid || !this.selectedVenueId) {
       this.termsForm.markAllAsTouched();
-      this.setSectionError('terms', 'Enter title, event type, and content before saving terms.');
+      this.setSectionError('terms', 'Enter title, event type(s), and content before saving terms.');
       return;
     }
 
     const value = this.termsForm.getRawValue();
-    const title = this.requiredText(value.title);
-    const versionsForTitle = this.termsDocuments.filter((doc) => doc.title.toLowerCase() === title.toLowerCase());
-    const highestVersion = versionsForTitle
-      .map((doc) => Number(doc.version.toLowerCase().replace('v', '')))
-      .filter((version) => Number.isFinite(version))
-      .reduce((max, version) => Math.max(max, version), 0);
-    const nextVersion = `v${highestVersion + 1}`;
-
-    const draft: TermsDocumentSettingDto = {
-      id: crypto.randomUUID(),
-      title,
-      eventType: this.requiredText(value.eventType),
-      version: nextVersion,
-      content: this.requiredText(value.content),
-      isActive: true,
-      updatedAtUtc: new Date().toISOString()
+    const draftId = this.optionalText(value.draftId);
+    const payload = {
+      name: this.requiredText(value.title),
+      contentHtml: this.requiredText(value.content),
+      eventTypes: this.parseTermsEventTypes(value.eventTypesCsv),
+      sourceTermsAndConditionsId: this.termsDraftSourceId
     };
 
-    this.termsDocuments = [draft, ...this.termsDocuments].slice(0, 40);
-    this.persistTermsDocuments(`Terms document saved as ${nextVersion}.`);
+    if (payload.eventTypes.length === 0) {
+      this.setSectionError('terms', 'Provide at least one event type.');
+      return;
+    }
 
-    this.termsForm.reset({
-      title: '',
-      eventType: 'Wedding',
-      content: ''
-    });
+    this.setSectionSaving('terms', true);
+    const request$ = draftId
+      ? this.api.updateVenueTermsDraft(this.selectedVenueId, draftId, {
+          name: payload.name,
+          contentHtml: payload.contentHtml,
+          eventTypes: payload.eventTypes,
+          isActive: true
+        })
+      : this.api.createVenueTermsDraft(this.selectedVenueId, payload);
+
+    request$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (draft) => {
+          this.setSectionSaving('terms', false);
+          this.setSectionSuccess('terms', draftId ? 'Terms draft updated.' : 'Terms draft created.');
+          this.termsDraftSourceId = draft.id;
+          this.termsForm.patchValue({ draftId: draft.id }, { emitEvent: false });
+          this.loadTermsVersionHistory(draft.id);
+          this.loadTermsSection(true);
+        },
+        error: (error) => {
+          this.setSectionSaving('terms', false);
+          this.setSectionError('terms', this.resolveError(error, 'Unable to save terms draft.'));
+        }
+      });
   }
 
-  deleteTermsDocument(id: string): void {
-    this.termsDocuments = this.termsDocuments.filter((item) => item.id !== id);
-    this.persistTermsDocuments('Terms document removed.');
+  publishTermsDraft(draftId?: string): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    const targetDraftId = draftId ?? this.optionalText(this.termsForm.getRawValue().draftId);
+    if (!targetDraftId) {
+      this.setSectionError('terms', 'Select or create a draft before publishing.');
+      return;
+    }
+
+    this.setSectionSaving('terms', true);
+    this.api
+      .publishVenueTerms(this.selectedVenueId, targetDraftId, { isActive: true })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (published) => {
+          this.setSectionSaving('terms', false);
+          this.setSectionSuccess('terms', `Published ${published.name} v${published.version}.`);
+          this.termsForm.patchValue({ draftId: '' }, { emitEvent: false });
+          this.termsDraftSourceId = published.id;
+          this.loadTermsSection(true);
+          this.loadTermsVersionHistory(published.id);
+        },
+        error: (error) => {
+          this.setSectionSaving('terms', false);
+          this.setSectionError('terms', this.resolveError(error, 'Unable to publish terms draft.'));
+        }
+      });
+  }
+
+  editTermsDraft(termsId: string): void {
+    const target = this.termsVersionHistory.find((item) => item.id === termsId && item.isDraft);
+    if (!target) {
+      this.setSectionError('terms', 'Only draft terms can be edited. Create a new draft from a published version.');
+      return;
+    }
+
+    this.termsDraftSourceId = target.id;
+    this.termsForm.patchValue(
+      {
+        draftId: target.id,
+        title: target.name,
+        eventTypesCsv: (target.eventTypes ?? []).join(', '),
+        content: target.contentHtml
+      },
+      { emitEvent: false });
+  }
+
+  createTermsDraftFromVersion(termsId: string): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    const source = this.termsVersionHistory.find((item) => item.id === termsId) ?? this.termsDocuments.find((item) => item.id === termsId);
+    if (!source) {
+      this.setSectionError('terms', 'Source terms version not found.');
+      return;
+    }
+
+    this.setSectionSaving('terms', true);
+    this.api
+      .createVenueTermsDraft(this.selectedVenueId, {
+        name: source.name,
+        contentHtml: source.contentHtml,
+        eventTypes: source.eventTypes ?? [],
+        sourceTermsAndConditionsId: source.id
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (draft) => {
+          this.setSectionSaving('terms', false);
+          this.setSectionSuccess('terms', 'New draft created from selected version.');
+          this.termsDraftSourceId = draft.id;
+          this.termsForm.patchValue(
+            {
+              draftId: draft.id,
+              title: draft.name,
+              eventTypesCsv: (draft.eventTypes ?? []).join(', '),
+              content: draft.contentHtml
+            },
+            { emitEvent: false });
+          this.loadTermsVersionHistory(draft.id);
+        },
+        error: (error) => {
+          this.setSectionSaving('terms', false);
+          this.setSectionError('terms', this.resolveError(error, 'Unable to create draft from selected version.'));
+        }
+      });
+  }
+
+  get selectedTermsPreviewHtml(): string {
+    const selected = this.termsVersionHistory.find((item) => item.id === this.selectedTermsViewId);
+    return selected?.contentHtml ?? '';
+  }
+
+  get termsDiffHtml(): string {
+    const left = this.termsVersionHistory.find((item) => item.id === this.selectedTermsDiffLeftId);
+    const right = this.termsVersionHistory.find((item) => item.id === this.selectedTermsDiffRightId);
+    if (!left || !right) {
+      return '';
+    }
+
+    return this.buildHtmlDiff(left.contentHtml ?? '', right.contentHtml ?? '');
+  }
+
+  private parseTermsEventTypes(value: string | null | undefined): string[] {
+    return (value ?? '')
+      .split(',')
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .filter((item, index, all) => all.findIndex((candidate) => candidate.toLowerCase() === item.toLowerCase()) === index)
+      .slice(0, 20);
+  }
+
+  private buildHtmlDiff(previousHtml: string, currentHtml: string): string {
+    const previous = this.stripHtml(previousHtml);
+    const current = this.stripHtml(currentHtml);
+    if (!previous && !current) {
+      return '';
+    }
+
+    const leftTokens = previous.split(/\s+/).filter((token) => token.length > 0);
+    const rightTokens = current.split(/\s+/).filter((token) => token.length > 0);
+    const lcs = this.buildLcsMatrix(leftTokens, rightTokens);
+    const chunks: string[] = [];
+    this.collectDiffChunks(leftTokens, rightTokens, lcs, leftTokens.length, rightTokens.length, chunks);
+    return chunks.join(' ').trim();
+  }
+
+  private buildLcsMatrix(left: string[], right: string[]): number[][] {
+    const matrix = Array.from({ length: left.length + 1 }, () => Array<number>(right.length + 1).fill(0));
+    for (let i = 1; i <= left.length; i += 1) {
+      for (let j = 1; j <= right.length; j += 1) {
+        if (left[i - 1].toLowerCase() === right[j - 1].toLowerCase()) {
+          matrix[i][j] = matrix[i - 1][j - 1] + 1;
+        } else {
+          matrix[i][j] = Math.max(matrix[i - 1][j], matrix[i][j - 1]);
+        }
+      }
+    }
+
+    return matrix;
+  }
+
+  private collectDiffChunks(
+    left: string[],
+    right: string[],
+    lcs: number[][],
+    i: number,
+    j: number,
+    chunks: string[]): void {
+    if (i > 0 && j > 0 && left[i - 1].toLowerCase() === right[j - 1].toLowerCase()) {
+      this.collectDiffChunks(left, right, lcs, i - 1, j - 1, chunks);
+      chunks.push(this.escapeHtml(right[j - 1]));
+      return;
+    }
+
+    if (j > 0 && (i === 0 || lcs[i][j - 1] >= lcs[i - 1][j])) {
+      this.collectDiffChunks(left, right, lcs, i, j - 1, chunks);
+      chunks.push(`<span class="diff-add">${this.escapeHtml(right[j - 1])}</span>`);
+      return;
+    }
+
+    if (i > 0 && (j === 0 || lcs[i][j - 1] < lcs[i - 1][j])) {
+      this.collectDiffChunks(left, right, lcs, i - 1, j, chunks);
+      chunks.push(`<span class="diff-remove">${this.escapeHtml(left[i - 1])}</span>`);
+    }
+  }
+
+  private stripHtml(value: string): string {
+    return value
+      .replace(/<\s*br\s*\/?>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  private escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   saveProposalTemplate(): void {
@@ -1683,6 +2129,35 @@ export class SettingsComponent implements OnInit {
       });
   }
 
+  saveNotificationMatrix(): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    this.setSectionSaving('notifications', true);
+    this.api
+      .upsertNotificationPreferenceMatrix(
+        this.notificationMatrixRows.map((row) => ({
+          triggerKey: row.triggerKey,
+          inAppEnabled: Boolean(row.inAppEnabled),
+          emailOperatorEnabled: Boolean(row.emailOperatorEnabled),
+          emailClientEnabled: Boolean(row.emailClientEnabled)
+        })),
+        this.selectedVenueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.notificationMatrixRows = [...response.rows].sort((left, right) => left.label.localeCompare(right.label));
+          this.setSectionSuccess('notifications', 'Notification matrix saved.');
+          this.setSectionSaving('notifications', false);
+        },
+        error: (error) => {
+          this.setSectionError('notifications', this.resolveError(error, 'Unable to save notification settings.'));
+          this.setSectionSaving('notifications', false);
+        }
+      });
+  }
+
   saveAutomationSettings(): void {
     if (this.automationSettingsForm.invalid || !this.selectedVenueId) {
       this.automationSettingsForm.markAllAsTouched();
@@ -1959,6 +2434,7 @@ export class SettingsComponent implements OnInit {
       name: this.requiredText(value.name),
       subjectTemplate: this.requiredText(value.subjectTemplate),
       bodyHtmlTemplate: this.requiredText(value.bodyHtmlTemplate),
+      category: this.optionalText(value.category) ?? 'Custom',
       isActive: Boolean(value.isActive)
     };
 
@@ -1977,6 +2453,7 @@ export class SettingsComponent implements OnInit {
             name: '',
             subjectTemplate: '',
             bodyHtmlTemplate: '',
+            category: 'Custom',
             isActive: true
           });
         },
@@ -1985,6 +2462,35 @@ export class SettingsComponent implements OnInit {
           this.setSectionSaving('email-templates', false);
         }
       });
+  }
+
+  editEmailTemplate(template: VenueEmailTemplateDto): void {
+    this.emailTemplateForm.reset({
+      key: template.key,
+      name: template.name,
+      subjectTemplate: template.subjectTemplate,
+      bodyHtmlTemplate: template.bodyHtmlTemplate,
+      category: template.category || 'Custom',
+      isActive: template.isActive
+    });
+  }
+
+  insertEmailTemplateMergeField(controlName: 'subjectTemplate' | 'bodyHtmlTemplate', mergeField: string): void {
+    const currentValue = this.emailTemplateForm.controls[controlName].value ?? '';
+    const token = `{${mergeField}}`;
+    const nextValue = currentValue.length > 0 ? `${currentValue} ${token}` : token;
+    this.emailTemplateForm.controls[controlName].setValue(nextValue);
+    this.emailTemplateForm.controls[controlName].markAsDirty();
+  }
+
+  get emailTemplatePreviewSubject(): string {
+    const value = this.emailTemplateForm.controls.subjectTemplate.value ?? '';
+    return this.applyEmailTemplateSampleMergeFields(value);
+  }
+
+  get emailTemplatePreviewBodyHtml(): string {
+    const value = this.emailTemplateForm.controls.bodyHtmlTemplate.value ?? '';
+    return this.applyEmailTemplateSampleMergeFields(value);
   }
 
   deleteEmailTemplate(key: string): void {
@@ -2008,6 +2514,33 @@ export class SettingsComponent implements OnInit {
           this.setSectionSaving('email-templates', false);
         }
       });
+  }
+
+  private applyEmailTemplateSampleMergeFields(value: string): string {
+    const samples: Record<string, string> = {
+      client_name: 'Alex Morgan',
+      client_first_name: 'Alex',
+      event_date: '24/09/2026',
+      venue_name: this.venueName || 'Grand Country Manor',
+      proposal_link: 'https://flow.creventa.dev/portal/proposal/sample',
+      payment_link: 'https://flow.creventa.dev/portal/payments/sample',
+      portal_link: 'https://flow.creventa.dev/portal/sample',
+      enquiry_ref: 'ENQ-2026-0101',
+      operator_name: this.auth.session?.fullName || 'Venue Team',
+      total_value: 'GBP 12,750.00',
+      deposit_amount: 'GBP 2,550.00',
+      hold_expiry_date: '30/09/2026',
+      guest_count: '120'
+    };
+
+    let output = value ?? '';
+    Object.entries(samples).forEach(([key, sample]) => {
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      output = output.replace(new RegExp(`{{\\s*${escapedKey}\\s*}}`, 'gi'), sample);
+      output = output.replace(new RegExp(`{\\s*${escapedKey}\\s*}`, 'gi'), sample);
+    });
+
+    return output;
   }
 
   saveWebsiteForm(): void {
@@ -2768,6 +3301,9 @@ export class SettingsComponent implements OnInit {
       case 'report-configuration':
         this.loadReportConfigurationSection();
         break;
+      case 'notifications':
+        this.loadNotificationsSection();
+        break;
       case 'automation':
         this.loadAutomationSection();
         break;
@@ -2957,16 +3493,34 @@ export class SettingsComponent implements OnInit {
     }
 
     this.setSectionLoading('payment-schedules', true);
-    this.api
-      .getPaymentScheduleTemplates(this.selectedVenueId)
+    forkJoin({
+      templates: this.api.getPaymentScheduleTemplates(this.selectedVenueId),
+      references: this.api.getFinancialReferenceSettings(this.selectedVenueId)
+    })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (templates) => {
+        next: ({ templates, references }) => {
           this.paymentScheduleTemplates = templates;
+          this.financialReferenceSettings = references;
+          this.financialReferenceForm.patchValue(references);
+          if (!this.paymentTemplateForm.get('id')?.value) {
+            if (templates.length > 0) {
+              this.editPaymentScheduleTemplate(templates[0]);
+            } else {
+              this.startNewPaymentScheduleTemplate();
+            }
+          }
           this.setSectionLoading('payment-schedules', false);
         },
         error: (error) => {
           this.paymentScheduleTemplates = [];
+          this.financialReferenceSettings = {
+            invoicePrefix: 'INV',
+            creditNotePrefix: 'CN',
+            receiptPrefix: 'RCT'
+          };
+          this.financialReferenceForm.patchValue(this.financialReferenceSettings);
+          this.startNewPaymentScheduleTemplate();
           this.setSectionError('payment-schedules', this.resolveError(error, 'Unable to load payment schedule templates.'));
           this.setSectionLoading('payment-schedules', false);
         }
@@ -2984,17 +3538,58 @@ export class SettingsComponent implements OnInit {
 
     this.setSectionLoading('terms', true);
     this.api
-      .getTermsDocuments(this.selectedVenueId)
+      .getVenueTerms(this.selectedVenueId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (documents) => {
           this.termsDocuments = documents;
+          if (!this.selectedTermsSeriesId && documents.length > 0) {
+            this.loadTermsVersionHistory(documents[0].id);
+          }
           this.setSectionLoading('terms', false);
         },
         error: (error) => {
           this.termsDocuments = [];
+          this.termsVersionHistory = [];
           this.setSectionError('terms', this.resolveError(error, 'Unable to load terms documents.'));
           this.setSectionLoading('terms', false);
+        }
+      });
+  }
+
+  loadTermsVersionHistory(termsId: string): void {
+    if (!this.selectedVenueId || !termsId) {
+      this.termsVersionHistory = [];
+      this.selectedTermsSeriesId = null;
+      return;
+    }
+
+    this.api
+      .getVenueTermsVersions(this.selectedVenueId, termsId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (versions) => {
+          this.termsVersionHistory = [...versions].sort((left, right) => {
+            const versionDelta = (right.version || 0) - (left.version || 0);
+            if (versionDelta !== 0) {
+              return versionDelta;
+            }
+
+            return new Date(right.createdAtUtc).getTime() - new Date(left.createdAtUtc).getTime();
+          });
+
+          this.selectedTermsSeriesId = this.termsVersionHistory[0]?.seriesId ?? null;
+          this.selectedTermsViewId = this.termsVersionHistory[0]?.id ?? null;
+          this.selectedTermsDiffLeftId = this.termsVersionHistory[0]?.id ?? null;
+          this.selectedTermsDiffRightId = this.termsVersionHistory.length > 1 ? this.termsVersionHistory[1].id : null;
+        },
+        error: (error) => {
+          this.termsVersionHistory = [];
+          this.selectedTermsSeriesId = null;
+          this.selectedTermsViewId = null;
+          this.selectedTermsDiffLeftId = null;
+          this.selectedTermsDiffRightId = null;
+          this.setSectionError('terms', this.resolveError(error, 'Unable to load terms version history.'));
         }
       });
   }
@@ -3201,6 +3796,32 @@ export class SettingsComponent implements OnInit {
       });
   }
 
+  private loadNotificationsSection(force = false): void {
+    if (!this.selectedVenueId) {
+      return;
+    }
+
+    if (!force && this.loadedSections.has('notifications')) {
+      return;
+    }
+
+    this.setSectionLoading('notifications', true);
+    this.api
+      .getNotificationPreferenceMatrix(this.selectedVenueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.notificationMatrixRows = [...response.rows].sort((left, right) => left.label.localeCompare(right.label));
+          this.setSectionLoading('notifications', false);
+        },
+        error: (error) => {
+          this.notificationMatrixRows = [];
+          this.setSectionError('notifications', this.resolveError(error, 'Unable to load notification settings.'));
+          this.setSectionLoading('notifications', false);
+        }
+      });
+  }
+
   private loadAutomationExecutionLog(): void {
     if (!this.selectedVenueId) {
       return;
@@ -3260,7 +3881,10 @@ export class SettingsComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (templates) => {
-          this.emailTemplates = templates;
+          this.emailTemplates = templates.map((template) => ({
+            ...template,
+            category: template.category || 'Custom'
+          }));
           this.setSectionLoading('email-templates', false);
         },
         error: (error) => {
@@ -3619,6 +4243,29 @@ export class SettingsComponent implements OnInit {
     }
   }
 
+  private createDefaultPaymentTemplateMilestone(): PaymentScheduleTemplateSettingDto['milestones'][number] {
+    return {
+      name: 'Deposit',
+      dueDateRule: 'On confirmation',
+      amountType: 'Percentage',
+      amount: 25,
+      paymentMethodsAccepted: ['Online (card)', 'Bank transfer'],
+      autoReminderEnabled: true,
+      autoReminderDays: 2,
+      lateReminderEnabled: true,
+      lateReminderDays: 2
+    };
+  }
+
+  private sanitizeFinancialPrefix(raw: string | null | undefined, fallback: string): string {
+    const cleaned = (raw ?? '')
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9-]/g, '');
+
+    return cleaned.length > 0 ? cleaned.slice(0, 20) : fallback;
+  }
+
   private persistPaymentScheduleTemplates(successMessage: string): void {
     if (!this.selectedVenueId) {
       return;
@@ -3631,34 +4278,21 @@ export class SettingsComponent implements OnInit {
       .subscribe({
         next: (templates) => {
           this.paymentScheduleTemplates = templates;
+          const selectedId = this.optionalText(this.paymentTemplateForm.get('id')?.value);
+          if (selectedId) {
+            const selectedTemplate = templates.find((template) => template.id === selectedId);
+            if (selectedTemplate) {
+              this.editPaymentScheduleTemplate(selectedTemplate);
+            }
+          } else if (templates.length === 0) {
+            this.startNewPaymentScheduleTemplate();
+          }
           this.setSectionSuccess('payment-schedules', successMessage);
           this.setSectionSaving('payment-schedules', false);
         },
         error: (error) => {
           this.setSectionError('payment-schedules', this.resolveError(error, 'Unable to save payment schedule templates.'));
           this.setSectionSaving('payment-schedules', false);
-        }
-      });
-  }
-
-  private persistTermsDocuments(successMessage: string): void {
-    if (!this.selectedVenueId) {
-      return;
-    }
-
-    this.setSectionSaving('terms', true);
-    this.api
-      .upsertTermsDocuments(this.selectedVenueId, this.termsDocuments)
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (documents) => {
-          this.termsDocuments = documents;
-          this.setSectionSuccess('terms', successMessage);
-          this.setSectionSaving('terms', false);
-        },
-        error: (error) => {
-          this.setSectionError('terms', this.resolveError(error, 'Unable to save terms documents.'));
-          this.setSectionSaving('terms', false);
         }
       });
   }

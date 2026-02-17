@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { distinctUntilChanged, map } from 'rxjs';
+import { QuillModule } from 'ngx-quill';
 import {
   ApiService,
   ChatChannelDto,
@@ -41,7 +42,7 @@ const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
 @Component({
   selector: 'app-connect',
   standalone: true,
-  imports: [FormsModule, DatePipe, TaskQuickCreateModalComponent],
+  imports: [FormsModule, DatePipe, QuillModule, TaskQuickCreateModalComponent],
   templateUrl: './connect.component.html',
   styleUrl: './connect.component.scss'
 })
@@ -65,8 +66,10 @@ export class ConnectComponent implements OnInit {
   composeChannel: 'email' | 'portal' = 'email';
   emailTo = '';
   emailCc = '';
+  emailBcc = '';
   emailSubject = '';
   emailBody = '';
+  showEmailCopyFields = false;
   portalSubject = '';
   portalBody = '';
   composeError = '';
@@ -92,6 +95,14 @@ export class ConnectComponent implements OnInit {
   isLoadingTimeline = false;
   isLoadingChat = false;
   showAddTaskModal = false;
+  readonly composeEditorModules = {
+    toolbar: [
+      ['bold', 'italic', 'underline'],
+      [{ list: 'ordered' }, { list: 'bullet' }],
+      ['link'],
+      ['clean']
+    ]
+  };
 
   get canCompose(): boolean {
     return this.selectedEnquiryId.length > 0;
@@ -103,6 +114,10 @@ export class ConnectComponent implements OnInit {
 
   get availableTemplates(): ConnectEmailTemplateDto[] {
     return this.emailTemplates.filter((template) => template.isActive);
+  }
+
+  get mergeFieldPreviewList(): string[] {
+    return Object.entries(this.buildMergeFields()).map(([key, value]) => `${key} = ${value || '—'}`);
   }
 
   get attachmentTotalBytes(): number {
@@ -120,7 +135,7 @@ export class ConnectComponent implements OnInit {
       !this.isSendingCompose &&
       !!this.emailTo.trim() &&
       !!this.emailSubject.trim() &&
-      !!this.emailBody.trim()
+      this.hasEmailBodyContent(this.emailBody)
     );
   }
 
@@ -165,6 +180,10 @@ export class ConnectComponent implements OnInit {
     this.composeError = '';
     this.composeSuccess = '';
     this.showTemplatePicker = false;
+  }
+
+  toggleEmailCopyFields(): void {
+    this.showEmailCopyFields = !this.showEmailCopyFields;
   }
 
   loadTimeline(): void {
@@ -253,6 +272,7 @@ export class ConnectComponent implements OnInit {
         venueId: this.venueId,
         to: this.emailTo.trim(),
         cc: this.emailCc.trim() || undefined,
+        bcc: this.emailBcc.trim() || undefined,
         subject: this.emailSubject.trim(),
         body: this.emailBody.trim(),
         attachments: inlineAttachments
@@ -263,6 +283,7 @@ export class ConnectComponent implements OnInit {
           this.isSendingCompose = false;
           this.emailTo = '';
           this.emailCc = '';
+          this.emailBcc = '';
           this.emailSubject = '';
           this.emailBody = '';
           this.attachments = [];
@@ -319,7 +340,7 @@ export class ConnectComponent implements OnInit {
 
   applyTemplate(template: ConnectEmailTemplateDto): void {
     this.emailSubject = this.applyMergeFields(template.subjectTemplate);
-    this.emailBody = this.applyMergeFields(this.htmlToText(template.bodyHtmlTemplate));
+    this.emailBody = this.applyMergeFields(template.bodyHtmlTemplate);
     this.showTemplatePicker = false;
     this.composeChannel = 'email';
     this.composeSuccess = '';
@@ -544,7 +565,10 @@ export class ConnectComponent implements OnInit {
       .subscribe({
         next: (templates) => {
           this.templatesLoading = false;
-          this.emailTemplates = templates;
+          this.emailTemplates = templates.map((template) => ({
+            ...template,
+            category: template.category || 'Custom'
+          }));
         },
         error: () => {
           this.templatesLoading = false;
@@ -651,22 +675,58 @@ export class ConnectComponent implements OnInit {
     const eventName = enquiry?.eventName || enquiry?.eventType || 'your event';
     const eventDate = enquiry?.eventStartUtc ? this.formatDate(enquiry.eventStartUtc) : '';
     const contactName = enquiry ? `${enquiry.contactFirstName} ${enquiry.contactLastName}`.trim() : '';
+    const contactFirstName = enquiry?.contactFirstName || '';
     const managerName = enquiry?.eventManagerName || this.auth.session?.fullName || '';
     const enquiryRef = enquiry?.reference || '';
     const origin = typeof window === 'undefined' ? '' : window.location.origin;
     const proposalLink = enquiry ? `${origin}/enquiries?enquiry=${enquiry.id}&tab=proposals` : '';
+    const paymentLink = enquiry ? `${origin}/payments?enquiry=${enquiry.id}` : '';
     const portalLink = origin ? `${origin}/portal` : '';
+    const totalValueAmount = enquiry?.budgetMaxAmount ?? enquiry?.budgetMinAmount ?? 0;
+    const depositAmount = totalValueAmount * 0.2;
+    const holdExpiryDate = enquiry?.holdExpiresAtUtc ? this.formatDate(enquiry.holdExpiresAtUtc) : '';
+    const guestCount = enquiry?.guestsExpected ? String(enquiry.guestsExpected) : '';
 
     return {
       contact_name: contactName,
+      client_name: contactName,
+      client_first_name: contactFirstName,
       event_name: eventName,
       event_date: eventDate,
       venue_name: venueName,
       manager_name: managerName,
+      operator_name: managerName,
       enquiry_ref: enquiryRef,
       proposal_link: proposalLink,
-      portal_link: portalLink
+      payment_link: paymentLink,
+      portal_link: portalLink,
+      total_value: this.formatCurrency(totalValueAmount),
+      deposit_amount: this.formatCurrency(depositAmount),
+      hold_expiry_date: holdExpiryDate,
+      guest_count: guestCount
     };
+  }
+
+  private formatCurrency(amount: number): string {
+    return new Intl.NumberFormat('en-GB', {
+      style: 'currency',
+      currency: 'GBP',
+      maximumFractionDigits: 2
+    }).format(Number.isFinite(amount) ? amount : 0);
+  }
+
+  private hasEmailBodyContent(value: string): boolean {
+    if (!value) {
+      return false;
+    }
+
+    const plain = value
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return plain.length > 0;
   }
 
   private resolveVenueName(): string {
@@ -689,24 +749,6 @@ export class ConnectComponent implements OnInit {
       month: '2-digit',
       year: 'numeric'
     }).format(parsed);
-  }
-
-  private htmlToText(html: string): string {
-    if (!html) {
-      return '';
-    }
-
-    const withNewLines = html
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/p>/gi, '\n')
-      .replace(/<\/div>/gi, '\n')
-      .replace(/<li>/gi, '- ')
-      .replace(/<\/li>/gi, '\n');
-    const withoutTags = withNewLines.replace(/<[^>]*>/g, '');
-
-    const textArea = document.createElement('textarea');
-    textArea.innerHTML = withoutTags;
-    return textArea.value.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
   }
 
   private readFileAsBase64(file: File): Promise<string> {
@@ -796,6 +838,9 @@ export class ConnectComponent implements OnInit {
     this.unreadMentionCount = 0;
     this.noteDraft = '';
     this.attachments = [];
+    this.emailCc = '';
+    this.emailBcc = '';
+    this.showEmailCopyFields = false;
     this.attachmentError = '';
     this.composeError = '';
     this.composeSuccess = '';
