@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, tap } from 'rxjs';
+import { BehaviorSubject, Observable, tap, timeout } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 
 export type UserRole =
@@ -92,6 +92,7 @@ export class AuthService {
 
   login(request: LoginRequest): Observable<LoginResponse> {
     return this.http.post<LoginResponse>('/api/auth/login', request).pipe(
+      timeout(15000),
       tap((response) => {
         if (!response.requiresTwoFactor && response.accessToken) {
           this.persistSession(response, request.tenantSubdomain ?? 'grandhotel');

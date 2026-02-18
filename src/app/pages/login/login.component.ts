@@ -57,8 +57,13 @@ export class LoginComponent {
         },
         error: (error) => {
           this.isSubmitting = false;
+          if (error?.name === 'TimeoutError') {
+            this.errorMessage = 'Login timed out. Please try again and check the server/API logs.';
+            return;
+          }
+
           if (error?.status === 0) {
-            this.errorMessage = 'Login service is unavailable. Ensure the API is running on http://localhost:5080.';
+            this.errorMessage = 'Login service is unavailable. Verify the API is reachable from this environment.';
             return;
           }
 
