@@ -133,13 +133,58 @@ export class WebsiteEnquiryComponent implements OnInit {
           this.selectedFormId = this.forms[0]?.id ?? '';
           this.loading = false;
         },
-        error: () => {
-          this.forms = [];
-          this.selectedFormId = '';
-          this.loading = false;
-          this.errorMessage = 'Unable to load website forms for this venue.';
+        error: (error) => {
+          if (error?.status === 401 || error?.status === 403) {
+            this.loadFormsFromPublicConfig(this.selectedVenueId!);
+            return;
+          }
+
+          this.handleFormsLoadFailure();
         }
       });
+  }
+
+  private loadFormsFromPublicConfig(venueId: string): void {
+    this.api
+      .getPublicWebsiteFormConfig(venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.forms = (response?.forms ?? []).map((form) => ({
+            id: form.id,
+            name: form.name,
+            slug: form.slug,
+            isActive: true,
+            successMessage: form.successMessage,
+            redirectUrl: form.redirectUrl ?? null,
+            requiredFields: form.requiredFields ?? [],
+            optionalFields: form.optionalFields ?? [],
+            styleJson: form.styleJson ?? null,
+            formFields: form.formFields ?? [],
+            brandingPrimaryColor: form.brandingPrimaryColor ?? null,
+            brandingLogoUrl: form.brandingLogoUrl ?? null,
+            gdprCheckboxText: form.gdprCheckboxText ?? null,
+            recaptchaSiteKey: form.recaptchaSiteKey ?? null,
+            autoAcknowledgementTemplateId: form.autoAcknowledgementTemplateId ?? null
+          }));
+
+          this.selectedFormId = response?.defaultFormId
+            ?? this.forms[0]?.id
+            ?? '';
+          this.loading = false;
+          this.errorMessage = '';
+        },
+        error: () => {
+          this.handleFormsLoadFailure();
+        }
+      });
+  }
+
+  private handleFormsLoadFailure(): void {
+    this.forms = [];
+    this.selectedFormId = '';
+    this.loading = false;
+    this.errorMessage = 'Unable to load website forms for this venue.';
   }
 
   private resolveWidgetBaseUrl(): string {
