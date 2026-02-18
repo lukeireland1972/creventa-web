@@ -220,6 +220,18 @@
         @if (syncResponse) {
           <p class="integration-note">{{ syncResponse.message }}</p>
         }
+
+        @if (selectedEvent) {
+          <div class="registration-share">
+            <label>
+              <span>Public Registration Link</span>
+              <input type="text" readonly [value]="publicRegistrationUrl" />
+            </label>
+            <button type="button" class="ghost" (click)="copyPublicRegistrationLink()">
+              {{ registrationLinkCopied ? 'Copied' : 'Copy Link' }}
+            </button>
+          </div>
+        }
       </section>
     </div>
 
@@ -294,6 +306,23 @@
             <small>{{ attendees.length }} attendee{{ attendees.length === 1 ? '' : 's' }} · {{ checkedInCount }} checked-in</small>
           </header>
 
+          <div class="attendee-toolbar">
+            <button type="button" class="ghost" (click)="emailAttendees('all')" [disabled]="attendees.length === 0">Email All</button>
+            <button type="button" class="ghost" (click)="emailAttendees('selected')" [disabled]="selectedAttendeeCount === 0">Email Selected</button>
+            <button type="button" class="ghost" (click)="exportAttendeesCsv()" [disabled]="attendees.length === 0">Export CSV</button>
+            <select [(ngModel)]="bulkFollowUpStatus" [ngModelOptions]="{ standalone: true }">
+              @for (status of followUpStatusOptions; track status) {
+                <option [value]="status">{{ status }}</option>
+              }
+            </select>
+            <button type="button" class="primary" (click)="bulkUpdateFollowUpStatus()" [disabled]="selectedAttendeeCount === 0">
+              Mark Selected
+            </button>
+            @if (selectedAttendeeCount > 0) {
+              <span class="selection-pill">{{ selectedAttendeeCount }} selected</span>
+            }
+          </div>
+
           <form class="attendee-form" [formGroup]="attendeeForm" (ngSubmit)="addAttendee()">
             <div class="grid three">
               <label>
@@ -336,16 +365,68 @@
             </div>
           </form>
 
+          <div class="attendee-import">
+            <h3>CSV Import (with column mapping)</h3>
+            <div class="grid two">
+              <label>
+                <span>CSV File</span>
+                <input type="file" accept=".csv,text/csv" (change)="onAttendeeImportFileSelected($event)" />
+              </label>
+              <label>
+                <span>Selected File</span>
+                <input type="text" [value]="attendeeImportFileName || 'None'" readonly />
+              </label>
+            </div>
+            <div class="grid three" [formGroup]="attendeeImportMappingForm">
+              <label><span>First Name Column</span><input type="text" formControlName="firstNameColumn" /></label>
+              <label><span>Last Name Column</span><input type="text" formControlName="lastNameColumn" /></label>
+              <label><span>Email Column</span><input type="text" formControlName="emailColumn" /></label>
+              <label><span>Phone Column</span><input type="text" formControlName="phoneColumn" /></label>
+              <label><span>Interest Column</span><input type="text" formControlName="eventInterestColumn" /></label>
+              <label><span>Notes Column</span><input type="text" formControlName="notesColumn" /></label>
+              <label><span>Follow-up Column</span><input type="text" formControlName="followUpStatusColumn" /></label>
+            </div>
+            <div class="form-actions compact">
+              <button type="button" class="ghost" (click)="importAttendeesCsv()" [disabled]="importingAttendees || !attendeeImportFile">
+                {{ importingAttendees ? 'Importing…' : 'Import CSV' }}
+              </button>
+            </div>
+          </div>
+
           @if (loadingAttendees) {
             <p>Loading attendees…</p>
           } @else {
             <div class="attendee-list">
+              @if (attendees.length > 0) {
+                <article class="attendee-row attendee-header">
+                  <div class="attendee-select">
+                    <input
+                      type="checkbox"
+                      [checked]="allAttendeesSelected"
+                      (change)="toggleSelectAllAttendees($any($event.target).checked)" />
+                  </div>
+                  <div>
+                    <strong>Attendee</strong>
+                    <p>Email · Interest</p>
+                    <small>Follow-up status</small>
+                  </div>
+                  <div class="attendee-actions">
+                    <span>Actions</span>
+                  </div>
+                </article>
+              }
               @for (attendee of attendees; track attendee.id) {
                 <article class="attendee-row">
+                  <div class="attendee-select">
+                    <input
+                      type="checkbox"
+                      [checked]="isAttendeeSelected(attendee.id)"
+                      (change)="toggleAttendeeSelection(attendee.id, $any($event.target).checked)" />
+                  </div>
                   <div>
                     <strong>{{ attendee.firstName }} {{ attendee.lastName }}</strong>
                     <p>{{ attendee.email }} · {{ attendee.eventInterest || 'General interest' }}</p>
-                    <small>{{ attendee.followUpStatus }}</small>
+                    <small>{{ attendee.followUpStatus }} · Registered {{ attendee.registeredAtUtc | date: 'dd/MM/yyyy HH:mm' }}</small>
                   </div>
                   <div class="attendee-actions">
                     <button type="button" class="ghost" (click)="toggleCheckIn(attendee)">

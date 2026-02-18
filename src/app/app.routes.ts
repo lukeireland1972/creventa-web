@@ -14,6 +14,7 @@ import { ReportsComponent } from './pages/reports/reports.component';
 import { SettingsComponent } from './pages/settings/settings.component';
 import { AdminComponent } from './pages/admin/admin.component';
 import { SignaturePortalComponent } from './pages/signature/signature-portal.component';
+import { EventsHubRegistrationComponent } from './pages/events-hub/events-hub-registration.component';
 
 export const routes: Routes = [
   { path: 'portal/e/:token', redirectTo: 'portal/:token/proposal', pathMatch: 'full' },
@@ -21,6 +22,7 @@ export const routes: Routes = [
   { path: 'portal/:token', redirectTo: 'portal/:token/proposal', pathMatch: 'full' },
   { path: 'payments/mock/:milestoneId', component: MockCardPaymentComponent },
   { path: 'signature/e/:token', component: SignaturePortalComponent },
+  { path: 'events-hub/register/:eventId', component: EventsHubRegistrationComponent },
   { path: 'login', component: LoginComponent },
   {
     path: '',
@@ -39,6 +41,7 @@ export const routes: Routes = [
       { path: 'settings', component: SettingsComponent },
       { path: 'events-hub', loadComponent: () => import('./pages/events-hub/events-hub.component').then((m) => m.EventsHubComponent) },
       { path: 'reports', component: ReportsComponent },
+      { path: 'website-enquiry', loadComponent: () => import('./pages/website-enquiry/website-enquiry.component').then((m) => m.WebsiteEnquiryComponent) },
       { path: 'ticket-dashboard', loadComponent: () => import('./pages/ticket-dashboard/ticket-dashboard.component').then((m) => m.TicketDashboardComponent) },
       { path: 'feedback-insights', loadComponent: () => import('./pages/feedback-insights/feedback-insights.component').then((m) => m.FeedbackInsightsComponent) },
       { path: '', component: DashboardComponent, pathMatch: 'full' }

@@ -203,11 +203,19 @@
   height: 1rem;
 }
 
+.inline-checkbox {
+  justify-content: flex-start;
+}
+
 .actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 0.5rem;
+}
+
+.actions.compact-actions {
+  justify-content: flex-start;
 }
 
 button {
@@ -754,6 +762,59 @@ td small {
 .preview-card strong {
   color: #1e293b;
   font-size: 0.82rem;
+}
+
+.website-form-branding-preview {
+  --website-primary: #2563eb;
+  border: 1px solid #dbe5f4;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+  padding: 0.8rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.website-form-branding-preview header {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.website-form-branding-preview img {
+  max-height: 2rem;
+  width: auto;
+  border-radius: 6px;
+  object-fit: contain;
+}
+
+.website-form-branding-preview .logo-fallback {
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  padding: 0.24rem 0.48rem;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.website-form-branding-preview strong {
+  color: #0f172a;
+  font-size: 0.84rem;
+}
+
+.website-form-branding-preview p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.76rem;
+}
+
+.website-form-branding-preview .preview-submit {
+  justify-self: start;
+  border: none;
+  border-radius: 9px;
+  background: var(--website-primary);
+  color: #fff;
+  padding: 0.38rem 0.72rem;
+  font-size: 0.74rem;
+  font-weight: 700;
 }
 
 @media (max-width: 1180px) {

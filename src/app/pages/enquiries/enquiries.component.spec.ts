@@ -103,7 +103,18 @@ describe('EnquiriesComponent', () => {
     ]);
     api.getEnquiries.and.returnValue(of(emptyListResponse));
     api.getEnquiry.and.returnValue(of(detailResponse));
-    api.transitionEnquiryStatus.and.returnValue(of(void 0));
+    api.transitionEnquiryStatus.and.returnValue(
+      of({
+        id: detailResponse.id,
+        status: detailResponse.status,
+        holdExpiresAtUtc: null,
+        lostReason: null,
+        lostReasonDetail: null,
+        lostAtUtc: null,
+        allowedTransitions: ['Tentative', 'OpenProposal', 'Lost'],
+        generatedTaskCount: 0
+      })
+    );
     api.getUsers.and.returnValue(of([]));
     api.getLostReasons.and.returnValue(of([]));
 

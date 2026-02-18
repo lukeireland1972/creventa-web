@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { distinctUntilChanged, map } from 'rxjs';
 import {
@@ -20,7 +21,7 @@ import { AuthService } from '../../services/auth.service';
 @Component({
   selector: 'app-events-hub',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule],
   templateUrl: './events-hub.component.html',
   styleUrl: './events-hub.component.scss'
 })
@@ -40,6 +41,7 @@ export class EventsHubComponent implements OnInit {
   spaces: SpaceSummaryDto[] = [];
   users: UserSummaryDto[] = [];
   attendees: EventsHubAttendeeDto[] = [];
+  selectedAttendeeIds = new Set<string>();
   analytics: EventsHubAnalyticsDto | null = null;
 
   selectedEvent: EventsHubEventDto | null = null;
@@ -52,12 +54,17 @@ export class EventsHubComponent implements OnInit {
   publishing = false;
   syncing = false;
   addingAttendee = false;
+  importingAttendees = false;
   deletingEvent = false;
 
   errorMessage = '';
   lastActionMessage = '';
   publishResponse: EventsHubPublishResponse | null = null;
   syncResponse: EventsHubSyncResponse | null = null;
+  attendeeImportFile: File | null = null;
+  attendeeImportFileName = '';
+  registrationLinkCopied = false;
+  bulkFollowUpStatus: 'Pending' | 'Contacted' | 'Converted' | 'NotInterested' | 'NoResponse' = 'Contacted';
 
   eventForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
@@ -88,6 +95,16 @@ export class EventsHubComponent implements OnInit {
     eventInterest: [''],
     notes: [''],
     followUpStatus: this.formBuilder.nonNullable.control<'Pending' | 'Contacted' | 'Converted' | 'NotInterested' | 'NoResponse'>('Pending')
+  });
+
+  attendeeImportMappingForm = this.formBuilder.nonNullable.group({
+    firstNameColumn: ['FirstName'],
+    lastNameColumn: ['LastName'],
+    emailColumn: ['Email'],
+    phoneColumn: ['Phone'],
+    eventInterestColumn: ['EventInterest'],
+    notesColumn: ['Notes'],
+    followUpStatusColumn: ['FollowUpStatus']
   });
 
   ngOnInit(): void {
@@ -132,6 +149,22 @@ export class EventsHubComponent implements OnInit {
 
   get convertedCount(): number {
     return this.attendees.filter((x) => !!x.convertedEnquiryId).length;
+  }
+
+  get selectedAttendeeCount(): number {
+    return this.selectedAttendeeIds.size;
+  }
+
+  get allAttendeesSelected(): boolean {
+    return this.attendees.length > 0 && this.selectedAttendeeIds.size === this.attendees.length;
+  }
+
+  get publicRegistrationUrl(): string {
+    if (!this.selectedEvent) {
+      return '';
+    }
+
+    return `${window.location.origin}/events-hub/register/${this.selectedEvent.id}`;
   }
 
   loadAll(): void {
@@ -235,6 +268,7 @@ export class EventsHubComponent implements OnInit {
     this.syncResponse = null;
     this.analytics = null;
     this.attendees = [];
+    this.selectedAttendeeIds.clear();
 
     const now = new Date();
     const start = this.toInputTime(now);
@@ -402,10 +436,13 @@ export class EventsHubComponent implements OnInit {
         next: (attendees) => {
           this.loadingAttendees = false;
           this.attendees = attendees;
+          const valid = new Set(attendees.map((x) => x.id));
+          this.selectedAttendeeIds = new Set(Array.from(this.selectedAttendeeIds).filter((id) => valid.has(id)));
         },
         error: () => {
           this.loadingAttendees = false;
           this.attendees = [];
+          this.selectedAttendeeIds.clear();
         }
       });
   }
@@ -468,6 +505,169 @@ export class EventsHubComponent implements OnInit {
         error: () => {
           this.errorMessage = 'Unable to update check-in state.';
         }
+      });
+  }
+
+  toggleSelectAllAttendees(checked: boolean): void {
+    if (checked) {
+      this.selectedAttendeeIds = new Set(this.attendees.map((x) => x.id));
+      return;
+    }
+
+    this.selectedAttendeeIds.clear();
+  }
+
+  toggleAttendeeSelection(attendeeId: string, checked: boolean): void {
+    if (checked) {
+      this.selectedAttendeeIds.add(attendeeId);
+      return;
+    }
+
+    this.selectedAttendeeIds.delete(attendeeId);
+  }
+
+  isAttendeeSelected(attendeeId: string): boolean {
+    return this.selectedAttendeeIds.has(attendeeId);
+  }
+
+  bulkUpdateFollowUpStatus(): void {
+    if (!this.venueId || !this.selectedEvent || this.selectedAttendeeIds.size === 0) {
+      return;
+    }
+
+    this.api.bulkSetEventsHubAttendeeFollowUpStatus(this.venueId, this.selectedEvent.id, {
+      attendeeIds: Array.from(this.selectedAttendeeIds),
+      followUpStatus: this.bulkFollowUpStatus
+    })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.lastActionMessage = `Updated follow-up status for ${response.updatedCount} attendee${response.updatedCount === 1 ? '' : 's'}.`;
+          this.loadAttendees(this.selectedEvent!.id);
+          this.loadEvents();
+        },
+        error: () => {
+          this.errorMessage = 'Unable to update attendee follow-up status.';
+        }
+      });
+  }
+
+  emailAttendees(scope: 'all' | 'selected'): void {
+    const targetAttendees = scope === 'all'
+      ? this.attendees
+      : this.attendees.filter((attendee) => this.selectedAttendeeIds.has(attendee.id));
+
+    const recipients = targetAttendees
+      .map((attendee) => attendee.email.trim())
+      .filter((email) => email.length > 0);
+
+    if (recipients.length === 0) {
+      this.errorMessage = scope === 'all'
+        ? 'No attendee email addresses are available.'
+        : 'No selected attendees have email addresses.';
+      return;
+    }
+
+    const subject = this.selectedEvent ? encodeURIComponent(`${this.selectedEvent.name} update`) : '';
+    window.location.href = `mailto:${recipients.join(',')}?subject=${subject}`;
+  }
+
+  exportAttendeesCsv(): void {
+    if (this.attendees.length === 0) {
+      this.errorMessage = 'No attendees to export.';
+      return;
+    }
+
+    const rows = [
+      ['First Name', 'Last Name', 'Email', 'Phone', 'Interest', 'Follow Up Status', 'Converted Enquiry', 'Registered At', 'Checked In'],
+      ...this.attendees.map((attendee) => [
+        attendee.firstName,
+        attendee.lastName,
+        attendee.email,
+        attendee.phoneNumberE164 ?? '',
+        attendee.eventInterest ?? '',
+        attendee.followUpStatus,
+        attendee.convertedEnquiryId ?? '',
+        attendee.registeredAtUtc,
+        attendee.checkedIn ? 'Yes' : 'No'
+      ])
+    ];
+
+    const csv = rows
+      .map((row) => row.map((value) => this.csvEscape(value)).join(','))
+      .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const eventSlug = (this.selectedEvent?.name ?? 'event').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const fileName = `${eventSlug}-attendees.csv`;
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.setAttribute('download', fileName);
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    window.URL.revokeObjectURL(url);
+  }
+
+  onAttendeeImportFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    this.attendeeImportFile = file;
+    this.attendeeImportFileName = file?.name ?? '';
+  }
+
+  importAttendeesCsv(): void {
+    if (!this.venueId || !this.selectedEvent || !this.attendeeImportFile) {
+      this.errorMessage = 'Select a CSV file to import attendees.';
+      return;
+    }
+
+    this.importingAttendees = true;
+    this.errorMessage = '';
+
+    this.api.importEventsHubAttendeesCsv(
+      this.venueId,
+      this.selectedEvent.id,
+      this.attendeeImportFile,
+      this.attendeeImportMappingForm.getRawValue()
+    )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.importingAttendees = false;
+          this.lastActionMessage = `Imported ${response.importedCount} attendee${response.importedCount === 1 ? '' : 's'} (${response.skippedCount} skipped).`;
+          if (response.warnings.length > 0) {
+            this.errorMessage = response.warnings.slice(0, 3).join(' ');
+          }
+          this.attendeeImportFile = null;
+          this.attendeeImportFileName = '';
+          this.loadAttendees(this.selectedEvent!.id);
+          this.loadEvents();
+          this.loadAnalytics(this.selectedEvent!.id);
+        },
+        error: () => {
+          this.importingAttendees = false;
+          this.errorMessage = 'Unable to import attendee CSV.';
+        }
+      });
+  }
+
+  copyPublicRegistrationLink(): void {
+    const url = this.publicRegistrationUrl;
+    if (!url) {
+      return;
+    }
+
+    navigator.clipboard.writeText(url)
+      .then(() => {
+        this.registrationLinkCopied = true;
+        window.setTimeout(() => {
+          this.registrationLinkCopied = false;
+        }, 1500);
+      })
+      .catch(() => {
+        this.errorMessage = 'Unable to copy the registration link.';
       });
   }
 
@@ -720,6 +920,7 @@ export class EventsHubComponent implements OnInit {
     this.spaces = [];
     this.users = [];
     this.attendees = [];
+    this.selectedAttendeeIds.clear();
     this.analytics = null;
     this.selectedEvent = null;
     this.selectedEventId = null;
@@ -751,6 +952,15 @@ export class EventsHubComponent implements OnInit {
   private trimOrNull(value: string | null | undefined): string | null {
     const normalized = (value ?? '').trim();
     return normalized ? normalized : null;
+  }
+
+  private csvEscape(value: unknown): string {
+    const text = String(value ?? '');
+    if (text.includes(',') || text.includes('"') || text.includes('\n')) {
+      return `"${text.replace(/"/g, '""')}"`;
+    }
+
+    return text;
   }
 
   private extractErrorMessage(error: unknown, fallback: string): string {

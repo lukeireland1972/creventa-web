@@ -211,12 +211,24 @@
               @if (isRecentOpen) {
                 <div class="recent-menu">
                   <div class="recent-title">Recently viewed</div>
-                  @for (item of recentItems; track item.entityId) {
+                  @for (item of recentItems; track item.enquiryId) {
                     <button (click)="openRecentItem(item)">
-                      <strong>{{ item.label }}</strong>
-                      <span>{{ item.secondaryLine }}</span>
+                      <strong>{{ item.enquiryRef }}</strong>
+                      <span>
+                        {{ item.clientName }}
+                        @if (item.eventDate) {
+                          · {{ item.eventDate | date: 'dd/MM/yyyy' }}
+                        }
+                      </span>
                       @if (item.status) {
-                        <em>{{ item.status }}</em>
+                        <em
+                          class="recent-status"
+                          [class.status-good]="recentStatusClass(item.status) === 'status-good'"
+                          [class.status-warn]="recentStatusClass(item.status) === 'status-warn'"
+                          [class.status-bad]="recentStatusClass(item.status) === 'status-bad'"
+                          [class.status-neutral]="recentStatusClass(item.status) === 'status-neutral'">
+                          {{ item.status }}
+                        </em>
                       }
                     </button>
                   }
@@ -286,7 +298,16 @@
               }
             </div>
 
+            <button class="ghost-btn seed-data-btn" (click)="seedRandomizedData()" [disabled]="isSeedingRandomData || !selectedVenueId">
+              {{ isSeedingRandomData ? 'Adding…' : '+ Add 10 Random Data' }}
+            </button>
             <button class="primary-btn" (click)="openDrawer()">+ New Enquiry</button>
+
+            @if (randomDataMessage || randomDataError) {
+              <span class="seed-feedback" [class.error]="!!randomDataError">
+                {{ randomDataError || randomDataMessage }}
+              </span>
+            }
           }
 
           <button class="avatar" (click)="logout()" [title]="displayName + ' (Sign out)'">{{ initials }}</button>
@@ -448,229 +469,273 @@
     </div>
 
     <form class="drawer-form" [formGroup]="enquiryForm" (ngSubmit)="submitEnquiry()">
-      @if (submissionError) {
-        <p class="form-error">{{ submissionError }}</p>
-      }
+      <div class="drawer-form-main">
+        @if (submissionError) {
+          <p class="form-error">{{ submissionError }}</p>
+        }
 
-      <label>
-        First Name
-        <input type="text" formControlName="contactFirstName" />
-      </label>
+        <label>
+          First Name
+          <input type="text" formControlName="contactFirstName" />
+        </label>
 
-      <label>
-        Last Name
-        <input type="text" formControlName="contactLastName" />
-      </label>
+        <label>
+          Last Name
+          <input type="text" formControlName="contactLastName" />
+        </label>
 
-      <label>
-        Email
-        <input type="email" formControlName="contactEmail" />
-      </label>
+        <label>
+          Email
+          <input type="email" formControlName="contactEmail" />
+        </label>
 
-      <label>
-        Phone (E.164)
-        <input type="text" formControlName="contactPhoneNumberE164" placeholder="+447700900111" />
-      </label>
+        <label>
+          Phone (E.164)
+          <input type="text" formControlName="contactPhoneNumberE164" placeholder="+447700900111" />
+        </label>
 
-      @if (duplicateCheckLoading) {
-        <p class="advisory-note">Checking existing contacts and enquiries...</p>
-      }
+        @if (duplicateCheckLoading) {
+          <p class="advisory-note">Checking existing contacts and enquiries...</p>
+        }
 
-      @if (hasDuplicateAdvisory && primaryDuplicateMatch; as duplicateMatch) {
-        <section class="advisory-banner">
-          <p>
-            Possible duplicate: <strong>{{ duplicateMatch.contactName }}</strong> has an existing enquiry
-            <strong>{{ duplicateMatch.reference }}</strong> for
-            <strong>{{ duplicateMatch.eventName }}</strong> on
-            <strong>{{ duplicateMatch.eventStartUtc | date: 'dd/MM/yyyy' }}</strong>. View existing enquiry.
-            @if ((duplicateCheck?.duplicateMatches?.length ?? 0) > 1) {
-              <span> +{{ (duplicateCheck?.duplicateMatches?.length ?? 1) - 1 }} additional possible match(es).</span>
-            }
-          </p>
-          <div class="advisory-actions">
-            <button type="button" class="inline-link" (click)="openDuplicateWarningModal()">Review duplicate options</button>
-          </div>
-        </section>
-      }
-
-      <label>
-        Company
-        <input type="text" formControlName="companyName" />
-      </label>
-
-      <label>
-        Event Type
-        <select formControlName="eventType">
-          <option>Wedding</option>
-          <option>Corporate Conference</option>
-          <option>Private Dining</option>
-          <option>Christmas Party</option>
-          <option>Birthday</option>
-          <option>Funeral/Wake</option>
-          <option>Charity</option>
-          <option>Product Launch</option>
-          <option>Team Building</option>
-          <option>Other</option>
-        </select>
-      </label>
-
-      <label>
-        Event Name
-        <input type="text" formControlName="eventName" />
-      </label>
-
-      <label>
-        Event Date
-        <input type="date" formControlName="eventDate" />
-      </label>
-
-      @if (hasDateConflictAdvisory && primarySameDateConflict; as sameDateConflict) {
-        <section class="advisory-banner">
-          <p>
-            Potential double-booking: <strong>{{ sameDateConflict.reference }}</strong> ({{ sameDateConflict.status }})
-            for <strong>{{ sameDateConflict.eventName }}</strong> on
-            <strong>{{ sameDateConflict.eventStartUtc | date: 'dd/MM/yyyy' }}</strong>.
-            @if ((duplicateCheck?.sameDateConflicts?.length ?? 0) > 1) {
-              <span> +{{ (duplicateCheck?.sameDateConflicts?.length ?? 1) - 1 }} additional enquiry conflict(s).</span>
-            }
-          </p>
-          <div class="advisory-actions">
-            <button type="button" class="inline-link" (click)="openDuplicateWarningModal()">Review duplicate options</button>
-          </div>
-        </section>
-      }
-
-      <label>
-        Start Time
-        <input type="time" formControlName="eventTime" />
-      </label>
-
-      <label>
-        Event Style
-        <select formControlName="eventStyle">
-          <option>Meeting</option>
-          <option>3-Course Dinner</option>
-          <option>Buffet</option>
-          <option>Reception/Standing</option>
-          <option>BBQ</option>
-          <option>Afternoon Tea</option>
-          <option>Drinks Reception</option>
-          <option>Custom</option>
-        </select>
-      </label>
-
-      <label>
-        Setup Style
-        <select formControlName="setupStyle">
-          <option>Theatre</option>
-          <option>Banquet</option>
-          <option>Boardroom</option>
-          <option>Cabaret</option>
-          <option>Reception</option>
-          <option>Classroom</option>
-          <option>U-Shape</option>
-          <option>Custom</option>
-        </select>
-      </label>
-
-      <label>
-        Guests
-        <input type="number" min="1" formControlName="guestsExpected" />
-      </label>
-
-      <label>
-        Budget Min
-        <input type="number" min="0" formControlName="budgetMinAmount" />
-      </label>
-
-      <label>
-        Budget Max
-        <input type="number" min="0" formControlName="budgetMaxAmount" />
-      </label>
-
-      <label>
-        Source
-        <select formControlName="sourceType">
-          <option>Phone</option>
-          <option>Walk-in</option>
-          <option>Referral</option>
-          <option>Social Media</option>
-          <option>Venue Event</option>
-          <option>Third-Party</option>
-          <option>Returning Client</option>
-          <option>Website Form</option>
-          <option>Email</option>
-        </select>
-      </label>
-
-      <label>
-        Source Detail
-        <input type="text" formControlName="sourceDetail" />
-      </label>
-
-      <label>
-        Lead Quality (1-5)
-        <input type="number" min="1" max="5" formControlName="leadQuality" />
-      </label>
-
-      <label class="checkbox">
-        <input type="checkbox" formControlName="marketingConsent" />
-        <span>Marketing consent</span>
-      </label>
-
-      <label class="checkbox">
-        <input type="checkbox" formControlName="hasFlexibleDates" />
-        <span>Flexible dates</span>
-      </label>
-
-      <label class="full">
-        Flexible Date Notes
-        <textarea rows="2" formControlName="flexibleDateNotes"></textarea>
-      </label>
-
-      <label class="full">
-        Special Requirements
-        <textarea rows="2" formControlName="specialRequirements"></textarea>
-      </label>
-
-      <label class="full">
-        Internal Notes
-        <textarea rows="3" formControlName="internalNotes"></textarea>
-      </label>
-
-      @if (availability) {
-        <section class="availability">
-          <h3>Same-date availability</h3>
-          @for (group of availability.spaces; track group.spaceId) {
-            <article>
-              <header>
-                <strong>{{ group.spaceName }}</strong>
-                @if (group.isAvailable) {
-                  <span class="available">Available</span>
-                } @else {
-                  <span class="busy">Busy</span>
-                }
-              </header>
-              @for (event of group.events; track event.recordId) {
-                <div class="availability-event">
-                  <strong>{{ event.label }}</strong>
-                  <span>{{ event.recordType }} · {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}</span>
-                  @if (event.enquiryStatus) {
-                    <span>{{ event.enquiryStatus }} · {{ event.covers }} covers</span>
-                  }
-                </div>
+        @if (hasDuplicateAdvisory && primaryDuplicateMatch; as duplicateMatch) {
+          <section class="advisory-banner">
+            <p>
+              Possible duplicate: <strong>{{ duplicateMatch.contactName }}</strong> has an existing enquiry
+              <strong>{{ duplicateMatch.reference }}</strong> for
+              <strong>{{ duplicateMatch.eventName }}</strong> on
+              <strong>{{ duplicateMatch.eventStartUtc | date: 'dd/MM/yyyy' }}</strong>. View existing enquiry.
+              @if ((duplicateCheck?.duplicateMatches?.length ?? 0) > 1) {
+                <span> +{{ (duplicateCheck?.duplicateMatches?.length ?? 1) - 1 }} additional possible match(es).</span>
               }
-            </article>
-          }
-        </section>
-      }
+            </p>
+            <div class="advisory-actions">
+              <button type="button" class="inline-link" (click)="openDuplicateWarningModal()">Review duplicate options</button>
+            </div>
+          </section>
+        }
 
-      <div class="drawer-actions">
-        <button type="button" class="ghost-btn" (click)="closeDrawer()">Cancel</button>
-        <button type="submit" class="primary-btn" [disabled]="isSubmitting">
-          {{ isSubmitting ? 'Creating...' : 'Create Enquiry' }}
-        </button>
+        <label>
+          Company
+          <input type="text" formControlName="companyName" />
+        </label>
+
+        <label>
+          Event Type
+          <select formControlName="eventType">
+            <option>Wedding</option>
+            <option>Corporate Conference</option>
+            <option>Private Dining</option>
+            <option>Christmas Party</option>
+            <option>Birthday</option>
+            <option>Funeral/Wake</option>
+            <option>Charity</option>
+            <option>Product Launch</option>
+            <option>Team Building</option>
+            <option>Other</option>
+          </select>
+        </label>
+
+        <label>
+          Event Name
+          <input type="text" formControlName="eventName" />
+        </label>
+
+        <label>
+          Event Date
+          <input type="date" formControlName="eventDate" />
+        </label>
+
+        @if (hasDateConflictAdvisory && primarySameDateConflict; as sameDateConflict) {
+          <section class="advisory-banner">
+            <p>
+              Potential double-booking: <strong>{{ sameDateConflict.reference }}</strong> ({{ sameDateConflict.status }})
+              for <strong>{{ sameDateConflict.eventName }}</strong> on
+              <strong>{{ sameDateConflict.eventStartUtc | date: 'dd/MM/yyyy' }}</strong>.
+              @if ((duplicateCheck?.sameDateConflicts?.length ?? 0) > 1) {
+                <span> +{{ (duplicateCheck?.sameDateConflicts?.length ?? 1) - 1 }} additional enquiry conflict(s).</span>
+              }
+            </p>
+            <div class="advisory-actions">
+              <button type="button" class="inline-link" (click)="openDuplicateWarningModal()">Review duplicate options</button>
+            </div>
+          </section>
+        }
+
+        <label>
+          Start Time
+          <input type="time" formControlName="eventTime" />
+        </label>
+
+        <label>
+          Event Style
+          <select formControlName="eventStyle">
+            <option>Meeting</option>
+            <option>3-Course Dinner</option>
+            <option>Buffet</option>
+            <option>Reception/Standing</option>
+            <option>BBQ</option>
+            <option>Afternoon Tea</option>
+            <option>Drinks Reception</option>
+            <option>Custom</option>
+          </select>
+        </label>
+
+        <label>
+          Setup Style
+          <select formControlName="setupStyle">
+            <option>Theatre</option>
+            <option>Banquet</option>
+            <option>Boardroom</option>
+            <option>Cabaret</option>
+            <option>Reception</option>
+            <option>Classroom</option>
+            <option>U-Shape</option>
+            <option>Custom</option>
+          </select>
+        </label>
+
+        <label>
+          Guests
+          <input type="number" min="1" formControlName="guestsExpected" />
+        </label>
+
+        <label>
+          Budget Min
+          <input type="number" min="0" formControlName="budgetMinAmount" />
+        </label>
+
+        <label>
+          Budget Max
+          <input type="number" min="0" formControlName="budgetMaxAmount" />
+        </label>
+
+        <label>
+          Source
+          <select formControlName="sourceType">
+            <option>Phone</option>
+            <option>Walk-in</option>
+            <option>Referral</option>
+            <option>Social Media</option>
+            <option>Venue Event</option>
+            <option>Third-Party</option>
+            <option>Returning Client</option>
+            <option>Website Form</option>
+            <option>Email</option>
+          </select>
+        </label>
+
+        <label>
+          Source Detail
+          <input type="text" formControlName="sourceDetail" />
+        </label>
+
+        <label>
+          Lead Quality (1-5)
+          <input type="number" min="1" max="5" formControlName="leadQuality" />
+        </label>
+
+        <label class="checkbox">
+          <input type="checkbox" formControlName="marketingConsent" />
+          <span>Marketing consent</span>
+        </label>
+
+        <label class="checkbox">
+          <input type="checkbox" formControlName="hasFlexibleDates" />
+          <span>Flexible dates</span>
+        </label>
+
+        <label class="full">
+          Flexible Date Notes
+          <textarea rows="2" formControlName="flexibleDateNotes"></textarea>
+        </label>
+
+        <label class="full">
+          Special Requirements
+          <textarea rows="2" formControlName="specialRequirements"></textarea>
+        </label>
+
+        <label class="full">
+          Internal Notes
+          <textarea rows="3" formControlName="internalNotes"></textarea>
+        </label>
+
+        <div class="drawer-actions">
+          <button type="button" class="ghost-btn" (click)="closeDrawer()">Cancel</button>
+          <button type="submit" class="primary-btn" [disabled]="isSubmitting">
+            {{ isSubmitting ? 'Creating...' : 'Create Enquiry' }}
+          </button>
+        </div>
       </div>
+
+      <aside class="availability-panel" [@availabilityPanel]="availabilityPanelAnimationState">
+        <header>
+          <div>
+            <h3>Same-date availability</h3>
+            @if (hasAvailabilityDateSelected) {
+              <p>{{ selectedEventDate | date: 'EEEE, dd MMM yyyy' }}</p>
+            } @else {
+              <p>Select an event date to check space availability.</p>
+            }
+          </div>
+        </header>
+
+        @if (availabilityLoading()) {
+          <p class="availability-status loading">Checking availability...</p>
+        } @else if (availabilityError()) {
+          <p class="availability-status error">{{ availabilityError() }}</p>
+        } @else if (availabilityState(); as availability) {
+          <div class="availability-groups">
+            @for (group of availability.spaces; track group.spaceId) {
+              <article [@availabilityGroup]>
+                <header>
+                  <strong>{{ group.spaceName }}</strong>
+                  @if (group.isAvailable) {
+                    <span class="available">Available</span>
+                  } @else {
+                    <span class="busy">Busy</span>
+                  }
+                </header>
+                @if (group.events.length === 0) {
+                  <p class="availability-empty">No events scheduled in this space.</p>
+                }
+                @for (event of group.events; track event.recordId) {
+                  <div class="availability-event">
+                    <div class="availability-event-title">
+                      <strong>{{ event.label }}</strong>
+                      @if (event.enquiryStatus) {
+                        <span class="status-pill">{{ event.enquiryStatus }}</span>
+                      }
+                    </div>
+                    <span>
+                      {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}
+                      · {{ event.eventType || event.recordType }}
+                      @if (event.eventStyle) {
+                        <span> · {{ event.eventStyle }}</span>
+                      }
+                    </span>
+                    @if (event.clientName || event.enquiryReference || event.covers) {
+                      <span>
+                        @if (event.clientName) {
+                          {{ event.clientName }}
+                        }
+                        @if (event.enquiryReference) {
+                          <span> · {{ event.enquiryReference }}</span>
+                        }
+                        @if (event.covers) {
+                          <span> · {{ event.covers }} covers</span>
+                        }
+                      </span>
+                    }
+                  </div>
+                }
+              </article>
+            }
+          </div>
+        } @else {
+          <p class="availability-status">Live space occupancy will appear here after you pick a date.</p>
+        }
+      </aside>
     </form>
   </aside>
 

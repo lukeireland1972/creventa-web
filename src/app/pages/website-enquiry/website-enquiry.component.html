@@ -1,0 +1,67 @@
+<section class="website-enquiry-page">
+  <header class="page-header">
+    <div>
+      <h1>Website Enquiry</h1>
+      <p>Preview the customer-facing enquiry form and copy embed code for venue websites.</p>
+    </div>
+    <button type="button" class="ghost" (click)="openSettingsWebsiteForms()">Manage in Settings</button>
+  </header>
+
+  @if (loading) {
+    <article class="state-card">
+      <h2>Loading Website Forms</h2>
+      <p>Fetching active website enquiry forms for this venue.</p>
+    </article>
+  } @else if (errorMessage) {
+    <article class="state-card error">
+      <h2>Unable to Load</h2>
+      <p>{{ errorMessage }}</p>
+    </article>
+  } @else if (forms.length === 0) {
+    <article class="state-card">
+      <h2>No Active Website Forms</h2>
+      <p>Create and activate a form in Settings to preview it here.</p>
+      <button type="button" class="primary" (click)="openSettingsWebsiteForms()">Open Website Forms Settings</button>
+    </article>
+  } @else {
+    <section class="controls card">
+      <label>
+        Select Form
+        <select [(ngModel)]="selectedFormId">
+          @for (form of forms; track form.id) {
+            <option [value]="form.id">{{ form.name }} ({{ form.slug }})</option>
+          }
+        </select>
+      </label>
+      <a class="link-btn" [href]="previewUrl" target="_blank" rel="noopener">Open in New Tab</a>
+    </section>
+
+    <section class="embed-grid">
+      <article class="card">
+        <h3>Script Embed</h3>
+        <p>Preferred method: load widget script and place the custom element where needed.</p>
+        <textarea rows="4" readonly [value]="widgetSnippet"></textarea>
+        <button type="button" class="link-btn" (click)="copySnippet(widgetSnippet)">Copy Script Embed</button>
+      </article>
+
+      <article class="card">
+        <h3>iframe Embed</h3>
+        <p>Fallback method if script embedding is restricted by the website platform.</p>
+        <textarea rows="4" readonly [value]="iframeSnippet"></textarea>
+        <button type="button" class="link-btn" (click)="copySnippet(iframeSnippet)">Copy iframe Embed</button>
+      </article>
+    </section>
+
+    @if (copyMessage) {
+      <p class="copy-message">{{ copyMessage }}</p>
+    }
+
+    <article class="card preview-card">
+      <header>
+        <h3>Live Customer Preview</h3>
+        <small>This is what a client sees when enquiring from your website.</small>
+      </header>
+      <iframe [src]="safePreviewUrl" title="Website enquiry preview"></iframe>
+    </article>
+  }
+</section>

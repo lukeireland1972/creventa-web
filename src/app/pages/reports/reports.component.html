@@ -33,6 +33,24 @@
       </label>
       <button type="button" class="apply-btn" (click)="loadReports()">Apply Filters</button>
     </div>
+
+    <div class="compare-row">
+      <label class="compare-toggle">
+        <input type="checkbox" [(ngModel)]="compareEnabled" (ngModelChange)="onCompareToggle()" />
+        Enable comparison range
+      </label>
+
+      @if (compareEnabled) {
+        <label>
+          Compare From
+          <input type="date" [(ngModel)]="compareFromDate" />
+        </label>
+        <label>
+          Compare To
+          <input type="date" [(ngModel)]="compareToDate" />
+        </label>
+      }
+    </div>
   </section>
 
   @if (errorMessage) {
@@ -57,6 +75,10 @@
           <div class="actions">
             <button type="button" class="ghost" [disabled]="isExporting('sales-performance', 'csv')" (click)="exportSection('sales-performance', 'csv')">Export CSV</button>
             <button type="button" class="ghost" [disabled]="isExporting('sales-performance', 'pdf')" (click)="exportSection('sales-performance', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('sales-performance')">Schedule</button>
+            @if (getActiveScheduleCount('sales-performance') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('sales-performance') }}</span>
+            }
           </div>
         </header>
 
@@ -111,6 +133,10 @@
           <div class="actions">
             <button type="button" class="ghost" [disabled]="isExporting('pipeline-conversion', 'csv')" (click)="exportSection('pipeline-conversion', 'csv')">Export CSV</button>
             <button type="button" class="ghost" [disabled]="isExporting('pipeline-conversion', 'pdf')" (click)="exportSection('pipeline-conversion', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('pipeline-conversion')">Schedule</button>
+            @if (getActiveScheduleCount('pipeline-conversion') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('pipeline-conversion') }}</span>
+            }
           </div>
         </header>
 
@@ -159,6 +185,321 @@
         </div>
       </article>
 
+      <article class="report-card">
+        <header class="card-header">
+          <div>
+            <h2>Revenue by Space</h2>
+            <p>Confirmed event revenue and utilisation by space.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('revenue-space', 'csv')" (click)="exportSection('revenue-space', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('revenue-space', 'pdf')" (click)="exportSection('revenue-space', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('revenue-space')">Schedule</button>
+            @if (getActiveScheduleCount('revenue-space') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('revenue-space') }}</span>
+            }
+          </div>
+        </header>
+
+        <div class="chart-panel">
+          <div class="chart-heading">Revenue by Space (Bar Chart)</div>
+          <div class="vertical-bar-chart" role="img" aria-label="Revenue by space">
+            @for (point of revenueBySpaceBarPoints; track point.month) {
+              <div class="bar-column">
+                <small class="bar-value">{{ formatCurrency(point.totalRevenue, point.currencyCode) }}</small>
+                <div class="bar-track">
+                  <span class="bar-fill primary" [style.height.%]="point.heightPercent"></span>
+                </div>
+                <span class="bar-label">{{ point.monthLabel }}</span>
+              </div>
+            }
+            @if (revenueBySpaceBarPoints.length === 0) {
+              <p class="empty">No confirmed revenue by space for this period.</p>
+            }
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Space Name</th>
+                <th>Booking Count</th>
+                <th>Total Revenue</th>
+                <th>Avg Booking Value</th>
+                <th>Utilisation Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of revenueBySpaceRows; track row.spaceId) {
+                <tr>
+                  <td>{{ row.spaceName }}</td>
+                  <td>{{ row.bookingCount }}</td>
+                  <td>{{ formatCurrency(row.totalRevenue, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.averageBookingValue, row.currencyCode) }}</td>
+                  <td>{{ formatPercent(row.utilisationRatePercent) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card report-wide">
+        <header class="card-header">
+          <div>
+            <h2>Revenue by Event Type</h2>
+            <p>Revenue share, counts, value and covers with side-by-side comparison metrics.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('revenue-event-type', 'csv')" (click)="exportSection('revenue-event-type', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('revenue-event-type', 'pdf')" (click)="exportSection('revenue-event-type', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('revenue-event-type')">Schedule</button>
+            @if (getActiveScheduleCount('revenue-event-type') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('revenue-event-type') }}</span>
+            }
+          </div>
+        </header>
+
+        <div class="source-layout">
+          <div class="donut" [style.background]="revenueByEventTypeDonutBackground">
+            <div class="donut-hole">
+              <strong>{{ formatCurrency(revenueByEventTypeTotal, revenueByEventTypeCurrencyCode) }}</strong>
+              <small>Total</small>
+            </div>
+          </div>
+
+          <ul class="legend">
+            @for (row of revenueByEventTypeRows; track row.eventType; let i = $index) {
+              <li>
+                <span class="dot" [style.background]="getEventTypeColor(i)"></span>
+                <span class="name">{{ row.eventType }}</span>
+                <strong>{{ formatCurrency(row.totalRevenue, row.currencyCode) }}</strong>
+                <small>{{ formatPercent(row.revenueSharePercent) }}</small>
+              </li>
+            }
+            @if (revenueByEventTypeRows.length === 0) {
+              <li class="empty">No event type revenue data available.</li>
+            }
+          </ul>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Event Type</th>
+                <th>Count</th>
+                <th>Total Revenue</th>
+                <th>Avg Value</th>
+                <th>Avg Covers</th>
+                <th>Compare Revenue</th>
+                <th>Δ Revenue</th>
+                <th>Δ %</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of revenueByEventTypeRows; track row.eventType) {
+                <tr>
+                  <td>{{ row.eventType }}</td>
+                  <td>{{ row.count }}</td>
+                  <td>{{ formatCurrency(row.totalRevenue, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.averageValue, row.currencyCode) }}</td>
+                  <td>{{ row.averageCovers | number: '1.0-2' }}</td>
+                  <td>{{ formatCurrency(row.compareTotalRevenue, row.currencyCode) }}</td>
+                  <td [class]="varianceClass(row.revenueDelta)">{{ formatCurrency(row.revenueDelta, row.currencyCode) }}</td>
+                  <td [class]="varianceClass(row.revenueDelta)">{{ formatNullablePercent(row.revenueDeltaPercent) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        @if (revenueByEventTypeReport?.note) {
+          <p class="helper-note">{{ revenueByEventTypeReport?.note }}</p>
+        }
+      </article>
+
+      <article class="report-card report-wide">
+        <header class="card-header">
+          <div>
+            <h2>Sales Team Performance</h2>
+            <p>Operator-level pipeline and productivity performance.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('sales-team-performance', 'csv')" (click)="exportSection('sales-team-performance', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('sales-team-performance', 'pdf')" (click)="exportSection('sales-team-performance', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('sales-team-performance')">Schedule</button>
+            @if (getActiveScheduleCount('sales-team-performance') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('sales-team-performance') }}</span>
+            }
+          </div>
+        </header>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Event Manager</th>
+                <th>Enquiries</th>
+                <th>Proposals Sent</th>
+                <th>Conversion Rate</th>
+                <th>Revenue (Confirmed)</th>
+                <th>Avg Response Time</th>
+                <th>Tasks Completed</th>
+                <th>Appointments Held</th>
+                <th>Trend</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of salesTeamRows; track row.rank) {
+                <tr>
+                  <td>{{ row.rank }}</td>
+                  <td>{{ row.eventManagerName }}</td>
+                  <td>{{ row.enquiriesAssigned }}</td>
+                  <td>{{ row.proposalsSent }}</td>
+                  <td>{{ formatPercent(row.conversionRatePercent) }}</td>
+                  <td>{{ formatCurrency(row.confirmedRevenue, row.currencyCode) }}</td>
+                  <td>{{ row.averageResponseHours | number: '1.0-2' }}h</td>
+                  <td>{{ row.tasksCompleted }}</td>
+                  <td>{{ row.appointmentsHeld }}</td>
+                  <td>
+                    <div class="sparkline" [attr.aria-label]="sparklineLabel(row)">
+                      @for (point of row.trend; track $index) {
+                        <span class="sparkline-bar" [style.height.%]="sparklineHeight(point)"></span>
+                      }
+                      @if (row.trend.length === 0) {
+                        <span class="sparkline-empty">No trend</span>
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card report-wide">
+        <header class="card-header">
+          <div>
+            <h2>Forecast (Weighted Pipeline)</h2>
+            <p>Confirmed + weighted pipeline by month compared with budget target.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('forecast', 'csv')" (click)="exportSection('forecast', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('forecast', 'pdf')" (click)="exportSection('forecast', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('forecast')">Schedule</button>
+            @if (getActiveScheduleCount('forecast') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('forecast') }}</span>
+            }
+          </div>
+        </header>
+
+        <div class="chart-panel">
+          <div class="chart-heading">Stacked Area Forecast</div>
+          @if (weightedForecastRows.length > 0) {
+            <div class="trend-chart-canvas">
+              <canvas #weightedForecastCanvas></canvas>
+            </div>
+          } @else {
+            <p class="empty">No weighted forecast data for this period.</p>
+          }
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Month</th>
+                <th>Confirmed Value</th>
+                <th>Weighted Pipeline Value</th>
+                <th>Total Forecast</th>
+                <th>Budget Target</th>
+                <th>Variance</th>
+                <th>Pace</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of weightedForecastRows; track row.month) {
+                <tr>
+                  <td>{{ formatMonth(row.month) }}</td>
+                  <td>{{ formatCurrency(row.confirmedValue, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.weightedPipelineValue, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.totalForecast, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.budgetTarget, row.currencyCode) }}</td>
+                  <td [class]="varianceClass(row.variance)">{{ formatCurrency(row.variance, row.currencyCode) }}</td>
+                  <td [class]="paceStatusClass(row.paceStatus)">{{ row.paceStatus }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card report-wide">
+        <header class="card-header">
+          <div>
+            <h2>Budget / Pace by Event Type</h2>
+            <p>Monthly event-type pace with LY and budget comparisons.</p>
+          </div>
+          <div class="actions">
+            <button type="button" class="ghost" [disabled]="isExporting('budget-pace-event-type', 'csv')" (click)="exportSection('budget-pace-event-type', 'csv')">Export CSV</button>
+            <button type="button" class="ghost" [disabled]="isExporting('budget-pace-event-type', 'pdf')" (click)="exportSection('budget-pace-event-type', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('budget-pace-event-type')">Schedule</button>
+            @if (getActiveScheduleCount('budget-pace-event-type') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('budget-pace-event-type') }}</span>
+            }
+          </div>
+        </header>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Event Type</th>
+                <th>Month</th>
+                <th>Bookings (TY)</th>
+                <th>Bookings (LY)</th>
+                <th>Revenue (TY)</th>
+                <th>Revenue (LY)</th>
+                <th>Budget</th>
+                <th>ASP (TY)</th>
+                <th>ASP (LY)</th>
+                <th>Avg Covers (TY)</th>
+                <th>Avg Covers (LY)</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of budgetPaceByEventTypeRows; track row.eventType + '-' + row.month + '-' + row.rowType) {
+                <tr [class.summary-row]="row.rowType === 'summary'">
+                  <td>
+                    @if (row.rowType === 'month') {
+                      <button type="button" class="table-link" (click)="drillIntoBudgetPaceRow(row)">{{ row.eventType }}</button>
+                    } @else {
+                      {{ row.eventType }}
+                    }
+                  </td>
+                  <td>{{ row.rowType === 'summary' ? 'Total' : formatMonth(row.month) }}</td>
+                  <td>{{ row.bookingCountThisYear }}</td>
+                  <td>{{ row.bookingCountLy }}</td>
+                  <td>{{ formatCurrency(row.revenueThisYear, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.revenueLy, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.budgetRevenue, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.aspThisYear, row.currencyCode) }}</td>
+                  <td>{{ formatCurrency(row.aspLy, row.currencyCode) }}</td>
+                  <td>{{ row.averageCoversThisYear | number: '1.0-2' }}</td>
+                  <td>{{ row.averageCoversLy | number: '1.0-2' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        @if (budgetPaceByEventTypeReport?.note) {
+          <p class="helper-note">{{ budgetPaceByEventTypeReport?.note }}</p>
+        }
+      </article>
+
       <article class="report-card report-wide">
         <header class="card-header">
           <div>
@@ -168,6 +509,10 @@
           <div class="actions">
             <button type="button" class="ghost" [disabled]="isExporting('revenue-forecast', 'csv')" (click)="exportSection('revenue-forecast', 'csv')">Export CSV</button>
             <button type="button" class="ghost" [disabled]="isExporting('revenue-forecast', 'pdf')" (click)="exportSection('revenue-forecast', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('revenue-forecast')">Schedule</button>
+            @if (getActiveScheduleCount('revenue-forecast') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('revenue-forecast') }}</span>
+            }
           </div>
         </header>
 
@@ -248,6 +593,10 @@
           <div class="actions">
             <button type="button" class="ghost" [disabled]="isExporting('pace', 'csv')" (click)="exportSection('pace', 'csv')">Export CSV</button>
             <button type="button" class="ghost" [disabled]="isExporting('pace', 'pdf')" (click)="exportSection('pace', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('pace')">Schedule</button>
+            @if (getActiveScheduleCount('pace') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('pace') }}</span>
+            }
           </div>
         </header>
 
@@ -319,6 +668,10 @@
           <div class="actions">
             <button type="button" class="ghost" [disabled]="isExporting('sustainability', 'csv')" (click)="exportSection('sustainability', 'csv')">Export CSV</button>
             <button type="button" class="ghost" [disabled]="isExporting('sustainability', 'pdf')" (click)="exportSection('sustainability', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('sustainability')">Schedule</button>
+            @if (getActiveScheduleCount('sustainability') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('sustainability') }}</span>
+            }
           </div>
         </header>
 
@@ -385,6 +738,10 @@
           <div class="actions">
             <button type="button" class="ghost" [disabled]="isExporting('source-analysis', 'csv')" (click)="exportSection('source-analysis', 'csv')">Export CSV</button>
             <button type="button" class="ghost" [disabled]="isExporting('source-analysis', 'pdf')" (click)="exportSection('source-analysis', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('source-analysis')">Schedule</button>
+            @if (getActiveScheduleCount('source-analysis') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('source-analysis') }}</span>
+            }
           </div>
         </header>
 
@@ -421,6 +778,10 @@
           <div class="actions">
             <button type="button" class="ghost" [disabled]="isExporting('lost-reason-analysis', 'csv')" (click)="exportSection('lost-reason-analysis', 'csv')">Export CSV</button>
             <button type="button" class="ghost" [disabled]="isExporting('lost-reason-analysis', 'pdf')" (click)="exportSection('lost-reason-analysis', 'pdf')">Export PDF</button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('lost-reason-analysis')">Schedule</button>
+            @if (getActiveScheduleCount('lost-reason-analysis') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('lost-reason-analysis') }}</span>
+            }
           </div>
         </header>
 
@@ -443,5 +804,106 @@
         </div>
       </article>
     </section>
+  }
+
+  @if (scheduleDialogOpen) {
+    <div class="schedule-modal-backdrop" (click)="closeScheduleDialog()">
+      <div class="schedule-modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+        <header>
+          <div>
+            <h3>Schedule {{ scheduleDialogReportKey ? getReportTitle(scheduleDialogReportKey) : 'Report' }}</h3>
+            <p>{{ getScheduleFilterSummary() }}</p>
+          </div>
+          <button type="button" class="icon-btn" (click)="closeScheduleDialog()">✕</button>
+        </header>
+
+        @if (scheduleDialogError) {
+          <p class="modal-state error">{{ scheduleDialogError }}</p>
+        }
+        @if (scheduleDialogSuccess) {
+          <p class="modal-state success">{{ scheduleDialogSuccess }}</p>
+        }
+
+        <div class="modal-form-grid">
+          <label>
+            Frequency
+            <select [(ngModel)]="scheduleFrequency">
+              @for (frequency of reportScheduleFrequencyOptions; track frequency) {
+                <option [value]="frequency">{{ frequency }}</option>
+              }
+            </select>
+          </label>
+
+          @if (scheduleFrequency === 'weekly') {
+            <label>
+              Day of Week
+              <select [(ngModel)]="scheduleDayOfWeek">
+                @for (day of reportScheduleDayOptions; track day.value) {
+                  <option [ngValue]="day.value">{{ day.label }}</option>
+                }
+              </select>
+            </label>
+          }
+
+          @if (scheduleFrequency === 'monthly') {
+            <label>
+              Day of Month
+              <input type="number" min="1" max="31" [(ngModel)]="scheduleDayOfMonth" />
+            </label>
+          }
+
+          <label>
+            Time (UTC)
+            <input type="time" [(ngModel)]="scheduleTimeOfDay" />
+          </label>
+
+          <label>
+            Format
+            <select [(ngModel)]="scheduleFormat">
+              @for (format of reportScheduleFormatOptions; track format) {
+                <option [value]="format">{{ format }}</option>
+              }
+            </select>
+          </label>
+        </div>
+
+        <section class="recipient-section">
+          <label>
+            Recipients
+            <div class="recipient-input-row">
+              <input
+                type="email"
+                placeholder="name@venue.co.uk"
+                [(ngModel)]="scheduleRecipientDraft"
+                (keydown)="onScheduleRecipientKeydown($event)" />
+              <button type="button" class="ghost" (click)="addScheduleRecipientFromDraft()">Add</button>
+            </div>
+          </label>
+          <div class="recipient-chips">
+            @for (email of scheduleRecipients; track email) {
+              <span class="recipient-chip">
+                {{ email }}
+                <button type="button" (click)="removeScheduleRecipient(email)">×</button>
+              </span>
+            }
+            @if (scheduleRecipients.length === 0) {
+              <p class="empty">No recipients added yet.</p>
+            }
+          </div>
+        </section>
+
+        <label class="checkbox-row">
+          <input type="checkbox" [(ngModel)]="scheduleIsActive" />
+          Active schedule
+        </label>
+
+        <footer>
+          <button type="button" class="ghost" (click)="closeScheduleDialog()">Cancel</button>
+          <button type="button" class="primary" [disabled]="scheduleDialogSaving" (click)="saveSchedule()">
+            {{ scheduleDialogSaving ? 'Saving...' : 'Save Schedule' }}
+          </button>
+        </footer>
+      </div>
+    </div>
   }
 </section>

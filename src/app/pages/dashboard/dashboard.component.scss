@@ -402,6 +402,17 @@
   font-size: 0.72rem;
 }
 
+.widget-link {
+  justify-self: start;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #1d4ed8;
+  font-weight: 700;
+  font-size: 0.74rem;
+  padding: 0.35rem 0.6rem;
+}
+
 .action-list,
 .simple-list,
 .ai-insight-list,

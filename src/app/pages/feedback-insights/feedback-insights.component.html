@@ -6,50 +6,33 @@
     </div>
   </header>
 
-  <article
-    class="ingest-card"
-    [class.drag-active]="isDropActive"
-    (dragover)="onDragOver($event)"
-    (dragleave)="onDragLeave($event)"
-    (drop)="onDrop($event)">
+  <article class="ingest-card">
     <div class="ingest-copy">
       <h2>Data Source</h2>
-      <p>Upload a JSON export from <code>questionnaire_results</code>. This runs entirely in your browser.</p>
+      <p>Loaded from API-backed tables: <code>feedback.venues</code>, <code>feedback.questionnaires</code>, and <code>feedback.questionnaire_results</code>.</p>
       @if (sourceFileName) {
         <p class="source-meta">
-          Loaded <strong>{{ sourceFileName }}</strong> with {{ totalLoadedSubmissions | number }} submissions.
+          {{ sourceFileName }} with {{ totalLoadedSubmissions | number }} submissions.
         </p>
       }
-      <p>Optional: upload a venue mapping CSV with columns <code>_id,name</code> to show venue names.</p>
-      <p>Template: <code>/Users/lukeireland/.codex/workspaces/default/client/src/assets/venue-mapping-template.csv</code></p>
-      @if (venueMapFileName) {
-        <p class="source-meta">
-          Venue map loaded from <strong>{{ venueMapFileName }}</strong>.
-        </p>
+      @if (isLoading) {
+        <p class="source-meta">Loading feedback dataset…</p>
       }
       @if (loadError) {
         <p class="error">{{ loadError }}</p>
       }
-      @if (venueMapError) {
-        <p class="error">{{ venueMapError }}</p>
-      }
     </div>
     <div class="upload-actions">
-      <label class="upload-btn">
-        <input type="file" accept=".json,application/json" (change)="onFileInputChange($event)" [disabled]="isProcessing" />
-        <span>{{ isProcessing ? 'Processing file...' : 'Choose feedback JSON' }}</span>
-      </label>
-      <label class="upload-btn secondary-upload">
-        <input type="file" accept=".csv,text/csv" (change)="onVenueMapInputChange($event)" [disabled]="isVenueMapProcessing" />
-        <span>{{ isVenueMapProcessing ? 'Loading venue CSV...' : 'Choose venues CSV' }}</span>
-      </label>
+      <button type="button" class="ghost-btn" (click)="reloadFromApi()" [disabled]="isLoading">
+        {{ isLoading ? 'Refreshing…' : 'Refresh data' }}
+      </button>
     </div>
   </article>
 
   @if (!hasData) {
     <article class="state-card">
-      <h2>No feedback loaded yet</h2>
-      <p>Choose <code>/Users/lukeireland/Desktop/Feedback.json</code> to generate interactive venue insights.</p>
+      <h2>No feedback data available</h2>
+      <p>The API returned no records from <code>feedback.questionnaire_results</code>.</p>
     </article>
   } @else {
     <section class="filters-card">
@@ -286,10 +269,18 @@
         </article>
 
         <article class="panel">
-          <header>
-            <h2>Menu Item Ratings</h2>
-            <p>Lowest scoring menu items first for rapid food quality triage.</p>
+          <header class="panel-header-with-action">
+            <div>
+              <h2>Menu Item Ratings</h2>
+              <p>Lowest scoring menu items first for rapid food quality triage.</p>
+            </div>
+            <button type="button" class="ghost-btn" (click)="downloadVenueMenuFeedbackCsv()">
+              Download Venue-Friendly Menu Ratings + Comments
+            </button>
           </header>
+          @if (menuExportNotice) {
+            <p class="export-note">{{ menuExportNotice }}</p>
+          }
           <div class="table-wrap">
             <table>
               <thead>

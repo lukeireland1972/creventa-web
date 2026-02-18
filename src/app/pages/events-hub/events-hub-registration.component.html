@@ -1,0 +1,96 @@
+<section class="registration-page">
+  <header class="registration-header">
+    <a routerLink="/login" class="back-link">Back to CreventaFlow</a>
+    <h1>Venue Event Registration</h1>
+    <p>Register your details to attend this venue-hosted event.</p>
+  </header>
+
+  @if (loading) {
+    <article class="state-card">
+      <h2>Loading event details</h2>
+      <p>Please wait while we prepare the registration form.</p>
+    </article>
+  } @else if (event) {
+    <div class="registration-grid">
+      <article class="event-summary card">
+        <h2>{{ event.eventName }}</h2>
+        <p>{{ event.eventType }}</p>
+        <dl>
+          <div>
+            <dt>Venue</dt>
+            <dd>{{ event.venueName }}</dd>
+          </div>
+          <div>
+            <dt>Date & Time</dt>
+            <dd>{{ event.startUtc | date: 'EEE dd MMM yyyy HH:mm' }} - {{ event.endUtc | date: 'HH:mm' }}</dd>
+          </div>
+          <div>
+            <dt>Registrations</dt>
+            <dd>{{ event.currentAttendeeCount }} {{ event.registrationLimit ? '/ ' + event.registrationLimit : '' }}</dd>
+          </div>
+        </dl>
+        @if (event.description) {
+          <p class="description">{{ event.description }}</p>
+        }
+      </article>
+
+      <article class="registration-form-wrap card">
+        <h2>Register</h2>
+
+        @if (errorMessage) {
+          <p class="alert error">{{ errorMessage }}</p>
+        }
+
+        @if (successMessage) {
+          <p class="alert success">{{ successMessage }}</p>
+        }
+
+        <form [formGroup]="registrationForm" (ngSubmit)="submit()">
+          <div class="grid two">
+            <label>
+              <span>First Name</span>
+              <input type="text" formControlName="firstName" />
+            </label>
+            <label>
+              <span>Last Name</span>
+              <input type="text" formControlName="lastName" />
+            </label>
+          </div>
+
+          <label>
+            <span>Email</span>
+            <input type="email" formControlName="email" />
+          </label>
+
+          <div class="grid two">
+            <label>
+              <span>Phone (optional)</span>
+              <input type="text" formControlName="phoneNumberE164" placeholder="+447700900000" />
+            </label>
+            <label>
+              <span>Interest (optional)</span>
+              <input type="text" formControlName="eventInterest" placeholder="Wedding / Corporate / Private Dining" />
+            </label>
+          </div>
+
+          <label>
+            <span>Notes (optional)</span>
+            <textarea rows="3" formControlName="notes"></textarea>
+          </label>
+
+          <div class="form-actions">
+            <button type="submit" class="primary" [disabled]="submitting">
+              {{ submitting ? 'Submitting…' : 'Complete Registration' }}
+            </button>
+          </div>
+        </form>
+      </article>
+    </div>
+  } @else {
+    <article class="state-card error">
+      <h2>Registration unavailable</h2>
+      <p>{{ errorMessage || 'This event is no longer accepting registrations.' }}</p>
+    </article>
+  }
+</section>
+

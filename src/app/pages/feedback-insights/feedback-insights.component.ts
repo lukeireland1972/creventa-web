@@ -2,6 +2,14 @@ import { Component, DestroyRef, ElementRef, ViewChild, inject } from '@angular/c
 import { DatePipe, DecimalPipe, TitleCasePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Chart as ChartJs, registerables } from 'chart.js';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import {
+  ApiService,
+  FeedbackInsightsDatasetResponse,
+  FeedbackInsightsMenuRatingDto,
+  FeedbackInsightsResponseDto,
+  FeedbackInsightsResultDto
+} from '../../services/api.service';
 
 ChartJs.register(...registerables);
 
@@ -31,14 +39,14 @@ interface RawQuestionResponse {
 }
 
 interface RawFeedbackRecord {
-  _id?: RawDocumentReference | null;
-  created?: RawDateValue | null;
-  updated?: RawDateValue | null;
+  _id?: RawDocumentReference | string | null;
+  created?: RawDateValue | string | null;
+  updated?: RawDateValue | string | null;
   questionnaireId?: string | null;
   title?: string | null;
-  venueId?: RawDocumentReference | null;
-  eventId?: RawDocumentReference | null;
-  eventGuestId?: RawDocumentReference | null;
+  venueId?: RawDocumentReference | string | null;
+  eventId?: RawDocumentReference | string | null;
+  eventGuestId?: RawDocumentReference | string | null;
   eventGuestName?: string | null;
   mailingList?: boolean | null;
   responses?: RawQuestionResponse[] | null;
@@ -161,6 +169,15 @@ interface CommentDrilldownRow {
   createdAt: number;
 }
 
+interface MenuItemCommentExportRow {
+  comment: string;
+  score: number | null;
+  guestName: string;
+  eventTitle: string;
+  questionnaireId: string;
+  createdAt: number;
+}
+
 @Component({
   selector: 'app-feedback-insights',
   imports: [FormsModule, DecimalPipe, DatePipe, TitleCasePipe],
@@ -169,6 +186,7 @@ interface CommentDrilldownRow {
 })
 export class FeedbackInsightsComponent {
   private readonly destroyRef = inject(DestroyRef);
+  private readonly api = inject(ApiService);
 
   @ViewChild('trendCanvas')
   private trendCanvas?: ElementRef<HTMLCanvasElement>;
@@ -179,7 +197,7 @@ export class FeedbackInsightsComponent {
   @ViewChild('distributionCanvas')
   private distributionCanvas?: ElementRef<HTMLCanvasElement>;
 
-  isDropActive = false;
+  isLoading = false;
   isProcessing = false;
   isVenueMapProcessing = false;
   loadError = '';
@@ -232,6 +250,7 @@ export class FeedbackInsightsComponent {
   commentScoreFilter: CommentScoreFilter = 'all';
   commentPage = 1;
   commentPageSize = 25;
+  menuExportNotice = '';
 
   totalLoadedSubmissions = 0;
 
@@ -254,59 +273,15 @@ export class FeedbackInsightsComponent {
 
   constructor() {
     this.destroyRef.onDestroy(() => this.destroyCharts());
+    this.loadFromApi();
   }
 
   get hasData(): boolean {
     return this.allSubmissions.length > 0;
   }
 
-  onFileInputChange(event: Event): void {
-    const input = event.target as HTMLInputElement | null;
-    const file = input?.files?.item(0);
-    if (!file) {
-      return;
-    }
-
-    if (input) {
-      input.value = '';
-    }
-
-    void this.loadFromFile(file);
-  }
-
-  onVenueMapInputChange(event: Event): void {
-    const input = event.target as HTMLInputElement | null;
-    const file = input?.files?.item(0);
-    if (!file) {
-      return;
-    }
-
-    if (input) {
-      input.value = '';
-    }
-
-    void this.loadVenueMapFromFile(file);
-  }
-
-  onDragOver(event: DragEvent): void {
-    event.preventDefault();
-    this.isDropActive = true;
-  }
-
-  onDragLeave(event: DragEvent): void {
-    event.preventDefault();
-    this.isDropActive = false;
-  }
-
-  onDrop(event: DragEvent): void {
-    event.preventDefault();
-    this.isDropActive = false;
-    const file = event.dataTransfer?.files?.item(0);
-    if (!file) {
-      return;
-    }
-
-    void this.loadFromFile(file);
+  reloadFromApi(): void {
+    this.loadFromApi();
   }
 
   resetFilters(): void {
@@ -326,6 +301,7 @@ export class FeedbackInsightsComponent {
     this.commentScoreFilter = 'all';
     this.commentPage = 1;
     this.commentPageSize = 25;
+    this.menuExportNotice = '';
     this.fromDate = this.toInputDate(this.minDataTimestamp);
     this.toDate = this.toInputDate(this.maxDataTimestamp);
     this.applyFilters();
@@ -345,6 +321,7 @@ export class FeedbackInsightsComponent {
     const rangeStart = Math.min(fromTs, toTs);
     const rangeEnd = Math.max(fromTs, toTs);
     const query = this.searchText.trim().toLowerCase();
+    this.menuExportNotice = '';
 
     this.filteredSubmissions = this.allSubmissions.filter((submission) => {
       if (submission.createdAt < rangeStart || submission.createdAt > rangeEnd) {
@@ -514,6 +491,146 @@ export class FeedbackInsightsComponent {
     URL.revokeObjectURL(downloadUrl);
   }
 
+  downloadVenueMenuFeedbackCsv(): void {
+    const menuMap = new Map<string, {
+      venueId: string;
+      courseName: string;
+      menuItemName: string;
+      scoreSum: number;
+      scoreCount: number;
+      comments: MenuItemCommentExportRow[];
+    }>();
+
+    for (const submission of this.filteredSubmissions) {
+      for (const response of submission.responses) {
+        for (const menuRating of response.menuRatings) {
+          const key = `${submission.venueId}||${menuRating.courseName}||${menuRating.menuItemName}`;
+          const aggregate = menuMap.get(key) ?? {
+            venueId: submission.venueId,
+            courseName: menuRating.courseName,
+            menuItemName: menuRating.menuItemName,
+            scoreSum: 0,
+            scoreCount: 0,
+            comments: []
+          };
+
+          if (menuRating.score !== null) {
+            aggregate.scoreSum += menuRating.score;
+            aggregate.scoreCount += 1;
+          }
+
+          for (const feedbackText of menuRating.feedbackTexts) {
+            aggregate.comments.push({
+              comment: feedbackText,
+              score: menuRating.score,
+              guestName: submission.guestName,
+              eventTitle: submission.title,
+              questionnaireId: submission.questionnaireId,
+              createdAt: submission.createdAt
+            });
+          }
+
+          menuMap.set(key, aggregate);
+        }
+      }
+    }
+
+    if (menuMap.size === 0) {
+      this.menuExportNotice = 'No menu ratings/comments are available for the current filters.';
+      return;
+    }
+
+    const headers = [
+      'Venue',
+      'Course',
+      'Menu Item',
+      'Average Rating',
+      'Rating Count',
+      'Comment Count',
+      'Comment Rating',
+      'Customer Comment',
+      'Guest Name',
+      'Event',
+      'Questionnaire',
+      'Comment Date'
+    ];
+
+    const rows: Array<Array<string | number>> = [];
+    const sortedAggregates = [...menuMap.values()].sort((left, right) => {
+      const venueCompare = this.venueLabel(left.venueId).localeCompare(this.venueLabel(right.venueId), undefined, { sensitivity: 'base' });
+      if (venueCompare !== 0) {
+        return venueCompare;
+      }
+
+      const courseCompare = left.courseName.localeCompare(right.courseName, undefined, { sensitivity: 'base' });
+      if (courseCompare !== 0) {
+        return courseCompare;
+      }
+
+      return left.menuItemName.localeCompare(right.menuItemName, undefined, { sensitivity: 'base' });
+    });
+
+    for (const aggregate of sortedAggregates) {
+      const average = aggregate.scoreCount > 0 ? (aggregate.scoreSum / aggregate.scoreCount).toFixed(2) : 'Unscored';
+      const sortedComments = [...aggregate.comments].sort((left, right) => right.createdAt - left.createdAt);
+
+      if (sortedComments.length === 0) {
+        rows.push([
+          this.venueLabel(aggregate.venueId),
+          aggregate.courseName,
+          aggregate.menuItemName,
+          average,
+          aggregate.scoreCount,
+          0,
+          '',
+          '',
+          '',
+          '',
+          '',
+          ''
+        ]);
+        continue;
+      }
+
+      for (const comment of sortedComments) {
+        rows.push([
+          this.venueLabel(aggregate.venueId),
+          aggregate.courseName,
+          aggregate.menuItemName,
+          average,
+          aggregate.scoreCount,
+          sortedComments.length,
+          comment.score === null ? 'Unscored' : comment.score.toFixed(1),
+          comment.comment,
+          comment.guestName,
+          comment.eventTitle,
+          comment.questionnaireId,
+          new Date(comment.createdAt).toISOString()
+        ]);
+      }
+    }
+
+    const csvLines = [headers, ...rows].map((line) => line.map((value) => this.csvCell(value)).join(','));
+    const csvText = `\uFEFF${csvLines.join('\r\n')}`;
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8;' });
+    const downloadUrl = URL.createObjectURL(blob);
+
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    const venueNamePart = this.selectedVenue === 'all'
+      ? 'all-venues'
+      : this.toFileSafeSegment(this.venueLabel(this.selectedVenue));
+    const stamp = new Date().toISOString().replace(/[:]/g, '-').slice(0, 19);
+    link.download = `venue-menu-ratings-comments-${venueNamePart}-${stamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    URL.revokeObjectURL(downloadUrl);
+    const totalComments = rows.filter((row) => String(row[7]).trim().length > 0).length;
+    this.menuExportNotice = `Downloaded ${sortedAggregates.length} menu items with ${totalComments} comments.`;
+  }
+
   private async loadFromFile(file: File): Promise<void> {
     this.isProcessing = true;
     this.loadError = '';
@@ -540,8 +657,75 @@ export class FeedbackInsightsComponent {
       this.loadError = this.resolveErrorMessage(error);
     } finally {
       this.isProcessing = false;
-      this.isDropActive = false;
     }
+  }
+
+  private loadFromApi(): void {
+    this.isLoading = true;
+    this.loadError = '';
+
+    this.api.getFeedbackInsightsDataset()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (dataset) => {
+          this.isLoading = false;
+          this.hydrateFromApiDataset(dataset);
+        },
+        error: () => {
+          this.isLoading = false;
+          this.resetDataState();
+          this.loadError = 'Unable to load feedback data from API.';
+        }
+      });
+  }
+
+  private hydrateFromApiDataset(dataset: FeedbackInsightsDatasetResponse): void {
+    const rawRecords = this.mapApiResultsToRawRecords(dataset.results);
+    const submissions = this.normalizeSubmissions(rawRecords);
+    if (submissions.length === 0) {
+      this.resetDataState();
+      this.loadError = 'No feedback records were returned by the API.';
+      return;
+    }
+
+    this.venueNameById = new Map(
+      dataset.venues.map((venue) => [this.normalizeVenueIdLookupKey(venue.id), venue.name])
+    );
+    this.venueMapFileName = '';
+    this.sourceFileName = `API dataset generated ${new Date(dataset.generatedAtUtc).toLocaleString()}`;
+    this.allSubmissions = submissions;
+    this.totalLoadedSubmissions = submissions.length;
+    this.initializeFiltersFromData();
+    this.applyFilters();
+  }
+
+  private mapApiResultsToRawRecords(results: FeedbackInsightsResultDto[]): RawFeedbackRecord[] {
+    return results.map((result) => ({
+      _id: result.id,
+      created: result.createdAtUtc,
+      updated: result.updatedAtUtc ?? null,
+      questionnaireId: result.questionnaireId,
+      title: result.title,
+      venueId: result.venueId,
+      eventId: result.eventId ?? null,
+      eventGuestId: result.eventGuestId ?? null,
+      eventGuestName: result.eventGuestName,
+      mailingList: result.mailingList,
+      responses: (result.responses ?? []).map((response: FeedbackInsightsResponseDto) => ({
+        questionId: response.questionId,
+        contributesTo: response.contributesTo ?? null,
+        responseScore: response.responseScore ?? null,
+        responseValue: response.responseValue ?? null,
+        furtherFeedbackValue: response.furtherFeedbackValue ?? null,
+        completed: response.completed ?? null,
+        menuRatings: (response.menuRatings ?? []).map((menu: FeedbackInsightsMenuRatingDto) => ({
+          courseName: menu.courseName ?? null,
+          menuItemName: menu.menuItemName ?? null,
+          score: menu.score ?? null,
+          furtherFeedbackValue: menu.furtherFeedbackValue ?? null
+        }))
+      }))
+    }));
   }
 
   private async loadVenueMapFromFile(file: File): Promise<void> {
@@ -625,10 +809,6 @@ export class FeedbackInsightsComponent {
       let scoreCount = 0;
 
       for (const rawResponse of record.responses ?? []) {
-        if (rawResponse.completed === false) {
-          continue;
-        }
-
         const questionId = this.normalizeIdentifier(rawResponse.questionId, 'unknown-question');
         const category = this.normalizeCategory(rawResponse.contributesTo);
         const score = this.toFiniteNumber(rawResponse.responseScore);
@@ -645,6 +825,13 @@ export class FeedbackInsightsComponent {
 
           menuRatings.push(menuRating);
           searchParts.push(menuRating.courseName, menuRating.menuItemName, ...menuRating.feedbackTexts);
+        }
+
+        const hasSignal = score !== null
+          || feedbackTexts.length > 0
+          || menuRatings.some((menuRating) => menuRating.score !== null || menuRating.feedbackTexts.length > 0);
+        if (rawResponse.completed === false && !hasSignal) {
+          continue;
         }
 
         const normalizedResponse: NormalizedQuestionResponse = {
@@ -1059,6 +1246,11 @@ export class FeedbackInsightsComponent {
     return `"${text.replace(/"/g, '""')}"`;
   }
 
+  private toFileSafeSegment(value: string): string {
+    const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return normalized || 'venue';
+  }
+
   private resolveSubmissionAverage(submission: NormalizedFeedbackSubmission): number | null {
     if (this.selectedCategory === 'all') {
       return submission.averageScore;
@@ -1307,13 +1499,18 @@ export class FeedbackInsightsComponent {
     return value || fallback;
   }
 
-  private extractOid(reference: RawDocumentReference | null | undefined): string | null {
+  private extractOid(reference: RawDocumentReference | string | null | undefined): string | null {
+    if (typeof reference === 'string') {
+      const trimmed = reference.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    }
+
     const value = reference?.$oid?.trim();
     return value && value.length > 0 ? value : null;
   }
 
-  private extractTimestamp(dateValue: RawDateValue | null | undefined): number | null {
-    const date = dateValue?.$date;
+  private extractTimestamp(dateValue: RawDateValue | string | null | undefined): number | null {
+    const date = typeof dateValue === 'string' ? dateValue : dateValue?.$date;
     if (!date) {
       return null;
     }

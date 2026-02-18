@@ -44,6 +44,7 @@ import {
   VenueEmailTemplateDto,
   VenueEmailAccountDto,
   NylasStatusDto,
+  WebsiteFormFieldConfigDto,
   WebsiteFormSettingDto,
   VenueProfileDto
 } from '../../services/api.service';
@@ -84,6 +85,14 @@ interface SectionState {
   success: string;
 }
 
+interface WebsiteFormFieldOption {
+  key: string;
+  label: string;
+  visible: boolean;
+  required: boolean;
+  sortOrder: number;
+}
+
 @Component({
   selector: 'app-settings',
   standalone: true,
@@ -98,6 +107,7 @@ export class SettingsComponent implements OnInit {
   private api = inject(ApiService);
   private formBuilder = inject(FormBuilder);
   private destroyRef = inject(DestroyRef);
+  private readonly websiteFormPreviewCacheBuster = Date.now().toString();
 
   readonly sections: SettingsSection[] = [
     {
@@ -252,8 +262,14 @@ export class SettingsComponent implements OnInit {
   ];
   readonly taskTemplateAutoApplyOptions = [
     { value: 'none', label: 'None' },
+    { value: 'openproposal', label: 'Open Proposal' },
     { value: 'provisional', label: 'Provisional' },
     { value: 'confirmed', label: 'Confirmed' }
+  ];
+  readonly taskTemplateDueDateRuleOptions = [
+    { value: 'days-after-trigger', label: 'Days after trigger' },
+    { value: 'days-before-event', label: 'Days before event' },
+    { value: 'days-after-event', label: 'Days after event' }
   ];
   readonly taskTemplatePriorityOptions = ['low', 'medium', 'high', 'urgent'];
   readonly taskTemplateCategoryOptions = [
@@ -282,6 +298,21 @@ export class SettingsComponent implements OnInit {
     'deposit_amount',
     'hold_expiry_date',
     'guest_count'
+  ];
+  readonly websiteFormAvailableFields: Array<{ key: string; label: string; defaultVisible: boolean; defaultRequired: boolean }> = [
+    { key: 'firstName', label: 'First Name', defaultVisible: true, defaultRequired: true },
+    { key: 'lastName', label: 'Last Name', defaultVisible: true, defaultRequired: true },
+    { key: 'email', label: 'Email', defaultVisible: true, defaultRequired: true },
+    { key: 'phone', label: 'Phone', defaultVisible: true, defaultRequired: true },
+    { key: 'eventType', label: 'Event Type', defaultVisible: true, defaultRequired: false },
+    { key: 'eventName', label: 'Event Name', defaultVisible: false, defaultRequired: false },
+    { key: 'eventDate', label: 'Event Date', defaultVisible: true, defaultRequired: true },
+    { key: 'guestsExpected', label: 'Guests Expected', defaultVisible: true, defaultRequired: true },
+    { key: 'eventStyle', label: 'Event Style', defaultVisible: true, defaultRequired: false },
+    { key: 'budgetRange', label: 'Budget Range', defaultVisible: true, defaultRequired: false },
+    { key: 'specialRequirements', label: 'Special Requirements', defaultVisible: true, defaultRequired: false },
+    { key: 'marketingConsent', label: 'Marketing Consent', defaultVisible: true, defaultRequired: false },
+    { key: 'dataConsent', label: 'Data Processing Consent', defaultVisible: true, defaultRequired: true }
   ];
   readonly taskTemplateAssigneeRoleOptions = [
     'owner',
@@ -402,6 +433,7 @@ export class SettingsComponent implements OnInit {
   guestProfileCustomFields: ContactCustomFieldDefinitionDto[] = [];
   emailTemplates: VenueEmailTemplateDto[] = [];
   websiteForms: WebsiteFormSettingDto[] = [];
+  websiteFormFields: WebsiteFormFieldOption[] = [];
   calendarAccounts: CalendarAccountSettingDto[] = [];
   taskTemplates: TaskTemplateDto[] = [];
   reportSchedules: ReportScheduleDto[] = [];
@@ -593,7 +625,12 @@ export class SettingsComponent implements OnInit {
     redirectUrl: [''],
     requiredFieldsCsv: ['firstName,lastName,email,phone,eventDate,guestsExpected,dataConsent', Validators.required],
     optionalFieldsCsv: ['eventStyle,budgetRange,specialRequirements,marketingConsent'],
-    styleJson: ['{"primaryColor":"#2563eb","buttonLabel":"Send Enquiry"}']
+    styleJson: ['{"primaryColor":"#2563eb","buttonLabel":"Send Enquiry"}'],
+    brandingPrimaryColor: ['#2563eb'],
+    brandingLogoUrl: [''],
+    gdprCheckboxText: ['I consent to my data being processed for this enquiry.'],
+    recaptchaSiteKey: [''],
+    autoAcknowledgementTemplateId: ['enquiry_ack']
   });
 
   readonly calendarAccountForm = this.formBuilder.group({
@@ -677,6 +714,37 @@ export class SettingsComponent implements OnInit {
     return this.getBudgetForm(this.selectedBudgetMonth);
   }
 
+  get taskTemplateGroups(): Array<{ status: string; label: string; templates: TaskTemplateDto[] }> {
+    const labelByStatus = new Map(this.taskTemplateAutoApplyOptions.map((option) => [option.value, option.label]));
+    const groups = new Map<string, TaskTemplateDto[]>();
+
+    for (const template of this.taskTemplates) {
+      const status = (template.triggerStatus || template.autoApplyOnStatus || 'none').toLowerCase();
+      const existing = groups.get(status) ?? [];
+      existing.push(template);
+      groups.set(status, existing);
+    }
+
+    for (const option of this.taskTemplateAutoApplyOptions) {
+      if (!groups.has(option.value)) {
+        groups.set(option.value, []);
+      }
+    }
+
+    return Array.from(groups.entries())
+      .map(([status, templates]) => ({
+        status,
+        label: labelByStatus.get(status) ?? status,
+        templates: templates.sort((left, right) => left.name.localeCompare(right.name))
+      }))
+      .sort((left, right) => {
+        const leftIndex = this.taskTemplateAutoApplyOptions.findIndex((option) => option.value === left.status);
+        const rightIndex = this.taskTemplateAutoApplyOptions.findIndex((option) => option.value === right.status);
+        return (leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex)
+          - (rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex);
+      });
+  }
+
   get conversionScoringWeightTotal(): number {
     const value = this.reportConfigurationForm.getRawValue();
     const fields = [
@@ -726,6 +794,7 @@ export class SettingsComponent implements OnInit {
     this.startNewAutomationRule();
     this.startNewTaskTemplate();
     this.startNewReportSchedule();
+    this.resetWebsiteFormEditor();
 
     this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
       const section = params.get('section') as SettingsSectionKey | null;
@@ -771,6 +840,7 @@ export class SettingsComponent implements OnInit {
       this.runningScheduleId = null;
       this.startNewAutomationRule();
       this.startNewReportSchedule();
+      this.resetWebsiteFormEditor();
       this.ensureSectionLoaded(this.activeSectionKey);
     });
   }
@@ -2550,6 +2620,14 @@ export class SettingsComponent implements OnInit {
       return;
     }
 
+    const fieldStates = this.normalizedWebsiteFormFields;
+    const requiredFields = fieldStates.filter((field) => field.visible && field.required).map((field) => field.key);
+    const optionalFields = fieldStates.filter((field) => field.visible && !field.required).map((field) => field.key);
+    if (requiredFields.length === 0 || !requiredFields.includes('dataConsent')) {
+      this.setSectionError('website-forms', 'At least one required field is needed, and Data Processing Consent must remain required.');
+      return;
+    }
+
     const value = this.websiteFormForm.getRawValue();
     const id = this.optionalText(value.id) ?? crypto.randomUUID();
     const nextForm: WebsiteFormSettingDto = {
@@ -2559,9 +2637,21 @@ export class SettingsComponent implements OnInit {
       isActive: Boolean(value.isActive),
       successMessage: this.requiredText(value.successMessage),
       redirectUrl: this.optionalText(value.redirectUrl),
-      requiredFields: this.parseCsvList(value.requiredFieldsCsv),
-      optionalFields: this.parseCsvList(value.optionalFieldsCsv),
-      styleJson: this.optionalText(value.styleJson)
+      requiredFields,
+      optionalFields,
+      styleJson: this.optionalText(value.styleJson),
+      formFields: fieldStates.map((field, index): WebsiteFormFieldConfigDto => ({
+        key: field.key,
+        label: field.label,
+        isVisible: field.visible,
+        isRequired: field.visible && field.required,
+        sortOrder: index
+      })),
+      brandingPrimaryColor: this.optionalText(value.brandingPrimaryColor),
+      brandingLogoUrl: this.optionalText(value.brandingLogoUrl),
+      gdprCheckboxText: this.optionalText(value.gdprCheckboxText),
+      recaptchaSiteKey: this.optionalText(value.recaptchaSiteKey),
+      autoAcknowledgementTemplateId: this.optionalText(value.autoAcknowledgementTemplateId)
     };
 
     const forms = [nextForm, ...this.websiteForms.filter((form) => form.id !== id)];
@@ -2574,17 +2664,7 @@ export class SettingsComponent implements OnInit {
           this.websiteForms = response;
           this.setSectionSuccess('website-forms', 'Website form saved.');
           this.setSectionSaving('website-forms', false);
-          this.websiteFormForm.reset({
-            id: '',
-            name: '',
-            slug: '',
-            isActive: true,
-            successMessage: 'Thank you. We have received your enquiry.',
-            redirectUrl: '',
-            requiredFieldsCsv: 'firstName,lastName,email,phone,eventDate,guestsExpected,dataConsent',
-            optionalFieldsCsv: 'eventStyle,budgetRange,specialRequirements,marketingConsent',
-            styleJson: '{"primaryColor":"#2563eb","buttonLabel":"Send Enquiry"}'
-          });
+          this.resetWebsiteFormEditor();
         },
         error: (error) => {
           this.setSectionError('website-forms', this.resolveError(error, 'Unable to save website form.'));
@@ -2603,8 +2683,14 @@ export class SettingsComponent implements OnInit {
       redirectUrl: form.redirectUrl ?? '',
       requiredFieldsCsv: form.requiredFields.join(','),
       optionalFieldsCsv: form.optionalFields.join(','),
-      styleJson: form.styleJson ?? ''
+      styleJson: form.styleJson ?? '',
+      brandingPrimaryColor: form.brandingPrimaryColor ?? '',
+      brandingLogoUrl: form.brandingLogoUrl ?? '',
+      gdprCheckboxText: form.gdprCheckboxText ?? 'I consent to my data being processed for this enquiry.',
+      recaptchaSiteKey: form.recaptchaSiteKey ?? '',
+      autoAcknowledgementTemplateId: form.autoAcknowledgementTemplateId ?? 'enquiry_ack'
     });
+    this.hydrateWebsiteFormFields(form);
   }
 
   deleteWebsiteForm(id: string): void {
@@ -2622,12 +2708,218 @@ export class SettingsComponent implements OnInit {
           this.websiteForms = response;
           this.setSectionSuccess('website-forms', 'Website form removed.');
           this.setSectionSaving('website-forms', false);
+          this.resetWebsiteFormEditor();
         },
         error: (error) => {
           this.setSectionError('website-forms', this.resolveError(error, 'Unable to remove website form.'));
           this.setSectionSaving('website-forms', false);
         }
       });
+  }
+
+  resetWebsiteFormEditor(): void {
+    this.websiteFormForm.reset({
+      id: '',
+      name: '',
+      slug: '',
+      isActive: true,
+      successMessage: 'Thank you. We have received your enquiry.',
+      redirectUrl: '',
+      requiredFieldsCsv: 'firstName,lastName,email,phone,eventDate,guestsExpected,dataConsent',
+      optionalFieldsCsv: 'eventStyle,budgetRange,specialRequirements,marketingConsent',
+      styleJson: '{"primaryColor":"#2563eb","buttonLabel":"Send Enquiry"}',
+      brandingPrimaryColor: '#2563eb',
+      brandingLogoUrl: '',
+      gdprCheckboxText: 'I consent to my data being processed for this enquiry.',
+      recaptchaSiteKey: '',
+      autoAcknowledgementTemplateId: 'enquiry_ack'
+    });
+    this.websiteFormFields = this.websiteFormAvailableFields.map((field, index) => ({
+      key: field.key,
+      label: field.label,
+      visible: field.defaultVisible,
+      required: field.defaultRequired,
+      sortOrder: index
+    }));
+  }
+
+  private hydrateWebsiteFormFields(form: WebsiteFormSettingDto): void {
+    const byKey = new Map<string, WebsiteFormFieldOption>();
+
+    for (const field of this.websiteFormAvailableFields) {
+      byKey.set(field.key.toLowerCase(), {
+        key: field.key,
+        label: field.label,
+        visible: field.defaultVisible,
+        required: field.defaultRequired,
+        sortOrder: byKey.size
+      });
+    }
+
+    const configuredFields = (form.formFields ?? []).length > 0
+      ? (form.formFields ?? [])
+      : [
+          ...form.requiredFields.map((key, index) => ({ key, label: key, isVisible: true, isRequired: true, sortOrder: index })),
+          ...form.optionalFields.map((key, index) => ({ key, label: key, isVisible: true, isRequired: false, sortOrder: form.requiredFields.length + index }))
+        ];
+
+    for (const config of configuredFields) {
+      if (!config?.key) {
+        continue;
+      }
+
+      byKey.set(config.key.toLowerCase(), {
+        key: config.key,
+        label: config.label || byKey.get(config.key.toLowerCase())?.label || config.key,
+        visible: config.isVisible !== false,
+        required: config.isRequired || form.requiredFields.some((field) => field.toLowerCase() === config.key.toLowerCase()),
+        sortOrder: Number(config.sortOrder ?? 0)
+      });
+    }
+
+    this.websiteFormFields = Array.from(byKey.values())
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((field, index) => ({ ...field, sortOrder: index }));
+    this.syncWebsiteFieldCsv();
+  }
+
+  onWebsiteFieldVisibilityChanged(field: WebsiteFormFieldOption): void {
+    if (!field.visible) {
+      field.required = false;
+    }
+    if (field.key === 'dataConsent') {
+      field.visible = true;
+      field.required = true;
+    }
+    this.syncWebsiteFieldCsv();
+  }
+
+  onWebsiteFieldRequiredChanged(field: WebsiteFormFieldOption): void {
+    if (field.required) {
+      field.visible = true;
+    }
+    if (field.key === 'dataConsent') {
+      field.required = true;
+      field.visible = true;
+    }
+    this.syncWebsiteFieldCsv();
+  }
+
+  get normalizedWebsiteFormFields(): WebsiteFormFieldOption[] {
+    return [...this.websiteFormFields]
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((field, index) => ({ ...field, sortOrder: index }));
+  }
+
+  get websiteFormPreviewUrl(): string {
+    if (!this.selectedVenueId) {
+      return '';
+    }
+
+    const embedBaseUrl = this.resolveWebsiteWidgetBaseUrl();
+    const cacheBusterQuery = `cb=${encodeURIComponent(this.websiteFormPreviewCacheBuster)}`;
+    const slug = this.requiredText(this.websiteFormForm.getRawValue().slug);
+    if (!slug) {
+      return `${embedBaseUrl}/embed/enquiry-form/${this.selectedVenueId}?${cacheBusterQuery}`;
+    }
+    return `${embedBaseUrl}/embed/enquiry-form/${this.selectedVenueId}/${encodeURIComponent(slug)}?${cacheBusterQuery}`;
+  }
+
+  get websiteFormWidgetScriptSnippet(): string {
+    if (!this.selectedVenueId) {
+      return '';
+    }
+    const embedBaseUrl = this.resolveWebsiteWidgetBaseUrl();
+    const slug = this.requiredText(this.websiteFormForm.getRawValue().slug);
+    const slugAttr = slug ? ` form-slug="${slug}"` : '';
+    return `<script src="${embedBaseUrl}/widget.js"></script>\n<creventa-enquiry-form venue-id="${this.selectedVenueId}"${slugAttr}></creventa-enquiry-form>`;
+  }
+
+  get websiteFormIframeSnippet(): string {
+    if (!this.selectedVenueId) {
+      return '';
+    }
+
+    const embedBaseUrl = this.resolveWebsiteWidgetBaseUrl();
+    const slug = this.requiredText(this.websiteFormForm.getRawValue().slug);
+    const suffix = slug ? `/${encodeURIComponent(slug)}` : '';
+    return `<iframe src="${embedBaseUrl}/embed/enquiry-form/${this.selectedVenueId}${suffix}" style="width:100%;min-height:760px;border:0;border-radius:12px;" loading="lazy"></iframe>`;
+  }
+
+  private resolveWebsiteWidgetBaseUrl(): string {
+    if (typeof window === 'undefined') {
+      return '';
+    }
+
+    const location = window.location;
+    const host = location.hostname.toLowerCase();
+    const isLocalHost = host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0';
+    if (isLocalHost && (location.port === '4200' || location.port === '5173')) {
+      return `${location.protocol}//${location.hostname}:5080`;
+    }
+
+    return location.origin;
+  }
+
+  copyWebsiteSnippet(value: string): void {
+    if (!value.trim()) {
+      return;
+    }
+
+    navigator.clipboard.writeText(value).then(
+      () => this.setSectionSuccess('website-forms', 'Embed code copied.'),
+      () => this.setSectionError('website-forms', 'Unable to copy embed code.')
+    );
+  }
+
+  get websiteFormPreviewPrimaryColor(): string {
+    const directColor = this.optionalText(this.websiteFormForm.getRawValue().brandingPrimaryColor);
+    return directColor ?? this.websiteFormStylePreview.primaryColor ?? '#2563eb';
+  }
+
+  get websiteFormPreviewLogoUrl(): string | null {
+    return this.optionalText(this.websiteFormForm.getRawValue().brandingLogoUrl);
+  }
+
+  get websiteFormPreviewButtonLabel(): string {
+    return this.websiteFormStylePreview.buttonLabel ?? 'Send Enquiry';
+  }
+
+  get websiteFormPreviewGdprText(): string {
+    return this.optionalText(this.websiteFormForm.getRawValue().gdprCheckboxText) ?? 'I consent to my data being processed for this enquiry.';
+  }
+
+  private syncWebsiteFieldCsv(): void {
+    const required = this.normalizedWebsiteFormFields
+      .filter((field) => field.visible && field.required)
+      .map((field) => field.key);
+    const optional = this.normalizedWebsiteFormFields
+      .filter((field) => field.visible && !field.required)
+      .map((field) => field.key);
+
+    this.websiteFormForm.patchValue(
+      {
+        requiredFieldsCsv: required.join(','),
+        optionalFieldsCsv: optional.join(',')
+      },
+      { emitEvent: false }
+    );
+  }
+
+  private get websiteFormStylePreview(): { primaryColor: string | null; buttonLabel: string | null } {
+    const styleJson = this.optionalText(this.websiteFormForm.getRawValue().styleJson);
+    if (!styleJson) {
+      return { primaryColor: null, buttonLabel: null };
+    }
+
+    try {
+      const parsed = JSON.parse(styleJson) as Record<string, unknown>;
+      const primaryColor = typeof parsed['primaryColor'] === 'string' ? parsed['primaryColor'].trim() || null : null;
+      const buttonLabel = typeof parsed['buttonLabel'] === 'string' ? parsed['buttonLabel'].trim() || null : null;
+      return { primaryColor, buttonLabel };
+    } catch {
+      return { primaryColor: null, buttonLabel: null };
+    }
   }
 
   saveCalendarAccount(): void {
@@ -2723,21 +3015,27 @@ export class SettingsComponent implements OnInit {
     const templateId = this.optionalText(value.id) ?? undefined;
     const items = this.taskTemplateItemControls.controls.map((control, index) => {
       const itemValue = control.getRawValue();
+      const normalizedDueDateRule = this.normalizeTemplateDueDateRuleForForm(itemValue.dueDateRule, Number(itemValue.dueDateOffset ?? 0));
+      const dueDateOffset = Math.max(0, Number(itemValue.dueDateOffset ?? 0));
+
       return {
         title: this.requiredText(itemValue.title),
         description: this.optionalText(itemValue.description),
         category: this.requiredText(itemValue.category),
         priority: this.requiredText(itemValue.priority),
         defaultAssigneeRole: this.requiredText(itemValue.defaultAssigneeRole),
-        dueDateOffset: Number(itemValue.dueDateOffset ?? 0),
+        dueDateRule: normalizedDueDateRule,
+        dueDateOffset,
         sortOrder: index + 1
       };
     });
 
     this.setSectionSaving('task-templates', true);
+    const normalizedEventType = this.requiredText(value.eventType);
     const payload = {
       name: this.requiredText(value.name),
-      eventType: this.requiredText(value.eventType),
+      eventType: normalizedEventType,
+      eventTypes: [normalizedEventType],
       description: this.optionalText(value.description),
       isActive: Boolean(value.isActive),
       autoApplyOnStatus: this.requiredText(value.autoApplyOnStatus),
@@ -2783,6 +3081,7 @@ export class SettingsComponent implements OnInit {
       category: string;
       priority: string;
       defaultAssigneeRole: string;
+      dueDateRule?: string;
       dueDateOffset: number;
       sortOrder: number;
     }> = template.tasks.length > 0
@@ -2793,6 +3092,7 @@ export class SettingsComponent implements OnInit {
           category: 'other',
           priority: 'medium',
           defaultAssigneeRole: 'owner',
+          dueDateRule: 'days-after-trigger',
           dueDateOffset: 0,
           sortOrder: 1
         }];
@@ -2806,7 +3106,8 @@ export class SettingsComponent implements OnInit {
           category: item.category,
           priority: item.priority,
           defaultAssigneeRole: item.defaultAssigneeRole,
-          dueDateOffset: item.dueDateOffset,
+          dueDateRule: this.normalizeTemplateDueDateRuleForForm(item.dueDateRule, item.dueDateOffset),
+          dueDateOffset: this.normalizeTemplateDueDateOffsetForForm(item.dueDateRule, item.dueDateOffset),
           sortOrder: item.sortOrder || index + 1
         })
       )
@@ -3911,10 +4212,16 @@ export class SettingsComponent implements OnInit {
       .subscribe({
         next: (forms) => {
           this.websiteForms = forms;
+          if (forms.length > 0) {
+            this.editWebsiteForm(forms[0]);
+          } else {
+            this.resetWebsiteFormEditor();
+          }
           this.setSectionLoading('website-forms', false);
         },
         error: (error) => {
           this.websiteForms = [];
+          this.resetWebsiteFormEditor();
           this.setSectionError('website-forms', this.resolveError(error, 'Unable to load website forms.'));
           this.setSectionLoading('website-forms', false);
         }
@@ -4219,6 +4526,7 @@ export class SettingsComponent implements OnInit {
     category?: string;
     priority?: string;
     defaultAssigneeRole?: string;
+    dueDateRule?: string;
     dueDateOffset?: number;
     sortOrder?: number;
   }): FormGroup {
@@ -4228,9 +4536,37 @@ export class SettingsComponent implements OnInit {
       category: [item?.category ?? 'other', Validators.required],
       priority: [item?.priority ?? 'medium', Validators.required],
       defaultAssigneeRole: [item?.defaultAssigneeRole ?? 'owner', Validators.required],
-      dueDateOffset: [item?.dueDateOffset ?? 0, [Validators.required, Validators.min(-3650), Validators.max(3650)]],
+      dueDateRule: [this.normalizeTemplateDueDateRuleForForm(item?.dueDateRule, item?.dueDateOffset), Validators.required],
+      dueDateOffset: [item?.dueDateOffset ?? 0, [Validators.required, Validators.min(0), Validators.max(3650)]],
       sortOrder: [item?.sortOrder ?? 1, [Validators.required, Validators.min(1)]]
     });
+  }
+
+  private normalizeTemplateDueDateRuleForForm(rule?: string | null, offset?: number | null): string {
+    const normalized = (rule ?? '').trim().toLowerCase();
+    if (normalized === 'days-before-event') {
+      return 'days-before-event';
+    }
+    if (normalized === 'days-after-event') {
+      return 'days-after-event';
+    }
+    if (normalized === 'event-date-offset') {
+      if (Number(offset ?? 0) < 0) {
+        return 'days-before-event';
+      }
+      if (Number(offset ?? 0) > 0) {
+        return 'days-after-event';
+      }
+    }
+    return 'days-after-trigger';
+  }
+
+  private normalizeTemplateDueDateOffsetForForm(rule: string | undefined, offset: number): number {
+    const normalizedRule = this.normalizeTemplateDueDateRuleForForm(rule, offset);
+    if (normalizedRule === 'days-before-event') {
+      return Math.abs(offset ?? 0);
+    }
+    return Math.max(0, offset ?? 0);
   }
 
   private replaceFormArray(target: FormArray, next: FormGroup[]): void {

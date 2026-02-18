@@ -244,6 +244,7 @@ export interface EventsHubAttendeeDto {
   convertedEnquiryId?: string | null;
   checkedIn: boolean;
   checkedInAtUtc?: string | null;
+  registeredAtUtc: string;
 }
 
 export interface UpsertEventsHubAttendeeRequest {
@@ -254,6 +255,44 @@ export interface UpsertEventsHubAttendeeRequest {
   eventInterest?: string | null;
   notes?: string | null;
   followUpStatus: 'Pending' | 'Contacted' | 'Converted' | 'NotInterested' | 'NoResponse';
+}
+
+export interface BulkEventsHubAttendeeFollowUpStatusRequest {
+  attendeeIds: string[];
+  followUpStatus: 'Pending' | 'Contacted' | 'Converted' | 'NotInterested' | 'NoResponse';
+}
+
+export interface BulkEventsHubAttendeeFollowUpStatusResponse {
+  updatedCount: number;
+}
+
+export interface ImportEventsHubAttendeesResponse {
+  importedCount: number;
+  skippedCount: number;
+  warnings: string[];
+}
+
+export interface PublicEventsHubRegistrationEventDto {
+  eventId: string;
+  venueId: string;
+  venueName: string;
+  eventName: string;
+  eventType: string;
+  startUtc: string;
+  endUtc: string;
+  description?: string | null;
+  capacity?: number | null;
+  registrationLimit?: number | null;
+  currentAttendeeCount: number;
+}
+
+export interface PublicEventsHubRegistrationRequest {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumberE164?: string | null;
+  eventInterest?: string | null;
+  notes?: string | null;
 }
 
 export interface EventsHubPublishResponse {
@@ -620,6 +659,79 @@ export interface WebsiteFormSettingDto {
   requiredFields: string[];
   optionalFields: string[];
   styleJson?: string | null;
+  formFields?: WebsiteFormFieldConfigDto[] | null;
+  brandingPrimaryColor?: string | null;
+  brandingLogoUrl?: string | null;
+  gdprCheckboxText?: string | null;
+  recaptchaSiteKey?: string | null;
+  autoAcknowledgementTemplateId?: string | null;
+}
+
+export interface WebsiteFormFieldConfigDto {
+  key: string;
+  label: string;
+  isVisible: boolean;
+  isRequired: boolean;
+  sortOrder: number;
+}
+
+export interface PublicWebsiteFormDto {
+  id: string;
+  name: string;
+  slug: string;
+  successMessage: string;
+  redirectUrl?: string | null;
+  requiredFields: string[];
+  optionalFields: string[];
+  styleJson?: string | null;
+  formFields: WebsiteFormFieldConfigDto[];
+  brandingPrimaryColor?: string | null;
+  brandingLogoUrl?: string | null;
+  gdprCheckboxText?: string | null;
+  recaptchaSiteKey?: string | null;
+  autoAcknowledgementTemplateId?: string | null;
+}
+
+export interface PublicWebsiteFormConfigResponse {
+  venueId: string;
+  venueName: string;
+  defaultFormId?: string | null;
+  forms: PublicWebsiteFormDto[];
+}
+
+export interface PublicWebsiteEnquirySubmitRequest {
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+  phoneNumberE164?: string | null;
+  eventType?: string | null;
+  eventName?: string | null;
+  eventStartUtc?: string | null;
+  eventDate?: string | null;
+  guestsExpected?: number | null;
+  eventStyle?: string | null;
+  budgetMinAmount?: number | null;
+  budgetMaxAmount?: number | null;
+  specialRequirements?: string | null;
+  marketingConsent: boolean;
+  dataConsent: boolean;
+  recaptchaToken?: string | null;
+  sourceUrl?: string | null;
+  utmSource?: string | null;
+  utmMedium?: string | null;
+  utmCampaign?: string | null;
+  utmContent?: string | null;
+  utmTerm?: string | null;
+  formId?: string | null;
+  formSlug?: string | null;
+}
+
+export interface PublicWebsiteEnquirySubmitResponse {
+  enquiryId: string;
+  enquiryReference: string;
+  status: string;
+  successMessage: string;
+  redirectUrl?: string | null;
 }
 
 export interface CalendarAccountSettingDto {
@@ -640,6 +752,15 @@ export interface RecentlyViewedDto {
   label: string;
   status?: string | null;
   secondaryLine?: string | null;
+  viewedAtUtc: string;
+}
+
+export interface RecentlyViewedBookingDto {
+  enquiryId: string;
+  enquiryRef: string;
+  clientName: string;
+  eventDate?: string | null;
+  status?: string | null;
   viewedAtUtc: string;
 }
 
@@ -770,6 +891,85 @@ export interface AppointmentDto {
   notes?: string | null;
 }
 
+export interface AppointmentLinkedEnquiryDto {
+  enquiryId: string;
+  reference: string;
+  contactName: string;
+  eventName?: string | null;
+  eventStartUtc: string;
+  status: string;
+}
+
+export interface AppointmentDetailDto {
+  id: string;
+  venueId: string;
+  title: string;
+  type: string;
+  startUtc: string;
+  endUtc: string;
+  durationMinutes: number;
+  spaceId?: string | null;
+  spaceName?: string | null;
+  attendees?: string | null;
+  assignedToUserId?: string | null;
+  assignedToName?: string | null;
+  status: string;
+  notes?: string | null;
+  relatedEnquiries: AppointmentLinkedEnquiryDto[];
+}
+
+export interface AppointmentListResponse {
+  items: AppointmentDetailDto[];
+}
+
+export interface UpsertAppointmentRequest {
+  venueId: string;
+  title: string;
+  type: string;
+  startUtc: string;
+  durationMinutes: number;
+  spaceId?: string | null;
+  attendees?: string | null;
+  relatedEnquiryIds: string[];
+  assignedToUserId?: string | null;
+  notes?: string | null;
+  status: 'Scheduled' | 'Completed' | 'Cancelled' | 'NoShow';
+  allowConflictOverride?: boolean;
+}
+
+export interface UpdateAppointmentRequest {
+  title: string;
+  type: string;
+  startUtc: string;
+  durationMinutes: number;
+  spaceId?: string | null;
+  attendees?: string | null;
+  relatedEnquiryIds: string[];
+  assignedToUserId?: string | null;
+  notes?: string | null;
+  status: 'Scheduled' | 'Completed' | 'Cancelled' | 'NoShow';
+  allowConflictOverride?: boolean;
+}
+
+export interface UpcomingAppointmentDto {
+  id: string;
+  venueId: string;
+  title: string;
+  type: string;
+  startUtc: string;
+  endUtc: string;
+  durationMinutes: number;
+  spaceId?: string | null;
+  spaceName?: string | null;
+  assignedToName?: string | null;
+  status: string;
+  relatedEnquiryCount: number;
+}
+
+export interface UpcomingAppointmentsResponse {
+  items: UpcomingAppointmentDto[];
+}
+
 export interface ActivityLogEntryDto {
   id: string;
   createdAtUtc: string;
@@ -821,9 +1021,12 @@ export interface AvailabilityEventDto {
   recordType: string;
   label: string;
   enquiryStatus?: string | null;
+  enquiryReference?: string | null;
+  clientName?: string | null;
   covers?: number | null;
   eventType?: string | null;
   eventStyle?: string | null;
+  spaceBooked?: boolean;
   spaceName: string;
   startUtc: string;
   endUtc: string;
@@ -2605,6 +2808,7 @@ export interface TaskTemplateItemDto {
   category: string;
   priority: string;
   defaultAssigneeRole: string;
+  dueDateRule: string;
   dueDateOffset: number;
   sortOrder: number;
 }
@@ -2614,9 +2818,11 @@ export interface TaskTemplateDto {
   venueId: string;
   name: string;
   eventType: string;
+  eventTypes: string[];
   description?: string | null;
   isActive: boolean;
   autoApplyOnStatus: string;
+  triggerStatus: string;
   tasks: TaskTemplateItemDto[];
   createdAtUtc: string;
   updatedAtUtc: string;
@@ -2632,6 +2838,7 @@ export interface TaskTemplateCreateItemRequest {
   category: string;
   priority: string;
   defaultAssigneeRole: string;
+  dueDateRule: string;
   dueDateOffset: number;
   sortOrder: number;
 }
@@ -2640,6 +2847,7 @@ export interface TaskTemplateCreateRequest {
   venueId: string;
   name: string;
   eventType: string;
+  eventTypes?: string[] | null;
   description?: string | null;
   isActive: boolean;
   autoApplyOnStatus: string;
@@ -2649,10 +2857,22 @@ export interface TaskTemplateCreateRequest {
 export interface TaskTemplateUpdateRequest {
   name: string;
   eventType: string;
+  eventTypes?: string[] | null;
   description?: string | null;
   isActive: boolean;
   autoApplyOnStatus: string;
   tasks: TaskTemplateCreateItemRequest[];
+}
+
+export interface TransitionEnquiryStatusResponse {
+  id: string;
+  status: string;
+  holdExpiresAtUtc?: string | null;
+  lostReason?: string | null;
+  lostReasonDetail?: string | null;
+  lostAtUtc?: string | null;
+  allowedTransitions: string[];
+  generatedTaskCount: number;
 }
 
 export interface NotificationItemDto {
@@ -2805,17 +3025,29 @@ export interface PortfolioSharedAvailabilityResponse {
 export interface TransferEnquiryVenueRequest {
   targetVenueId: string;
   reason?: string | null;
+  keepCopy?: boolean;
 }
 
 export interface TransferEnquiryVenueResponse {
   enquiryId: string;
   enquiryReference: string;
+  sourceEnquiryId?: string;
+  sourceEnquiryReference?: string;
+  targetEnquiryId?: string;
+  targetEnquiryReference?: string;
   sourceVenueId: string;
   sourceVenueName: string;
   targetVenueId: string;
   targetVenueName: string;
-  clearedSubEventSpaceLinks: number;
-  clearedSubEventMenuLinks: number;
+  keepCopy?: boolean;
+  sourceArchived?: boolean;
+  copiedSubEvents?: number;
+  copiedCommunications?: number;
+  copiedTasks?: number;
+  copiedDocuments?: number;
+  copiedActivityEntries?: number;
+  clearedSubEventSpaceLinks?: number;
+  clearedSubEventMenuLinks?: number;
   transferredAtUtc: string;
 }
 
@@ -2843,6 +3075,8 @@ export interface ReportFilterParams {
   venueId: string;
   from?: string;
   to?: string;
+  compareFrom?: string;
+  compareTo?: string;
   eventType?: string;
   status?: string;
 }
@@ -2884,6 +3118,74 @@ export interface TicketDashboardDatasetResponse {
   generatedAtUtc: string;
   venues: TicketDashboardVenueDto[];
   records: TicketDashboardRecordDto[];
+}
+
+export interface SeedTicketDashboardTestDataRequest {
+  venueId?: string | null;
+}
+
+export interface SeedTicketDashboardTestDataResponse {
+  venueId: string;
+  venueName: string;
+  eventsInserted: number;
+  purchasesInserted: number;
+  seededAtUtc: string;
+}
+
+export interface FeedbackInsightsVenueDto {
+  id: string;
+  name: string;
+  currencyCode: string;
+  currencySymbol: string;
+  timeZone: string;
+}
+
+export interface FeedbackInsightsQuestionnaireDto {
+  id: string;
+  venueId: string;
+  title: string;
+  description?: string | null;
+  status: string;
+  locale: string;
+  publishedAtUtc?: string | null;
+}
+
+export interface FeedbackInsightsMenuRatingDto {
+  courseName?: string | null;
+  menuItemName?: string | null;
+  score?: number | null;
+  furtherFeedbackValue?: string | null;
+}
+
+export interface FeedbackInsightsResponseDto {
+  questionId: string;
+  contributesTo?: string | null;
+  responseScore?: number | null;
+  responseValue?: string | null;
+  furtherFeedbackValue?: string | null;
+  completed?: boolean | null;
+  menuRatings: FeedbackInsightsMenuRatingDto[];
+}
+
+export interface FeedbackInsightsResultDto {
+  id: string;
+  createdAtUtc: string;
+  updatedAtUtc?: string | null;
+  questionnaireId: string;
+  title: string;
+  venueId: string;
+  eventId?: string | null;
+  eventGuestId?: string | null;
+  eventGuestName: string;
+  mailingList: boolean;
+  responses: FeedbackInsightsResponseDto[];
+}
+
+export interface FeedbackInsightsDatasetResponse {
+  generatedAtUtc: string;
+  venues: FeedbackInsightsVenueDto[];
+  questionnaires: FeedbackInsightsQuestionnaireDto[];
+  results: FeedbackInsightsResultDto[];
 }
 
 export interface ReportScheduleDto {
@@ -3173,6 +3475,51 @@ export class ApiService {
     );
   }
 
+  importEventsHubAttendeesCsv(
+    venueId: string,
+    eventId: string,
+    file: File,
+    mapping?: {
+      firstNameColumn?: string | null;
+      lastNameColumn?: string | null;
+      emailColumn?: string | null;
+      phoneColumn?: string | null;
+      eventInterestColumn?: string | null;
+      notesColumn?: string | null;
+      followUpStatusColumn?: string | null;
+    }
+  ): Observable<ImportEventsHubAttendeesResponse> {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (mapping?.firstNameColumn) {
+      formData.append('firstNameColumn', mapping.firstNameColumn);
+    }
+    if (mapping?.lastNameColumn) {
+      formData.append('lastNameColumn', mapping.lastNameColumn);
+    }
+    if (mapping?.emailColumn) {
+      formData.append('emailColumn', mapping.emailColumn);
+    }
+    if (mapping?.phoneColumn) {
+      formData.append('phoneColumn', mapping.phoneColumn);
+    }
+    if (mapping?.eventInterestColumn) {
+      formData.append('eventInterestColumn', mapping.eventInterestColumn);
+    }
+    if (mapping?.notesColumn) {
+      formData.append('notesColumn', mapping.notesColumn);
+    }
+    if (mapping?.followUpStatusColumn) {
+      formData.append('followUpStatusColumn', mapping.followUpStatusColumn);
+    }
+
+    return this.postWithApiPathFallback<ImportEventsHubAttendeesResponse>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}/attendees/import`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}/attendees/import`,
+      formData
+    );
+  }
+
   setEventsHubAttendeeCheckIn(
     venueId: string,
     eventId: string,
@@ -3183,6 +3530,31 @@ export class ApiService {
       `/api/v1/events-hub/venues/${venueId}/events/${eventId}/attendees/${attendeeId}/check-in`,
       `/api/events-hub/venues/${venueId}/events/${eventId}/attendees/${attendeeId}/check-in`,
       { checkedIn });
+  }
+
+  setEventsHubAttendeeFollowUpStatus(
+    venueId: string,
+    eventId: string,
+    attendeeId: string,
+    followUpStatus: 'Pending' | 'Contacted' | 'Converted' | 'NotInterested' | 'NoResponse'
+  ): Observable<EventsHubAttendeeDto> {
+    return this.patchWithApiPathFallback<EventsHubAttendeeDto>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}/attendees/${attendeeId}/follow-up-status`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}/attendees/${attendeeId}/follow-up-status`,
+      { followUpStatus }
+    );
+  }
+
+  bulkSetEventsHubAttendeeFollowUpStatus(
+    venueId: string,
+    eventId: string,
+    payload: BulkEventsHubAttendeeFollowUpStatusRequest
+  ): Observable<BulkEventsHubAttendeeFollowUpStatusResponse> {
+    return this.patchWithApiPathFallback<BulkEventsHubAttendeeFollowUpStatusResponse>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}/attendees/follow-up-status`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}/attendees/follow-up-status`,
+      payload
+    );
   }
 
   convertVenueEventAttendeeToEnquiry(
@@ -3199,9 +3571,29 @@ export class ApiService {
       spaceId?: string | null;
     }
   ): Observable<{ id: string; reference: string }> {
-    return this.http.post<{ id: string; reference: string }>(
-      `/api/venues/${venueId}/venue-events/${eventId}/attendees/${attendeeId}/convert-to-enquiry`,
-      payload);
+    return this.postWithApiPathFallback<{ id: string; reference: string }>(
+      `/api/v1/events-hub/venues/${venueId}/events/${eventId}/attendees/${attendeeId}/convert`,
+      `/api/events-hub/venues/${venueId}/events/${eventId}/attendees/${attendeeId}/convert`,
+      payload
+    );
+  }
+
+  getPublicEventsHubRegistrationEvent(eventId: string): Observable<PublicEventsHubRegistrationEventDto> {
+    return this.getWithApiPathFallback<PublicEventsHubRegistrationEventDto>(
+      `/api/v1/public/venue-events/${eventId}`,
+      `/api/public/venue-events/${eventId}`
+    );
+  }
+
+  registerPublicEventsHubAttendee(
+    eventId: string,
+    payload: PublicEventsHubRegistrationRequest
+  ): Observable<EventsHubAttendeeDto> {
+    return this.postWithApiPathFallback<EventsHubAttendeeDto>(
+      `/api/v1/public/venue-events/${eventId}/register`,
+      `/api/public/venue-events/${eventId}/register`,
+      payload
+    );
   }
 
   getUsers(venueId?: string): Observable<UserSummaryDto[]> {
@@ -3513,6 +3905,28 @@ export class ApiService {
     return this.http.put<WebsiteFormSettingDto[]>(`/api/venues/${venueId}/settings/website-forms`, { forms });
   }
 
+  getPublicWebsiteFormConfig(venueId: string, formId?: string | null, formSlug?: string | null): Observable<PublicWebsiteFormConfigResponse> {
+    let params = new HttpParams();
+    if (formId?.trim()) {
+      params = params.set('formId', formId.trim());
+    }
+    if (formSlug?.trim()) {
+      params = params.set('formSlug', formSlug.trim());
+    }
+    return this.http.get<PublicWebsiteFormConfigResponse>(`/api/public/enquiry-form/${venueId}/config`, { params });
+  }
+
+  submitPublicWebsiteEnquiry(venueId: string, payload: PublicWebsiteEnquirySubmitRequest, formId?: string | null, formSlug?: string | null): Observable<PublicWebsiteEnquirySubmitResponse> {
+    let params = new HttpParams();
+    if (formId?.trim()) {
+      params = params.set('formId', formId.trim());
+    }
+    if (formSlug?.trim()) {
+      params = params.set('formSlug', formSlug.trim());
+    }
+    return this.http.post<PublicWebsiteEnquirySubmitResponse>(`/api/public/enquiry-form/${venueId}`, payload, { params });
+  }
+
   getCalendarAccounts(venueId: string): Observable<CalendarAccountSettingDto[]> {
     return this.http.get<CalendarAccountSettingDto[]>(`/api/venues/${venueId}/settings/calendar-accounts`);
   }
@@ -3570,6 +3984,10 @@ export class ApiService {
 
   getRecentEnquiries(): Observable<RecentlyViewedDto[]> {
     return this.http.get<RecentlyViewedDto[]>('/api/enquiries/recent');
+  }
+
+  getMyRecentlyViewedBookings(): Observable<RecentlyViewedBookingDto[]> {
+    return this.http.get<RecentlyViewedBookingDto[]>('/api/users/me/recently-viewed');
   }
 
   getEnquiries(params: {
@@ -3923,11 +4341,96 @@ export class ApiService {
     return this.http.post<SubEventAvailabilityCheckResponse>(`/api/enquiries/${enquiryId}/sub-events/check-availability`, payload);
   }
 
+  getAppointments(params: {
+    venueId: string;
+    fromUtc?: string;
+    toUtc?: string;
+    enquiryId?: string;
+    assignedToUserId?: string;
+    status?: string;
+  }): Observable<AppointmentListResponse> {
+    let queryParams = new HttpParams().set('venueId', params.venueId);
+    if (params.fromUtc) {
+      queryParams = queryParams.set('fromUtc', params.fromUtc);
+    }
+    if (params.toUtc) {
+      queryParams = queryParams.set('toUtc', params.toUtc);
+    }
+    if (params.enquiryId) {
+      queryParams = queryParams.set('enquiryId', params.enquiryId);
+    }
+    if (params.assignedToUserId) {
+      queryParams = queryParams.set('assignedToUserId', params.assignedToUserId);
+    }
+    if (params.status) {
+      queryParams = queryParams.set('status', params.status);
+    }
+
+    return this.getWithApiPathFallback<AppointmentListResponse>(
+      '/api/v1/appointments',
+      '/api/appointments',
+      { params: queryParams }
+    );
+  }
+
+  getAppointment(appointmentId: string, venueId?: string): Observable<AppointmentDetailDto> {
+    let queryParams = new HttpParams();
+    if (venueId) {
+      queryParams = queryParams.set('venueId', venueId);
+    }
+
+    return this.getWithApiPathFallback<AppointmentDetailDto>(
+      `/api/v1/appointments/${appointmentId}`,
+      `/api/appointments/${appointmentId}`,
+      queryParams.keys().length ? { params: queryParams } : undefined
+    );
+  }
+
+  createAppointment(payload: UpsertAppointmentRequest): Observable<AppointmentDetailDto> {
+    return this.postWithApiPathFallback<AppointmentDetailDto>(
+      '/api/v1/appointments',
+      '/api/appointments',
+      payload
+    );
+  }
+
+  updateAppointment(appointmentId: string, payload: UpdateAppointmentRequest): Observable<AppointmentDetailDto> {
+    return this.putWithApiPathFallback<AppointmentDetailDto>(
+      `/api/v1/appointments/${appointmentId}`,
+      `/api/appointments/${appointmentId}`,
+      payload
+    );
+  }
+
+  deleteAppointment(appointmentId: string, venueId?: string): Observable<void> {
+    let queryParams = new HttpParams();
+    if (venueId) {
+      queryParams = queryParams.set('venueId', venueId);
+    }
+
+    return this.deleteWithApiPathFallback(
+      `/api/v1/appointments/${appointmentId}${queryParams.keys().length ? `?${queryParams.toString()}` : ''}`,
+      `/api/appointments/${appointmentId}${queryParams.keys().length ? `?${queryParams.toString()}` : ''}`
+    );
+  }
+
+  getUpcomingAppointments(venueId: string, days = 14): Observable<UpcomingAppointmentsResponse> {
+    const params = new HttpParams()
+      .set('venueId', venueId)
+      .set('days', Math.max(1, Math.min(90, Math.floor(days) || 14)));
+
+    return this.getWithApiPathFallback<UpcomingAppointmentsResponse>(
+      '/api/v1/appointments/upcoming',
+      '/api/appointments/upcoming',
+      { params }
+    );
+  }
+
   transitionEnquiryStatus(
     enquiryId: string,
     payload: { targetStatus: string; lostReason?: string; lostReasonDetail?: string; holdDaysOverride?: number; lostAtUtc?: string }
-  ): Observable<void> {
-    return this.http.post<void>(`/api/enquiries/${enquiryId}/status-transition`, payload);
+  ): Observable<TransitionEnquiryStatusResponse> {
+    return this.http.post<TransitionEnquiryStatusResponse>(`/api/enquiries/${enquiryId}/status-transition`, payload);
   }
 
   bulkAssignEnquiries(payload: {
@@ -3961,8 +4464,22 @@ export class ApiService {
   }
 
   getAvailability(venueId: string, date: string): Observable<AvailabilitySidebarResponse> {
-    const params = new HttpParams().set('venueId', venueId).set('date', date);
-    return this.http.get<AvailabilitySidebarResponse>('/api/enquiries/availability', { params });
+    const params = new HttpParams().set('date', date);
+
+    return this.getWithApiPathFallback<AvailabilitySidebarResponse>(
+      `/api/v1/venues/${venueId}/availability`,
+      `/api/venues/${venueId}/availability`,
+      { params }
+    ).pipe(
+      catchError((error) => {
+        if (error?.status === 404 || error?.status === 405) {
+          const legacyParams = new HttpParams().set('venueId', venueId).set('date', date);
+          return this.http.get<AvailabilitySidebarResponse>('/api/enquiries/availability', { params: legacyParams });
+        }
+
+        return throwError(() => error);
+      })
+    );
   }
 
   assignEnquirySpace(enquiryId: string, spaceId: string): Observable<void> {
@@ -4403,11 +4920,18 @@ export class ApiService {
   }
 
   getEnquiryRoutingOptions(enquiryId: string): Observable<PortfolioRoutingOptionsResponse> {
-    return this.http.get<PortfolioRoutingOptionsResponse>(`/api/portfolio/enquiries/${enquiryId}/routing-options`);
+    return this.getWithApiPathFallback<PortfolioRoutingOptionsResponse>(
+      `/api/v1/portfolio/enquiries/${enquiryId}/routing-options`,
+      `/api/portfolio/enquiries/${enquiryId}/routing-options`
+    );
   }
 
   transferEnquiryToVenue(enquiryId: string, payload: TransferEnquiryVenueRequest): Observable<TransferEnquiryVenueResponse> {
-    return this.http.post<TransferEnquiryVenueResponse>(`/api/portfolio/enquiries/${enquiryId}/transfer`, payload);
+    return this.postWithApiPathFallback<TransferEnquiryVenueResponse>(
+      `/api/v1/enquiries/${enquiryId}/transfer`,
+      `/api/portfolio/enquiries/${enquiryId}/transfer`,
+      payload
+    );
   }
 
   cascadeGroupSettings(payload: GroupSettingsCascadeRequest): Observable<GroupSettingsCascadeResponse> {
@@ -4931,6 +5455,19 @@ export class ApiService {
     return this.http.get<TicketDashboardDatasetResponse>('/api/reports/ticket-dashboard');
   }
 
+  seedTicketDashboardTestData(
+    request: SeedTicketDashboardTestDataRequest
+  ): Observable<SeedTicketDashboardTestDataResponse> {
+    return this.http.post<SeedTicketDashboardTestDataResponse>(
+      '/api/reports/ticket-dashboard/seed-test-data',
+      request
+    );
+  }
+
+  getFeedbackInsightsDataset(): Observable<FeedbackInsightsDatasetResponse> {
+    return this.http.get<FeedbackInsightsDatasetResponse>('/api/v1/reports/feedback-insights');
+  }
+
   getReport(reportKey: string, params: ReportFilterParams): Observable<ReportResponse> {
     let queryParams = new HttpParams().set('venueId', params.venueId);
     if (params.from) {
@@ -4938,6 +5475,12 @@ export class ApiService {
     }
     if (params.to) {
       queryParams = queryParams.set('to', params.to);
+    }
+    if (params.compareFrom) {
+      queryParams = queryParams.set('compareFrom', params.compareFrom);
+    }
+    if (params.compareTo) {
+      queryParams = queryParams.set('compareTo', params.compareTo);
     }
     if (params.eventType) {
       queryParams = queryParams.set('eventType', params.eventType);
@@ -4972,9 +5515,29 @@ export class ApiService {
     return this.getReport('sustainability', params);
   }
 
+  getRevenueBySpaceReport(params: ReportFilterParams): Observable<ReportResponse> {
+    return this.getReport('revenue-space', params);
+  }
+
+  getRevenueByEventTypeReport(params: ReportFilterParams): Observable<ReportResponse> {
+    return this.getReport('revenue-event-type', params);
+  }
+
+  getSalesTeamPerformanceReport(params: ReportFilterParams): Observable<ReportResponse> {
+    return this.getReport('sales-team-performance', params);
+  }
+
+  getForecastReport(params: ReportFilterParams): Observable<ReportResponse> {
+    return this.getReport('forecast', params);
+  }
+
+  getBudgetPaceByEventTypeReport(params: ReportFilterParams): Observable<ReportResponse> {
+    return this.getReport('budget-pace-event-type', params);
+  }
+
   exportReport(
     reportKey: string,
-    params: { venueId: string; format: 'csv' | 'xlsx' | 'pdf'; from?: string; to?: string; eventType?: string }
+    params: { venueId: string; format: 'csv' | 'xlsx' | 'pdf'; from?: string; to?: string; compareFrom?: string; compareTo?: string; eventType?: string }
   ): Observable<Blob> {
     let queryParams = new HttpParams().set('venueId', params.venueId).set('format', params.format);
     if (params.from) {
@@ -4982,6 +5545,12 @@ export class ApiService {
     }
     if (params.to) {
       queryParams = queryParams.set('to', params.to);
+    }
+    if (params.compareFrom) {
+      queryParams = queryParams.set('compareFrom', params.compareFrom);
+    }
+    if (params.compareTo) {
+      queryParams = queryParams.set('compareTo', params.compareTo);
     }
     if (params.eventType) {
       queryParams = queryParams.set('eventType', params.eventType);
@@ -4991,7 +5560,7 @@ export class ApiService {
 
   getReportSchedules(venueId: string): Observable<ReportSchedulesResponse> {
     const params = new HttpParams().set('venueId', venueId);
-    return this.http.get<ReportSchedulesResponse>('/api/reports/schedules', { params });
+    return this.getWithApiPathFallback<ReportSchedulesResponse>('/api/report-schedules', '/api/reports/schedules', { params });
   }
 
   upsertReportSchedule(
@@ -5018,19 +5587,34 @@ export class ApiService {
     if (scheduleId) {
       params = params.set('scheduleId', scheduleId);
     }
-    return this.http.post<ReportScheduleDto>('/api/reports/schedules', payload, { params });
+    return this.postWithApiPathFallback<ReportScheduleDto>('/api/report-schedules', '/api/reports/schedules', payload, { params });
   }
 
   deleteReportSchedule(scheduleId: string): Observable<void> {
-    return this.http.delete<void>(`/api/reports/schedules/${scheduleId}`);
+    return this.http.delete<void>(`/api/report-schedules/${scheduleId}`).pipe(
+      catchError((error) => {
+        if (error?.status === 404 || error?.status === 405) {
+          return this.http.delete<void>(`/api/reports/schedules/${scheduleId}`);
+        }
+
+        return throwError(() => error);
+      })
+    );
   }
 
   sendReportScheduleNow(scheduleId: string): Observable<ReportScheduleRunResponse> {
-    return this.http.post<ReportScheduleRunResponse>(`/api/reports/schedules/${scheduleId}/send-now`, {});
+    return this.postWithApiPathFallback<ReportScheduleRunResponse>(
+      `/api/report-schedules/${scheduleId}/send-now`,
+      `/api/reports/schedules/${scheduleId}/send-now`,
+      {}
+    );
   }
 
   getReportScheduleExecutions(scheduleId: string): Observable<ReportScheduleExecutionLogsResponse> {
-    return this.http.get<ReportScheduleExecutionLogsResponse>(`/api/reports/schedules/${scheduleId}/executions`);
+    return this.getWithApiPathFallback<ReportScheduleExecutionLogsResponse>(
+      `/api/report-schedules/${scheduleId}/executions`,
+      `/api/reports/schedules/${scheduleId}/executions`
+    );
   }
 
   runPipelineSnapshot(venueId: string): Observable<SnapshotRunResponse> {

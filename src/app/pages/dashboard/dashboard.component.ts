@@ -260,6 +260,10 @@ export class DashboardComponent implements OnInit {
     this.showAddTaskModal = true;
   }
 
+  openWebsiteEnquiry(): void {
+    this.router.navigateByUrl('/website-enquiry');
+  }
+
   closeAddTaskModal(): void {
     this.showAddTaskModal = false;
   }

@@ -1,6 +1,7 @@
 import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { animate, style, transition, trigger } from '@angular/animations';
 import { DatePipe, DecimalPipe } from '@angular/common';
-import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { catchError, concatMap, distinctUntilChanged, forkJoin, from, map, of, tap } from 'rxjs';
@@ -8,6 +9,7 @@ import { DocumentsComponent } from './components/documents/documents.component';
 import { TasksTabComponent } from './components/tasks-tab/tasks-tab.component';
 import { QuickTaskCreatedEvent, TaskQuickCreateModalComponent } from '../../ui/task-quick-create-modal/task-quick-create-modal.component';
 import {
+  AppointmentDetailDto,
   ActivityFeedEntryDto,
   AiFollowUpRecommendationDto,
   ApiService,
@@ -36,6 +38,7 @@ import {
   UploadEnquiryDocumentRequest,
   UpsertSubEventRequest,
   UpsertPaymentMilestoneRequest,
+  TransitionEnquiryStatusResponse,
   UpdateEnquiryRequest,
   UserSummaryDto
 } from '../../services/api.service';
@@ -89,6 +92,25 @@ interface SubEventAvailabilityState {
   isAvailable: boolean;
   warning: string;
   conflicts: SubEventConflictDto[];
+}
+
+interface AppointmentDraft {
+  title: string;
+  type: string;
+  date: string;
+  startTime: string;
+  durationMinutes: number;
+  spaceId: string;
+  attendees: string;
+  assignedToUserId: string;
+  notes: string;
+  status: 'Scheduled' | 'Completed' | 'Cancelled' | 'NoShow';
+  relatedEnquiryIds: string[];
+}
+
+interface AppointmentEnquiryOption {
+  id: string;
+  label: string;
 }
 
 interface EnquiryActivityFilterState {
@@ -157,9 +179,20 @@ interface EnquiryOverviewDraft {
 
 @Component({
     selector: 'app-enquiries',
-    imports: [DatePipe, DecimalPipe, ReactiveFormsModule, DocumentsComponent, TasksTabComponent, TaskQuickCreateModalComponent],
+    imports: [DatePipe, DecimalPipe, ReactiveFormsModule, FormsModule, DocumentsComponent, TasksTabComponent, TaskQuickCreateModalComponent],
     templateUrl: './enquiries.component.html',
-    styleUrl: './enquiries.component.scss'
+    styleUrl: './enquiries.component.scss',
+    animations: [
+      trigger('expandSection', [
+        transition(':enter', [
+          style({ opacity: 0, height: 0 }),
+          animate('180ms ease-out', style({ opacity: 1, height: '*' }))
+        ]),
+        transition(':leave', [
+          animate('140ms ease-in', style({ opacity: 0, height: 0 }))
+        ])
+      ])
+    ]
 })
 export class EnquiriesComponent implements OnInit {
   private api = inject(ApiService);
@@ -209,6 +242,7 @@ export class EnquiriesComponent implements OnInit {
 
   selectedEnquiryId: string | null = null;
   selectedEnquiry: EnquiryDetailResponse | null = null;
+  sameDateAvailabilityExpanded = true;
   aiFollowUpRecommendations: AiFollowUpRecommendationDto[] = [];
   aiFollowUpRecommendationsLoading = false;
   aiFollowUpRecommendationsMessage = '';
@@ -284,9 +318,14 @@ export class EnquiriesComponent implements OnInit {
   routingOptionsLoading = false;
   routingOptionsError = '';
   selectedRoutingVenueId = '';
-  routingTransferReason = '';
-  routingTransferring = false;
   routingTransferMessage = '';
+  showTransferEnquiryModal = false;
+  transferModalStep: 'form' | 'confirm' = 'form';
+  transferModalTargetVenueId = '';
+  transferModalReason = '';
+  transferModalKeepCopy = true;
+  transferModalSubmitting = false;
+  transferModalError = '';
   eventStyleOptions = [
     'Meeting',
     '3-Course Dinner',
@@ -337,6 +376,13 @@ export class EnquiriesComponent implements OnInit {
   subEventCanOverrideConflict: Record<string, boolean> = {};
   subEventAvailability: Record<string, SubEventAvailabilityState> = {};
   private subEventAvailabilityTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+  showAppointmentForm = false;
+  appointmentFormMode: 'create' | 'edit' = 'create';
+  appointmentEditingId: string | null = null;
+  appointmentSaving = false;
+  appointmentError = '';
+  appointmentConflictWarning = '';
+  appointmentDraft: AppointmentDraft = this.createDefaultAppointmentDraft();
   selectedEnquiryIds = new Set<string>();
   selectingAllMatching = false;
   assignableUsers: UserSummaryDto[] = [];
@@ -540,6 +586,26 @@ export class EnquiriesComponent implements OnInit {
     return (this.routingOptions?.venueOptions.length ?? 0) > 0;
   }
 
+  get canTransferSelectedEnquiry(): boolean {
+    const enquiryVenueId = this.selectedEnquiry?.venueId;
+    if (!enquiryVenueId) {
+      return false;
+    }
+
+    const venueRoles = this.auth.session?.venueRoles ?? [];
+    return venueRoles.some((assignment) =>
+      (assignment.venueId === enquiryVenueId && (assignment.role === 'SalesManager' || assignment.role === 'VenueAdmin'))
+      || assignment.role === 'GroupAdmin');
+  }
+
+  get selectedTransferModalVenueOption(): PortfolioRoutingVenueOptionDto | null {
+    if (!this.routingOptions || !this.transferModalTargetVenueId) {
+      return null;
+    }
+
+    return this.routingOptions.venueOptions.find((option) => option.venueId === this.transferModalTargetVenueId) ?? null;
+  }
+
   get paymentSummaryCurrency(): string {
     return this.paymentSchedule?.currencyCode || this.selectedEnquiry?.currencyCode || 'GBP';
   }
@@ -580,6 +646,37 @@ export class EnquiriesComponent implements OnInit {
 
   get managersForOverview(): UserSummaryDto[] {
     return this.assignableUsers;
+  }
+
+  get appointmentEnquiryOptions(): AppointmentEnquiryOption[] {
+    const lookup = new Map<string, AppointmentEnquiryOption>();
+    for (const enquiry of this.enquiries) {
+      lookup.set(enquiry.id, {
+        id: enquiry.id,
+        label: `${enquiry.reference} · ${enquiry.contactName} · ${enquiry.eventType}`
+      });
+    }
+
+    if (this.selectedEnquiry) {
+      lookup.set(this.selectedEnquiry.id, {
+        id: this.selectedEnquiry.id,
+        label: `${this.selectedEnquiry.reference} · ${this.selectedEnquiry.contactFirstName} ${this.selectedEnquiry.contactLastName} · ${this.selectedEnquiry.eventName || this.selectedEnquiry.eventType}`
+      });
+    }
+
+    return Array.from(lookup.values())
+      .sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }))
+      .slice(0, 80);
+  }
+
+  get canSaveAppointment(): boolean {
+    return !this.appointmentSaving
+      && !!this.selectedEnquiry
+      && !!this.appointmentDraft.title.trim()
+      && !!this.appointmentDraft.type.trim()
+      && !!this.appointmentDraft.date
+      && !!this.appointmentDraft.startTime
+      && this.appointmentDraft.durationMinutes > 0;
   }
 
   get filteredEnquiryDocuments(): EnquiryDocumentDto[] {
@@ -990,6 +1087,10 @@ export class EnquiriesComponent implements OnInit {
       });
   }
 
+  openWebsiteEnquiryPreview(): void {
+    this.router.navigateByUrl('/website-enquiry');
+  }
+
   private createFallbackTestEnquiries(venueId: string): void {
     const payloads = this.buildFallbackTestEnquiryPayloads(venueId, 10);
     let created = 0;
@@ -1261,6 +1362,7 @@ export class EnquiriesComponent implements OnInit {
 
   selectEnquiry(enquiryId: string): void {
     this.selectedEnquiryId = enquiryId;
+    this.sameDateAvailabilityExpanded = true;
     this.resetEnquiryActivityState();
     this.enquiryProposals = [];
     this.enquiryProposalsLoading = false;
@@ -1323,6 +1425,10 @@ export class EnquiriesComponent implements OnInit {
     });
   }
 
+  toggleSameDateAvailability(): void {
+    this.sameDateAvailabilityExpanded = !this.sameDateAvailabilityExpanded;
+  }
+
   onActivityFiltersChanged(): void {
     if (this.detailTab !== 'activity' || !this.selectedEnquiryId) {
       return;
@@ -1376,7 +1482,8 @@ export class EnquiriesComponent implements OnInit {
       .transitionEnquiryStatus(this.selectedEnquiryId, { targetStatus })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: () => {
+        next: (response) => {
+          this.showGeneratedTasksToast(response);
           this.loadEnquiryDetail(this.selectedEnquiryId!);
           this.loadEnquiries(this.listResponse?.page.page ?? 1);
         }
@@ -1551,31 +1658,75 @@ export class EnquiriesComponent implements OnInit {
     this.routingTransferMessage = '';
   }
 
-  transferSelectedEnquiryToVenue(): void {
-    if (!this.selectedEnquiryId || !this.selectedRoutingVenueId || this.routingTransferring) {
+  openTransferEnquiryModal(): void {
+    if (!this.selectedEnquiryId || !this.hasCrossVenueRoutingOptions || !this.canTransferSelectedEnquiry) {
       return;
     }
 
-    const selectedOption = this.selectedRoutingVenueOption;
-    const targetVenueName = selectedOption?.venueName ?? 'target venue';
-    const confirmed = window.confirm(`Transfer this enquiry to ${targetVenueName}?`);
-    if (!confirmed) {
+    this.transferModalTargetVenueId = this.selectedRoutingVenueId || this.routingOptions?.venueOptions[0]?.venueId || '';
+    this.transferModalReason = '';
+    this.transferModalKeepCopy = true;
+    this.transferModalError = '';
+    this.transferModalSubmitting = false;
+    this.transferModalStep = 'form';
+    this.showTransferEnquiryModal = true;
+  }
+
+  closeTransferEnquiryModal(): void {
+    if (this.transferModalSubmitting) {
       return;
     }
 
-    this.routingTransferring = true;
+    this.showTransferEnquiryModal = false;
+    this.transferModalError = '';
+    this.transferModalSubmitting = false;
+    this.transferModalStep = 'form';
+  }
+
+  continueTransferEnquiryModal(): void {
+    if (!this.transferModalTargetVenueId) {
+      this.transferModalError = 'Please choose a target venue.';
+      return;
+    }
+
+    this.transferModalError = '';
+    this.transferModalStep = 'confirm';
+  }
+
+  editTransferEnquiryModal(): void {
+    if (this.transferModalSubmitting) {
+      return;
+    }
+
+    this.transferModalError = '';
+    this.transferModalStep = 'form';
+  }
+
+  confirmTransferEnquiryModal(): void {
+    if (!this.selectedEnquiryId || !this.transferModalTargetVenueId || this.transferModalSubmitting) {
+      return;
+    }
+
+    this.transferModalSubmitting = true;
+    this.transferModalError = '';
     this.routingTransferMessage = '';
+
     this.api
       .transferEnquiryToVenue(this.selectedEnquiryId, {
-        targetVenueId: this.selectedRoutingVenueId,
-        reason: this.routingTransferReason.trim() || undefined
+        targetVenueId: this.transferModalTargetVenueId,
+        reason: this.transferModalReason.trim() || undefined,
+        keepCopy: this.transferModalKeepCopy
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
-          this.routingTransferring = false;
-          this.routingTransferReason = '';
-          this.routingTransferMessage = `Transferred to ${response.targetVenueName}.`;
+          this.transferModalSubmitting = false;
+          this.showTransferEnquiryModal = false;
+          this.transferModalStep = 'form';
+
+          const targetEnquiryId = response.targetEnquiryId || response.enquiryId;
+          const targetReference = response.targetEnquiryReference || response.enquiryReference;
+          this.routingTransferMessage = `Transferred to ${response.targetVenueName} (${targetReference}).`;
           this.showOverviewToast(`Transferred to ${response.targetVenueName}`);
 
           const canAccessTargetVenue = (this.auth.session?.venueRoles ?? [])
@@ -1584,20 +1735,180 @@ export class EnquiriesComponent implements OnInit {
           if (canAccessTargetVenue) {
             this.auth.setSelectedVenue(response.targetVenueId);
             this.router.navigate(['/enquiries'], {
-              queryParams: { statusTab: 'all', enquiry: response.enquiryId }
+              queryParams: { statusTab: 'all', enquiry: targetEnquiryId }
             });
             return;
           }
 
           this.loadEnquiries(1);
+          if (this.selectedEnquiryId) {
+            this.loadEnquiryDetail(this.selectedEnquiryId);
+          }
         },
         error: (error) => {
-          this.routingTransferring = false;
-          this.routingTransferMessage = typeof error?.error === 'string'
+          this.transferModalSubmitting = false;
+          this.transferModalError = typeof error?.error === 'string'
             ? error.error
             : 'Unable to transfer this enquiry.';
         }
       });
+  }
+
+  openCreateAppointmentForm(): void {
+    if (!this.selectedEnquiry) {
+      return;
+    }
+
+    const baseDate = this.toDateOnly(this.selectedEnquiry.eventStartUtc);
+    this.appointmentFormMode = 'create';
+    this.appointmentEditingId = null;
+    this.appointmentSaving = false;
+    this.appointmentError = '';
+    this.appointmentConflictWarning = '';
+    this.appointmentDraft = this.createDefaultAppointmentDraft(this.selectedEnquiry);
+    this.appointmentDraft.date = baseDate;
+    this.appointmentDraft.relatedEnquiryIds = [this.selectedEnquiry.id];
+    this.showAppointmentForm = true;
+  }
+
+  editAppointment(appointment: { id: string }): void {
+    if (!this.selectedEnquiry?.venueId || !appointment?.id) {
+      return;
+    }
+
+    this.appointmentFormMode = 'edit';
+    this.appointmentEditingId = appointment.id;
+    this.appointmentSaving = false;
+    this.appointmentError = '';
+    this.appointmentConflictWarning = '';
+    this.showAppointmentForm = true;
+
+    this.api.getAppointment(appointment.id, this.selectedEnquiry.venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (detail) => {
+          this.appointmentDraft = this.mapAppointmentToDraft(detail);
+        },
+        error: () => {
+          this.showAppointmentForm = false;
+          this.appointmentEditingId = null;
+          this.appointmentError = '';
+          this.appointmentConflictWarning = '';
+          this.showOverviewToast('Unable to load appointment');
+        }
+      });
+  }
+
+  cancelAppointmentForm(): void {
+    this.showAppointmentForm = false;
+    this.appointmentFormMode = 'create';
+    this.appointmentEditingId = null;
+    this.appointmentSaving = false;
+    this.appointmentError = '';
+    this.appointmentConflictWarning = '';
+    this.appointmentDraft = this.createDefaultAppointmentDraft(this.selectedEnquiry ?? undefined);
+  }
+
+  submitAppointmentForm(allowConflictOverride = false): void {
+    if (!this.selectedEnquiry?.venueId || !this.canSaveAppointment || this.appointmentSaving) {
+      return;
+    }
+
+    const startDate = this.combineDateAndTimeToDate(this.appointmentDraft.date, this.appointmentDraft.startTime);
+    const startUtc = startDate.toISOString();
+
+    const payload = {
+      venueId: this.selectedEnquiry.venueId,
+      title: this.appointmentDraft.title.trim(),
+      type: this.appointmentDraft.type.trim(),
+      startUtc,
+      durationMinutes: Math.max(15, Math.floor(this.appointmentDraft.durationMinutes || 60)),
+      spaceId: this.appointmentDraft.spaceId || null,
+      attendees: this.appointmentDraft.attendees.trim() || null,
+      relatedEnquiryIds: this.appointmentDraft.relatedEnquiryIds.filter((id) => !!id),
+      assignedToUserId: this.appointmentDraft.assignedToUserId || null,
+      notes: this.appointmentDraft.notes.trim() || null,
+      status: this.appointmentDraft.status,
+      allowConflictOverride
+    } as const;
+
+    this.appointmentSaving = true;
+    this.appointmentError = '';
+    this.appointmentConflictWarning = '';
+
+    const request$ = this.appointmentFormMode === 'edit' && this.appointmentEditingId
+      ? this.api.updateAppointment(this.appointmentEditingId, payload)
+      : this.api.createAppointment(payload);
+
+    request$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          const mode = this.appointmentFormMode;
+          const enquiryId = this.selectedEnquiryId;
+          this.cancelAppointmentForm();
+          if (enquiryId) {
+            this.loadEnquiryDetail(enquiryId);
+          }
+          this.showOverviewToast(mode === 'edit' ? 'Appointment updated' : 'Appointment created');
+        },
+        error: (errorResponse) => {
+          this.appointmentSaving = false;
+          const message = typeof errorResponse?.error?.message === 'string'
+            ? errorResponse.error.message
+            : 'Unable to save appointment.';
+          this.appointmentError = message;
+          if (errorResponse?.status === 409) {
+            this.appointmentConflictWarning = 'This appointment conflicts with an existing booking.';
+          }
+        }
+      });
+  }
+
+  deleteAppointment(appointmentId: string): void {
+    if (!this.selectedEnquiry?.venueId || !appointmentId || this.appointmentSaving) {
+      return;
+    }
+
+    const confirmed = window.confirm('Delete this appointment?');
+    if (!confirmed) {
+      return;
+    }
+
+    this.appointmentSaving = true;
+    this.appointmentError = '';
+    this.appointmentConflictWarning = '';
+
+    this.api.deleteAppointment(appointmentId, this.selectedEnquiry.venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.appointmentSaving = false;
+          if (this.selectedEnquiryId) {
+            this.loadEnquiryDetail(this.selectedEnquiryId);
+          }
+          this.showOverviewToast('Appointment deleted');
+        },
+        error: () => {
+          this.appointmentSaving = false;
+          this.appointmentError = 'Unable to delete appointment.';
+        }
+      });
+  }
+
+  toggleAppointmentRelatedEnquiry(enquiryId: string): void {
+    const selected = new Set(this.appointmentDraft.relatedEnquiryIds);
+    if (selected.has(enquiryId)) {
+      selected.delete(enquiryId);
+    } else {
+      selected.add(enquiryId);
+    }
+
+    this.appointmentDraft.relatedEnquiryIds = Array.from(selected);
+  }
+
+  isAppointmentRelatedEnquirySelected(enquiryId: string): boolean {
+    return this.appointmentDraft.relatedEnquiryIds.includes(enquiryId);
   }
 
   get timelineSubEvents(): SubEventDto[] {
@@ -2668,7 +2979,8 @@ export class EnquiriesComponent implements OnInit {
         })
         .pipe(takeUntilDestroyed(this.destroyRef))
         .subscribe({
-          next: () => {
+          next: (response) => {
+            this.showGeneratedTasksToast(response);
             this.cancelLostReasonModal();
             this.loadEnquiryDetail(this.selectedEnquiryId!);
             this.loadEnquiries(this.listResponse?.page.page ?? 1);
@@ -2682,6 +2994,42 @@ export class EnquiriesComponent implements OnInit {
     }
 
     this.executeBulkStatusTransition('Lost', this.bulkLostReason.trim(), lostReasonDetail, lostAtUtc);
+  }
+
+  private showGeneratedTasksToast(response?: TransitionEnquiryStatusResponse | null): void {
+    const generatedTaskCount = Number(response?.generatedTaskCount ?? 0);
+    if (!Number.isFinite(generatedTaskCount) || generatedTaskCount <= 0) {
+      return;
+    }
+
+    const statusLabel = this.toStatusLabel(response?.status ?? '');
+    this.showOverviewToast(
+      `${generatedTaskCount} task${generatedTaskCount === 1 ? '' : 's'} created from ${statusLabel} template.`
+    );
+  }
+
+  private toStatusLabel(status: string): string {
+    const normalized = (status ?? '').trim().toLowerCase();
+    switch (normalized) {
+      case 'openproposal':
+        return 'Open Proposal';
+      case 'provisional':
+        return 'Provisional';
+      case 'confirmed':
+        return 'Confirmed';
+      case 'tentative':
+        return 'Tentative';
+      case 'new':
+        return 'New';
+      case 'completed':
+        return 'Completed';
+      case 'lost':
+        return 'Lost';
+      case 'archived':
+        return 'Archived';
+      default:
+        return status || 'status';
+    }
   }
 
   private openLostReasonModal(mode: 'bulk' | 'single', targetStatus: string): void {
@@ -3131,6 +3479,44 @@ export class EnquiriesComponent implements OnInit {
       spaceId: this.venueSpaces[0]?.id ?? '',
       setupStyle: enquiry?.setupStyle ?? '',
       notes: ''
+    };
+  }
+
+  private createDefaultAppointmentDraft(enquiry?: EnquiryDetailResponse): AppointmentDraft {
+    const startReference = enquiry ? new Date(enquiry.eventStartUtc) : new Date();
+    const date = this.toDateOnly(startReference.toISOString());
+
+    return {
+      title: '',
+      type: 'Meeting',
+      date,
+      startTime: this.toTimeOnly(startReference),
+      durationMinutes: 60,
+      spaceId: this.venueSpaces[0]?.id ?? '',
+      attendees: '',
+      assignedToUserId: enquiry?.eventManagerUserId ?? '',
+      notes: '',
+      status: 'Scheduled',
+      relatedEnquiryIds: enquiry ? [enquiry.id] : []
+    };
+  }
+
+  private mapAppointmentToDraft(appointment: AppointmentDetailDto): AppointmentDraft {
+    const start = new Date(appointment.startUtc);
+    const date = this.toDateOnly(appointment.startUtc);
+
+    return {
+      title: appointment.title ?? '',
+      type: appointment.type ?? 'Meeting',
+      date,
+      startTime: this.toTimeOnly(start),
+      durationMinutes: Math.max(15, Number(appointment.durationMinutes || 60)),
+      spaceId: appointment.spaceId ?? '',
+      attendees: appointment.attendees ?? '',
+      assignedToUserId: appointment.assignedToUserId ?? '',
+      notes: appointment.notes ?? '',
+      status: this.normalizeAppointmentStatus(appointment.status),
+      relatedEnquiryIds: (appointment.relatedEnquiries ?? []).map((item) => item.enquiryId).filter((id) => !!id)
     };
   }
 
@@ -3605,6 +3991,7 @@ export class EnquiriesComponent implements OnInit {
       .subscribe({
         next: (enquiry) => {
           this.selectedEnquiry = enquiry;
+          this.sameDateAvailabilityExpanded = true;
           this.populateOverviewDraft(enquiry);
           this.overviewEditingField = null;
           this.overviewValidationErrors = {};
@@ -3630,6 +4017,13 @@ export class EnquiriesComponent implements OnInit {
           this.subEventAvailability = {};
           this.updatingSubEventIds = new Set<string>();
           this.deletingSubEventId = null;
+          this.showAppointmentForm = false;
+          this.appointmentFormMode = 'create';
+          this.appointmentEditingId = null;
+          this.appointmentSaving = false;
+          this.appointmentError = '';
+          this.appointmentConflictWarning = '';
+          this.appointmentDraft = this.createDefaultAppointmentDraft(enquiry);
           this.aiFollowUpExecutionMessage = '';
           this.aiFollowUpExecutionError = '';
           this.loadEnquiryProposals(enquiryId);
@@ -3695,6 +4089,13 @@ export class EnquiriesComponent implements OnInit {
           this.aiFollowUpExecutionError = '';
           this.updatingSubEventIds = new Set<string>();
           this.deletingSubEventId = null;
+          this.showAppointmentForm = false;
+          this.appointmentFormMode = 'create';
+          this.appointmentEditingId = null;
+          this.appointmentSaving = false;
+          this.appointmentError = '';
+          this.appointmentConflictWarning = '';
+          this.appointmentDraft = this.createDefaultAppointmentDraft();
           this.enquiryDocuments = [];
           this.enquiryDocumentsLoading = false;
           this.enquiryDocumentsError = '';
@@ -3713,9 +4114,14 @@ export class EnquiriesComponent implements OnInit {
           this.routingOptionsLoading = false;
           this.routingOptionsError = '';
           this.selectedRoutingVenueId = '';
-          this.routingTransferReason = '';
-          this.routingTransferring = false;
           this.routingTransferMessage = '';
+          this.showTransferEnquiryModal = false;
+          this.transferModalStep = 'form';
+          this.transferModalTargetVenueId = '';
+          this.transferModalReason = '';
+          this.transferModalKeepCopy = true;
+          this.transferModalSubmitting = false;
+          this.transferModalError = '';
         }
       });
   }
@@ -3809,9 +4215,14 @@ export class EnquiriesComponent implements OnInit {
     this.routingOptionsLoading = false;
     this.routingOptionsError = '';
     this.selectedRoutingVenueId = '';
-    this.routingTransferReason = '';
-    this.routingTransferring = false;
     this.routingTransferMessage = '';
+    this.showTransferEnquiryModal = false;
+    this.transferModalStep = 'form';
+    this.transferModalTargetVenueId = '';
+    this.transferModalReason = '';
+    this.transferModalKeepCopy = true;
+    this.transferModalSubmitting = false;
+    this.transferModalError = '';
   }
 
   private resolveEnquiryListError(error: any): string {
@@ -4507,6 +4918,23 @@ export class EnquiriesComponent implements OnInit {
     }
 
     return normalized.replace(/\s+/g, '-');
+  }
+
+  private normalizeAppointmentStatus(status: string | null | undefined): 'Scheduled' | 'Completed' | 'Cancelled' | 'NoShow' {
+    const normalized = (status ?? '').trim().toLowerCase();
+    if (normalized === 'completed') {
+      return 'Completed';
+    }
+
+    if (normalized === 'cancelled' || normalized === 'canceled') {
+      return 'Cancelled';
+    }
+
+    if (normalized === 'noshow' || normalized === 'no-show' || normalized === 'no show') {
+      return 'NoShow';
+    }
+
+    return 'Scheduled';
   }
 
   setMilestoneAmount(milestone: PaymentMilestoneDraft, raw: string): void {

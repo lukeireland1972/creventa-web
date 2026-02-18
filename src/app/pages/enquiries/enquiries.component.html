@@ -11,6 +11,7 @@
       [disabled]="creatingTestEnquiries">
       {{ creatingTestEnquiries ? 'Creating...' : 'Create 10 Test Enquiries' }}
     </button>
+    <button type="button" class="website-preview-btn" (click)="openWebsiteEnquiryPreview()">Preview Website Form</button>
     <button type="button" class="add-task-btn" (click)="openAddTask()">+ Add Task</button>
     <span class="period-pill">This Month</span>
   </div>
@@ -883,43 +884,54 @@
             }
 
             @if (detail.sameDateAvailability) {
-              <div class="same-date">
-                <h3>Same-date availability</h3>
-                @for (group of detail.sameDateAvailability.spaces; track group) {
-                  <article>
-                    <header>
-                      <strong>{{ group.spaceName }}</strong>
-                      <div class="space-actions">
-                        @if (isSpaceAssigned(group.spaceId)) {
-                          <span class="space-badge booked">Booked</span>
-                          <button
-                            type="button"
-                            class="space-remove"
-                            [disabled]="spaceAssignmentBusySpaceId === group.spaceId"
-                            (click)="unassignSpace(group.spaceId)">
-                            {{ spaceAssignmentBusySpaceId === group.spaceId ? '...' : 'X' }}
-                          </button>
-                        } @else if (showSpaceBookButton(group.spaceId, group.isAvailable)) {
-                          <button
-                            type="button"
-                            class="book-btn"
-                            [disabled]="spaceAssignmentBusySpaceId === group.spaceId"
-                            (click)="bookSpace(group.spaceId)">
-                            {{ spaceAssignmentBusySpaceId === group.spaceId ? 'Booking...' : 'Book' }}
-                          </button>
-                        } @else {
-                          <span class="space-badge unavailable">Unavailable</span>
+              <section class="same-date">
+                <button type="button" class="same-date-toggle" (click)="toggleSameDateAvailability()">
+                  <span>
+                    <h3>Same-date availability</h3>
+                    <small>{{ detail.eventStartUtc | date: 'EEEE, dd MMM yyyy' }}</small>
+                  </span>
+                  <span class="same-date-chevron">{{ sameDateAvailabilityExpanded ? '▾' : '▸' }}</span>
+                </button>
+
+                @if (sameDateAvailabilityExpanded) {
+                  <div class="same-date-body" [@expandSection]>
+                    @for (group of detail.sameDateAvailability.spaces; track group) {
+                      <article>
+                        <header>
+                          <strong>{{ group.spaceName }}</strong>
+                          <div class="space-actions">
+                            @if (isSpaceAssigned(group.spaceId)) {
+                              <span class="space-badge booked">Booked</span>
+                              <button
+                                type="button"
+                                class="space-remove"
+                                [disabled]="spaceAssignmentBusySpaceId === group.spaceId"
+                                (click)="unassignSpace(group.spaceId)">
+                                {{ spaceAssignmentBusySpaceId === group.spaceId ? '...' : 'X' }}
+                              </button>
+                            } @else if (showSpaceBookButton(group.spaceId, group.isAvailable)) {
+                              <button
+                                type="button"
+                                class="book-btn"
+                                [disabled]="spaceAssignmentBusySpaceId === group.spaceId"
+                                (click)="bookSpace(group.spaceId)">
+                                {{ spaceAssignmentBusySpaceId === group.spaceId ? 'Booking...' : 'Book' }}
+                              </button>
+                            } @else {
+                              <span class="space-badge unavailable">Unavailable</span>
+                            }
+                          </div>
+                        </header>
+                        @for (event of group.events; track event) {
+                          <p>
+                            {{ event.label }} · {{ event.recordType }} · {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}
+                          </p>
                         }
-                      </div>
-                    </header>
-                    @for (event of group.events; track event) {
-                      <p>
-                        {{ event.label }} · {{ event.recordType }} · {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}
-                      </p>
+                      </article>
                     }
-                  </article>
+                  </div>
                 }
-              </div>
+              </section>
             }
 
             <div class="cross-venue-routing">
@@ -936,24 +948,13 @@
                     <span>Suggested Venue</span>
                     <select
                       [value]="selectedRoutingVenueId"
-                      (change)="onRoutingVenueSelected($any($event.target).value)"
-                      [disabled]="routingTransferring">
+                      (change)="onRoutingVenueSelected($any($event.target).value)">
                       @for (option of routingOptions?.venueOptions ?? []; track option.venueId) {
                         <option [value]="option.venueId">
                           {{ option.venueName }} · {{ option.availableSpaceCount }}/{{ option.totalSpaceCount }} spaces free
                         </option>
                       }
                     </select>
-                  </label>
-
-                  <label>
-                    <span>Transfer Reason (optional)</span>
-                    <textarea
-                      rows="2"
-                      [value]="routingTransferReason"
-                      (input)="routingTransferReason = $any($event.target).value"
-                      [disabled]="routingTransferring"
-                      placeholder="e.g. Date unavailable at this venue"></textarea>
                   </label>
                 </div>
 
@@ -981,13 +982,15 @@
                 }
 
                 <div class="routing-actions">
-                  <button
-                    type="button"
-                    class="book-btn"
-                    [disabled]="routingTransferring || !selectedRoutingVenueId"
-                    (click)="transferSelectedEnquiryToVenue()">
-                    {{ routingTransferring ? 'Transferring...' : 'Transfer to Venue' }}
-                  </button>
+                  @if (canTransferSelectedEnquiry) {
+                    <button
+                      type="button"
+                      class="book-btn"
+                      [disabled]="!selectedRoutingVenueId"
+                      (click)="openTransferEnquiryModal()">
+                      Transfer Enquiry
+                    </button>
+                  }
                   @if (routingTransferMessage) {
                     <span class="routing-feedback">{{ routingTransferMessage }}</span>
                   }
@@ -1313,14 +1316,155 @@
 
         @if (detailTab === 'appointments') {
           <section class="tab-panel">
-            @for (appointment of detail.appointments; track appointment) {
-              <article class="row">
-                <strong>{{ appointment.title }}</strong>
-                <span>{{ appointment.startUtc | date: 'dd/MM/yyyy HH:mm' }} · {{ appointment.durationMinutes }} mins</span>
-                <span>{{ appointment.spaceName || 'No space' }} · {{ appointment.status }}</span>
+            <div class="appointment-header">
+              <button type="button" (click)="openCreateAppointmentForm()">+ New Appointment</button>
+            </div>
+
+            @if (showAppointmentForm) {
+              <article class="appointment-form">
+                <h4>{{ appointmentFormMode === 'edit' ? 'Edit Appointment' : 'New Appointment' }}</h4>
+                <div class="appointment-grid">
+                  <label>
+                    Title
+                    <input
+                      type="text"
+                      maxlength="200"
+                      [(ngModel)]="appointmentDraft.title"
+                      [ngModelOptions]="{ standalone: true }" />
+                  </label>
+                  <label>
+                    Type
+                    <select [(ngModel)]="appointmentDraft.type" [ngModelOptions]="{ standalone: true }">
+                      <option value="Meeting">Meeting</option>
+                      <option value="MenuTasting">Menu Tasting</option>
+                      <option value="SiteVisit">Site Visit</option>
+                      <option value="Rehearsal">Rehearsal</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </label>
+                  <label>
+                    Date
+                    <input
+                      type="date"
+                      [(ngModel)]="appointmentDraft.date"
+                      [ngModelOptions]="{ standalone: true }" />
+                  </label>
+                  <label>
+                    Start Time
+                    <input
+                      type="time"
+                      [(ngModel)]="appointmentDraft.startTime"
+                      [ngModelOptions]="{ standalone: true }" />
+                  </label>
+                  <label>
+                    Duration (mins)
+                    <input
+                      type="number"
+                      min="15"
+                      step="15"
+                      [(ngModel)]="appointmentDraft.durationMinutes"
+                      [ngModelOptions]="{ standalone: true }" />
+                  </label>
+                  <label>
+                    Status
+                    <select [(ngModel)]="appointmentDraft.status" [ngModelOptions]="{ standalone: true }">
+                      <option value="Scheduled">Scheduled</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Cancelled">Cancelled</option>
+                      <option value="NoShow">No Show</option>
+                    </select>
+                  </label>
+                  <label>
+                    Space
+                    <select [(ngModel)]="appointmentDraft.spaceId" [ngModelOptions]="{ standalone: true }">
+                      <option value="">No space</option>
+                      @for (space of venueSpaces; track space.id) {
+                        <option [value]="space.id">{{ space.name }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>
+                    Assigned To
+                    <select [(ngModel)]="appointmentDraft.assignedToUserId" [ngModelOptions]="{ standalone: true }">
+                      <option value="">Unassigned</option>
+                      @for (user of assignableUsers; track user.id) {
+                        <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label>
+                    Attendees
+                    <input
+                      type="text"
+                      maxlength="500"
+                      [(ngModel)]="appointmentDraft.attendees"
+                      [ngModelOptions]="{ standalone: true }"
+                      placeholder="Client + team" />
+                  </label>
+                  <label class="appointment-notes">
+                    Notes
+                    <textarea
+                      rows="3"
+                      maxlength="1000"
+                      [(ngModel)]="appointmentDraft.notes"
+                      [ngModelOptions]="{ standalone: true }"></textarea>
+                  </label>
+                </div>
+
+                <div class="appointment-related">
+                  <h5>Related Enquiries</h5>
+                  @if (appointmentEnquiryOptions.length === 0) {
+                    <p class="empty">No enquiries available to link.</p>
+                  } @else {
+                    <div class="appointment-related-list">
+                      @for (option of appointmentEnquiryOptions; track option.id) {
+                        <label>
+                          <input
+                            type="checkbox"
+                            [checked]="isAppointmentRelatedEnquirySelected(option.id)"
+                            (change)="toggleAppointmentRelatedEnquiry(option.id)" />
+                          <span>{{ option.label }}</span>
+                        </label>
+                      }
+                    </div>
+                  }
+                </div>
+
+                @if (appointmentError) {
+                  <p class="payment-error">{{ appointmentError }}</p>
+                }
+                @if (appointmentConflictWarning) {
+                  <p class="proposal-warning">{{ appointmentConflictWarning }}</p>
+                }
+
+                <div class="appointment-actions">
+                  <button type="button" class="ghost" (click)="cancelAppointmentForm()" [disabled]="appointmentSaving">Cancel</button>
+                  @if (appointmentConflictWarning) {
+                    <button type="button" class="danger" (click)="submitAppointmentForm(true)" [disabled]="!canSaveAppointment">
+                      {{ appointmentSaving ? 'Saving...' : 'Save Anyway' }}
+                    </button>
+                  }
+                  <button type="button" (click)="submitAppointmentForm(false)" [disabled]="!canSaveAppointment">
+                    {{ appointmentSaving ? 'Saving...' : (appointmentFormMode === 'edit' ? 'Save Appointment' : 'Create Appointment') }}
+                  </button>
+                </div>
               </article>
             }
-            @if (detail.appointments.length === 0) {
+
+            @for (appointment of detail.appointments; track appointment.id) {
+              <article class="row appointment-row">
+                <div>
+                  <strong>{{ appointment.title }}</strong>
+                  <span>{{ appointment.startUtc | date: 'dd/MM/yyyy HH:mm' }} · {{ appointment.durationMinutes }} mins</span>
+                  <span>{{ appointment.spaceName || 'No space' }} · {{ appointment.status }}</span>
+                </div>
+                <div class="row-actions">
+                  <button type="button" (click)="editAppointment(appointment)">Edit</button>
+                  <button type="button" class="danger-link" (click)="deleteAppointment(appointment.id)">Delete</button>
+                </div>
+              </article>
+            }
+            @if (detail.appointments.length === 0 && !showAppointmentForm) {
               <p class="empty">No appointments linked.</p>
             }
           </section>
@@ -1964,6 +2108,86 @@
       <button type="button" (click)="sendBulkEmail()" [disabled]="sendingBulkEmail">
         {{ sendingBulkEmail ? 'Sending...' : 'Send Email' }}
       </button>
+    </div>
+  </section>
+}
+
+@if (showTransferEnquiryModal) {
+  <div class="modal-backdrop" (click)="closeTransferEnquiryModal()"></div>
+  <section class="modal-card transfer-modal" role="dialog" aria-modal="true" aria-label="Transfer enquiry">
+    <h3>Transfer Enquiry</h3>
+
+    @if (transferModalStep === 'form') {
+      <p>Move this enquiry to another venue in your group while preserving communication and activity history.</p>
+
+      <label>
+        <span>Target Venue</span>
+        <select
+          [value]="transferModalTargetVenueId"
+          (change)="transferModalTargetVenueId = $any($event.target).value"
+          [disabled]="transferModalSubmitting">
+          <option value="">Select venue</option>
+          @for (option of routingOptions?.venueOptions ?? []; track option.venueId) {
+            <option [value]="option.venueId">
+              {{ option.venueName }} · {{ option.availableSpaceCount }}/{{ option.totalSpaceCount }} spaces free
+            </option>
+          }
+        </select>
+      </label>
+
+      <label>
+        <span>Reason</span>
+        <textarea
+          rows="3"
+          [value]="transferModalReason"
+          (input)="transferModalReason = $any($event.target).value"
+          [disabled]="transferModalSubmitting"
+          placeholder="Optional reason for transfer"></textarea>
+      </label>
+
+      <label class="transfer-checkbox">
+        <input
+          type="checkbox"
+          [checked]="transferModalKeepCopy"
+          (change)="transferModalKeepCopy = !!$any($event.target).checked"
+          [disabled]="transferModalSubmitting" />
+        <span>Keep copy in current venue</span>
+      </label>
+    } @else {
+      @if (selectedTransferModalVenueOption; as venue) {
+        <p>Confirm transfer to <strong>{{ venue.venueName }}</strong>.</p>
+        <div class="transfer-summary">
+          <span>Same-date enquiries: <strong>{{ venue.sameDateEnquiryCount }}</strong></span>
+          <span>Available spaces: <strong>{{ venue.availableSpaceCount }} / {{ venue.totalSpaceCount }}</strong></span>
+          <span>Keep copy: <strong>{{ transferModalKeepCopy ? 'Yes' : 'No (archive source)' }}</strong></span>
+        </div>
+      } @else {
+        <p>Please select a valid target venue.</p>
+      }
+      @if (transferModalReason.trim()) {
+        <p class="transfer-reason-preview">Reason: {{ transferModalReason.trim() }}</p>
+      }
+    }
+
+    @if (transferModalError) {
+      <p class="inline-error">{{ transferModalError }}</p>
+    }
+
+    <div class="modal-actions">
+      <button type="button" class="ghost" (click)="closeTransferEnquiryModal()" [disabled]="transferModalSubmitting">Cancel</button>
+      @if (transferModalStep === 'form') {
+        <button type="button" (click)="continueTransferEnquiryModal()" [disabled]="transferModalSubmitting || !transferModalTargetVenueId">
+          Continue
+        </button>
+      } @else {
+        <button type="button" class="ghost" (click)="editTransferEnquiryModal()" [disabled]="transferModalSubmitting">Back</button>
+        <button
+          type="button"
+          (click)="confirmTransferEnquiryModal()"
+          [disabled]="transferModalSubmitting || !transferModalTargetVenueId">
+          {{ transferModalSubmitting ? 'Transferring...' : 'Confirm Transfer' }}
+        </button>
+      }
     </div>
   </section>
 }

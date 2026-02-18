@@ -1,5 +1,6 @@
 import { Component, DestroyRef, HostListener, OnInit, inject } from '@angular/core';
 import { DatePipe, NgClass } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { distinctUntilChanged, forkJoin, map } from 'rxjs';
@@ -15,7 +16,8 @@ import {
   MoveDiaryEventRequest,
   OperationsDayColumnDto,
   SpaceCombinationDto,
-  SpaceSummaryDto
+  SpaceSummaryDto,
+  UserSummaryDto
 } from '../../services/api.service';
 import { ActivityRealtimeService } from '../../services/activity-realtime.service';
 import { AuthService } from '../../services/auth.service';
@@ -147,9 +149,28 @@ interface ResizeState {
   originalEndUtc: Date;
 }
 
+interface DiaryAppointmentDraft {
+  title: string;
+  type: string;
+  date: string;
+  startTime: string;
+  durationMinutes: number;
+  spaceId: string;
+  attendees: string;
+  assignedToUserId: string;
+  notes: string;
+  status: 'Scheduled' | 'Completed' | 'Cancelled' | 'NoShow';
+  relatedEnquiryIds: string[];
+}
+
+interface DiaryAppointmentEnquiryOption {
+  id: string;
+  label: string;
+}
+
 @Component({
   selector: 'app-event-diary',
-  imports: [NgClass, DatePipe, TaskQuickCreateModalComponent, DragDropModule, OverlayModule, DiaryEventPopoverComponent],
+  imports: [NgClass, DatePipe, FormsModule, TaskQuickCreateModalComponent, DragDropModule, OverlayModule, DiaryEventPopoverComponent],
   templateUrl: './event-diary.component.html',
   styleUrl: './event-diary.component.scss'
 })
@@ -211,6 +232,14 @@ export class EventDiaryComponent implements OnInit {
   loadError = '';
   exportState: 'xlsx' | 'pdf' | null = null;
   showAddTaskModal = false;
+  showAppointmentModal = false;
+  appointmentDraft: DiaryAppointmentDraft = this.createDefaultAppointmentDraft();
+  appointmentError = '';
+  appointmentConflictWarning = '';
+  appointmentSaving = false;
+  appointmentUsers: UserSummaryDto[] = [];
+  appointmentEnquiryOptions: DiaryAppointmentEnquiryOption[] = [];
+  loadingAppointmentLookups = false;
   selectedView: DiaryView = 'month';
   pendingMove: PendingMove | null = null;
   applyingMove = false;
@@ -378,6 +407,16 @@ export class EventDiaryComponent implements OnInit {
 
   get hasPendingMove(): boolean {
     return !!this.pendingMove;
+  }
+
+  get canSaveAppointment(): boolean {
+    return !this.appointmentSaving
+      && !!this.venueId
+      && !!this.appointmentDraft.title.trim()
+      && !!this.appointmentDraft.type.trim()
+      && !!this.appointmentDraft.date
+      && !!this.appointmentDraft.startTime
+      && this.appointmentDraft.durationMinutes > 0;
   }
 
   ngOnInit(): void {
@@ -576,6 +615,11 @@ export class EventDiaryComponent implements OnInit {
     });
   }
 
+  openAddAppointment(): void {
+    const dayIso = this.selectedView === 'day' ? this.currentDayIso : this.toIsoDateUtc(this.monthCursor);
+    this.openAppointmentModal(dayIso, this.unassignedSpaceId, 3 * 60);
+  }
+
   openAddTask(): void {
     this.showAddTaskModal = true;
   }
@@ -586,6 +630,76 @@ export class EventDiaryComponent implements OnInit {
 
   onTaskQuickCreated(event: QuickTaskCreatedEvent): void {
     this.showAddTaskModal = false;
+  }
+
+  closeAppointmentModal(): void {
+    this.showAppointmentModal = false;
+    this.appointmentSaving = false;
+    this.appointmentError = '';
+    this.appointmentConflictWarning = '';
+    this.appointmentDraft = this.createDefaultAppointmentDraft();
+  }
+
+  submitAppointment(allowConflictOverride = false): void {
+    const venueId = this.venueId;
+    if (!venueId || !this.canSaveAppointment) {
+      return;
+    }
+
+    const start = this.combineDateAndTimeToDate(this.appointmentDraft.date, this.appointmentDraft.startTime);
+    const payload = {
+      venueId,
+      title: this.appointmentDraft.title.trim(),
+      type: this.appointmentDraft.type.trim(),
+      startUtc: start.toISOString(),
+      durationMinutes: Math.max(15, Math.floor(this.appointmentDraft.durationMinutes || 60)),
+      spaceId: this.appointmentDraft.spaceId && this.appointmentDraft.spaceId !== this.unassignedSpaceId
+        ? this.appointmentDraft.spaceId
+        : null,
+      attendees: this.appointmentDraft.attendees.trim() || null,
+      relatedEnquiryIds: this.appointmentDraft.relatedEnquiryIds.filter((id) => !!id),
+      assignedToUserId: this.appointmentDraft.assignedToUserId || null,
+      notes: this.appointmentDraft.notes.trim() || null,
+      status: this.appointmentDraft.status,
+      allowConflictOverride
+    } as const;
+
+    this.appointmentSaving = true;
+    this.appointmentError = '';
+    this.appointmentConflictWarning = '';
+
+    this.api.createAppointment(payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.closeAppointmentModal();
+          this.loadDiary();
+        },
+        error: (errorResponse) => {
+          this.appointmentSaving = false;
+          this.appointmentError = typeof errorResponse?.error?.message === 'string'
+            ? errorResponse.error.message
+            : 'Unable to save appointment.';
+          if (errorResponse?.status === 409) {
+            this.appointmentConflictWarning = 'This appointment conflicts with an existing booking.';
+          }
+        }
+      });
+  }
+
+  toggleAppointmentEnquiry(enquiryId: string): void {
+    const next = new Set(this.appointmentDraft.relatedEnquiryIds);
+    if (next.has(enquiryId)) {
+      next.delete(enquiryId);
+    } else {
+      next.add(enquiryId);
+    }
+
+    this.appointmentDraft.relatedEnquiryIds = Array.from(next);
+  }
+
+  isAppointmentEnquirySelected(enquiryId: string): boolean {
+    return this.appointmentDraft.relatedEnquiryIds.includes(enquiryId);
   }
 
   exportDiary(format: 'xlsx' | 'pdf'): void {
@@ -992,12 +1106,28 @@ export class EventDiaryComponent implements OnInit {
     this.draggingEvent = null;
   }
 
+  onMonthCellClick(cell: MonthCell, event: MouseEvent): void {
+    if (!cell?.key || this.isInteractiveDiaryClick(event)) {
+      return;
+    }
+
+    this.openAppointmentModal(cell.key, this.unassignedSpaceId, 3 * 60);
+  }
+
   onDropTimelineCell(cell: TimelineCell): void {
     if (!cell.isoDate) {
       return;
     }
 
     this.onDropDay(cell.isoDate);
+  }
+
+  onTimelineCellClick(cell: TimelineCell, event: MouseEvent): void {
+    if (!cell.isoDate || this.isInteractiveDiaryClick(event)) {
+      return;
+    }
+
+    this.openAppointmentModal(cell.isoDate, this.unassignedSpaceId, 3 * 60);
   }
 
   onDropWeekColumn(dayIso: string, dragEvent: DragEvent, container: HTMLElement): void {
@@ -1008,6 +1138,15 @@ export class EventDiaryComponent implements OnInit {
     dragEvent.preventDefault();
     this.queueMoveFromVerticalDrop(this.draggingEvent, dayIso, this.draggingEvent.spaceId, dragEvent, container, 'Move event to new time');
     this.draggingEvent = null;
+  }
+
+  onWeekColumnClick(dayIso: string, container: HTMLElement, event: MouseEvent): void {
+    if (this.isInteractiveDiaryClick(event)) {
+      return;
+    }
+
+    const minuteOffset = this.resolveMinuteOffsetFromClick(event, container);
+    this.openAppointmentModal(dayIso, this.unassignedSpaceId, minuteOffset);
   }
 
   onWeekCdkDrop(dayIso: string, dropEvent: CdkDragDrop<DiaryEventDto[], DiaryEventDto[], DiaryEventDto>, container: HTMLElement): void {
@@ -1037,6 +1176,15 @@ export class EventDiaryComponent implements OnInit {
     this.draggingEvent = null;
   }
 
+  onWeekSpaceColumnClick(dayIso: string, targetSpaceId: string, container: HTMLElement, event: MouseEvent): void {
+    if (this.isInteractiveDiaryClick(event)) {
+      return;
+    }
+
+    const minuteOffset = this.resolveMinuteOffsetFromClick(event, container);
+    this.openAppointmentModal(dayIso, targetSpaceId, minuteOffset);
+  }
+
   onWeekSpaceCdkDrop(dayIso: string, targetSpaceId: string, dropEvent: CdkDragDrop<DiaryEventDto[], DiaryEventDto[], DiaryEventDto>, container: HTMLElement): void {
     const source = dropEvent.item.data;
     if (!source) {
@@ -1064,6 +1212,15 @@ export class EventDiaryComponent implements OnInit {
     this.draggingEvent = null;
   }
 
+  onDaySpaceColumnClick(dayIso: string, targetSpaceId: string, container: HTMLElement, event: MouseEvent): void {
+    if (this.isInteractiveDiaryClick(event)) {
+      return;
+    }
+
+    const minuteOffset = this.resolveMinuteOffsetFromClick(event, container);
+    this.openAppointmentModal(dayIso, targetSpaceId, minuteOffset);
+  }
+
   onDaySpaceCdkDrop(dayIso: string, targetSpaceId: string, dropEvent: CdkDragDrop<DiaryEventDto[], DiaryEventDto[], DiaryEventDto>, container: HTMLElement): void {
     const source = dropEvent.item.data;
     if (!source) {
@@ -1079,6 +1236,85 @@ export class EventDiaryComponent implements OnInit {
       container,
       'Move event to new time/space'
     );
+  }
+
+  private openAppointmentModal(dayIso: string, targetSpaceId: string, minuteOffset: number): void {
+    const safeDayIso = dayIso?.slice(0, 10);
+    if (!safeDayIso || !this.venueId) {
+      return;
+    }
+
+    const startMinutes = this.dayStartHour * 60 + Math.max(0, Math.min(this.totalWindowMinutes - this.minuteStep, minuteOffset));
+    const hours = Math.floor(startMinutes / 60);
+    const minutes = startMinutes % 60;
+    const startTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+
+    const preferredSpace = targetSpaceId && targetSpaceId !== this.unassignedSpaceId ? targetSpaceId : '';
+    this.appointmentDraft = {
+      ...this.createDefaultAppointmentDraft(),
+      date: safeDayIso,
+      startTime,
+      spaceId: preferredSpace
+    };
+
+    this.appointmentError = '';
+    this.appointmentConflictWarning = '';
+    this.showAppointmentModal = true;
+    this.ensureAppointmentLookupsLoaded(this.venueId);
+  }
+
+  private ensureAppointmentLookupsLoaded(venueId: string): void {
+    this.loadingAppointmentLookups = true;
+    forkJoin({
+      users: this.api.getUsers(venueId),
+      enquiries: this.api.getEnquiries({
+        venueId,
+        statusTab: 'all',
+        page: 1,
+        pageSize: 80
+      })
+    })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: ({ users, enquiries }) => {
+          this.loadingAppointmentLookups = false;
+          this.appointmentUsers = (users ?? [])
+            .filter((item) => item.isActive)
+            .sort((left, right) => `${left.firstName} ${left.lastName}`.localeCompare(`${right.firstName} ${right.lastName}`, undefined, { sensitivity: 'base' }));
+          this.appointmentEnquiryOptions = (enquiries?.page?.items ?? [])
+            .map((item) => ({
+              id: item.id,
+              label: `${item.reference} · ${item.contactName} · ${item.eventType}`
+            }))
+            .slice(0, 80);
+        },
+        error: () => {
+          this.loadingAppointmentLookups = false;
+          this.appointmentUsers = [];
+          this.appointmentEnquiryOptions = [];
+        }
+      });
+  }
+
+  private isInteractiveDiaryClick(event: MouseEvent): boolean {
+    const target = event.target as HTMLElement | null;
+    if (!target) {
+      return false;
+    }
+
+    return !!target.closest(
+      '.event-chip, .event-group-parent, .week-event-block, .day-event-bar, .room-event-bar, .resize-handle, .move-modal, .move-modal-backdrop, .move-undo-toast'
+    );
+  }
+
+  private resolveMinuteOffsetFromClick(event: MouseEvent, container: HTMLElement): number {
+    const rect = container.getBoundingClientRect();
+    if (rect.height <= 0) {
+      return 3 * 60;
+    }
+
+    const y = Math.max(0, Math.min(rect.height, event.clientY - rect.top));
+    return this.roundMinutesToStep((y / rect.height) * this.totalWindowMinutes);
   }
 
   onDropRoomTrack(row: RoomTimelineRow, dragEvent: DragEvent, track: HTMLElement): void {
@@ -1126,6 +1362,37 @@ export class EventDiaryComponent implements OnInit {
 
     this.queueMove(source, moved.start, moved.end, row.spaceId, 'Move event in room timeline');
     this.draggingEvent = null;
+  }
+
+  onRoomTrackClick(row: RoomTimelineRow, track: HTMLElement, event: MouseEvent): void {
+    if (this.isInteractiveDiaryClick(event)) {
+      return;
+    }
+
+    const rect = track.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+
+    const x = Math.max(0, Math.min(rect.width, event.clientX - rect.left));
+    const normalized = x / rect.width;
+    const timelineColumn = Math.min(
+      EventDiaryComponent.timelineColumnCount - 1,
+      Math.max(0, Math.floor(normalized * EventDiaryComponent.timelineColumnCount))
+    );
+
+    const firstMondayDay = this.getFirstMondayDay(this.monthCursor);
+    const dayOfMonth = firstMondayDay + (timelineColumn - EventDiaryComponent.timelineColumnAnchor);
+    const year = this.monthCursor.getUTCFullYear();
+    const month = this.monthCursor.getUTCMonth();
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+
+    if (dayOfMonth < 1 || dayOfMonth > daysInMonth) {
+      return;
+    }
+
+    const dayIso = this.toIsoDateUtc(new Date(Date.UTC(year, month, dayOfMonth)));
+    this.openAppointmentModal(dayIso, row.spaceId, 3 * 60);
   }
 
   onResizeHandleMouseDown(
@@ -2249,6 +2516,27 @@ export class EventDiaryComponent implements OnInit {
 
   private toIsoDateUtc(date: Date): string {
     return date.toISOString().slice(0, 10);
+  }
+
+  private createDefaultAppointmentDraft(): DiaryAppointmentDraft {
+    const now = new Date();
+    return {
+      title: '',
+      type: 'Meeting',
+      date: this.toIsoDateUtc(now),
+      startTime: '09:00',
+      durationMinutes: 60,
+      spaceId: '',
+      attendees: '',
+      assignedToUserId: '',
+      notes: '',
+      status: 'Scheduled',
+      relatedEnquiryIds: []
+    };
+  }
+
+  private combineDateAndTimeToDate(date: string, time: string): Date {
+    return new Date(`${date}T${time}:00`);
   }
 
   private getFirstMondayDay(monthStart: Date): number {

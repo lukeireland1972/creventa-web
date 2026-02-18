@@ -2022,10 +2022,97 @@
                   <input type="text" formControlName="optionalFieldsCsv" />
                 </label>
 
+                <div class="full-width card-subsection">
+                  <h4>Form Fields</h4>
+                  <p class="hint">Choose which fields are visible on the public widget and which are mandatory.</p>
+                  <div class="table-wrap">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Field</th>
+                          <th>Visible</th>
+                          <th>Required</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (field of websiteFormFields; track field.key) {
+                          <tr>
+                            <td>{{ field.label }}</td>
+                            <td>
+                              <label class="checkbox inline-checkbox">
+                                <input
+                                  type="checkbox"
+                                  [(ngModel)]="field.visible"
+                                  [ngModelOptions]="{ standalone: true }"
+                                  [disabled]="field.key === 'dataConsent'"
+                                  (change)="onWebsiteFieldVisibilityChanged(field)" />
+                                <span>{{ field.visible ? 'Yes' : 'No' }}</span>
+                              </label>
+                            </td>
+                            <td>
+                              <label class="checkbox inline-checkbox">
+                                <input
+                                  type="checkbox"
+                                  [(ngModel)]="field.required"
+                                  [ngModelOptions]="{ standalone: true }"
+                                  [disabled]="field.key === 'dataConsent' || !field.visible"
+                                  (change)="onWebsiteFieldRequiredChanged(field)" />
+                                <span>{{ field.required ? 'Yes' : 'No' }}</span>
+                              </label>
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <label>
+                  Branding Primary Colour
+                  <input type="text" formControlName="brandingPrimaryColor" placeholder="#2563eb" />
+                </label>
+
+                <label>
+                  Branding Logo URL
+                  <input type="url" formControlName="brandingLogoUrl" placeholder="https://..." />
+                </label>
+
+                <label class="full-width">
+                  GDPR Checkbox Text
+                  <input type="text" formControlName="gdprCheckboxText" />
+                </label>
+
+                <label>
+                  reCAPTCHA Site Key
+                  <input type="text" formControlName="recaptchaSiteKey" />
+                </label>
+
+                <label>
+                  Auto-Acknowledgement Template Key
+                  <input type="text" formControlName="autoAcknowledgementTemplateId" placeholder="enquiry_ack" />
+                </label>
+
                 <label class="full-width">
                   Style JSON
                   <textarea rows="3" formControlName="styleJson"></textarea>
                 </label>
+
+                <div class="full-width card-subsection">
+                  <h4>Branding Preview</h4>
+                  <p class="hint">Live preview of the primary styling shown on the embedded enquiry form.</p>
+                  <article class="website-form-branding-preview" [style.--website-primary]="websiteFormPreviewPrimaryColor">
+                    <header>
+                      @if (websiteFormPreviewLogoUrl; as logoUrl) {
+                        <img [src]="logoUrl" alt="Form logo preview" />
+                      } @else {
+                        <span class="logo-fallback">Logo preview</span>
+                      }
+                      <strong>{{ websiteFormForm.getRawValue().name || 'Website Enquiry Form' }}</strong>
+                    </header>
+                    <p>{{ websiteFormPreviewGdprText }}</p>
+                    <button type="button" class="preview-submit">{{ websiteFormPreviewButtonLabel }}</button>
+                  </article>
+                </div>
 
                 <label class="checkbox">
                   <input type="checkbox" formControlName="isActive" />
@@ -2033,11 +2120,33 @@
                 </label>
 
                 <div class="actions full-width">
+                  <button type="button" class="ghost" (click)="resetWebsiteFormEditor()">New Form</button>
                   <button type="submit" class="primary" [disabled]="sectionStates['website-forms'].saving">
                     {{ sectionStates['website-forms'].saving ? 'Saving...' : 'Save Website Form' }}
                   </button>
                 </div>
               </form>
+
+              <div class="card-subsection">
+                <h4>Embed Generator</h4>
+                <p class="hint">Use either script + web component or iframe fallback.</p>
+                <label class="full-width">
+                  Script Embed
+                  <textarea rows="3" readonly [value]="websiteFormWidgetScriptSnippet"></textarea>
+                </label>
+                <div class="actions compact-actions">
+                  <button type="button" class="link" (click)="copyWebsiteSnippet(websiteFormWidgetScriptSnippet)">Copy Script Embed</button>
+                  <a class="link" [href]="websiteFormPreviewUrl" target="_blank" rel="noopener">Open Preview</a>
+                </div>
+
+                <label class="full-width">
+                  iframe Embed
+                  <textarea rows="3" readonly [value]="websiteFormIframeSnippet"></textarea>
+                </label>
+                <div class="actions compact-actions">
+                  <button type="button" class="link" (click)="copyWebsiteSnippet(websiteFormIframeSnippet)">Copy iframe Embed</button>
+                </div>
+              </div>
 
               <div class="table-wrap">
                 <table>
@@ -2045,6 +2154,7 @@
                     <tr>
                       <th>Name</th>
                       <th>Slug</th>
+                      <th>Required Fields</th>
                       <th>Active</th>
                       <th></th>
                     </tr>
@@ -2054,6 +2164,7 @@
                       <tr>
                         <td>{{ form.name }}</td>
                         <td>{{ form.slug }}</td>
+                        <td>{{ form.requiredFields.length }}</td>
                         <td>{{ form.isActive ? 'Yes' : 'No' }}</td>
                         <td>
                           <button type="button" class="link" (click)="editWebsiteForm(form)">Edit</button>
@@ -2063,7 +2174,7 @@
                     }
                     @if (websiteForms.length === 0) {
                       <tr>
-                        <td colspan="4" class="empty-row">No website forms configured yet.</td>
+                        <td colspan="5" class="empty-row">No website forms configured yet.</td>
                       </tr>
                     }
                   </tbody>
@@ -2213,6 +2324,11 @@
                             <option [value]="role">{{ role }}</option>
                           }
                         </select>
+                        <select formControlName="dueDateRule">
+                          @for (rule of taskTemplateDueDateRuleOptions; track rule.value) {
+                            <option [value]="rule.value">{{ rule.label }}</option>
+                          }
+                        </select>
                         <input type="number" formControlName="dueDateOffset" placeholder="Offset days" />
                         <button type="button" class="icon" (click)="moveTaskTemplateItem(i, -1)">&#8593;</button>
                         <button type="button" class="icon" (click)="moveTaskTemplateItem(i, 1)">&#8595;</button>
@@ -2230,41 +2346,44 @@
                 </div>
               </form>
 
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Name</th>
-                      <th>Event Type</th>
-                      <th>Task Count</th>
-                      <th>Auto-Apply</th>
-                      <th>Active</th>
-                      <th></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    @for (template of taskTemplates; track template.id) {
+              @for (group of taskTemplateGroups; track group.status) {
+                <div class="table-wrap">
+                  <h4>{{ group.label }} templates</h4>
+                  <table>
+                    <thead>
                       <tr>
-                        <td>{{ template.name }}</td>
-                        <td>{{ template.eventType }}</td>
-                        <td>{{ template.tasks.length }}</td>
-                        <td>{{ template.autoApplyOnStatus }}</td>
-                        <td>{{ template.isActive ? 'Yes' : 'No' }}</td>
-                        <td>
-                          <button type="button" class="link" (click)="editTaskTemplate(template)">Edit</button>
-                          <button type="button" class="link" (click)="duplicateTaskTemplate(template.id)">Duplicate</button>
-                          <button type="button" class="link danger" (click)="deleteTaskTemplate(template.id)">Delete</button>
-                        </td>
+                        <th>Name</th>
+                        <th>Event Types</th>
+                        <th>Task Count</th>
+                        <th>Trigger</th>
+                        <th>Active</th>
+                        <th></th>
                       </tr>
-                    }
-                    @if (taskTemplates.length === 0) {
-                      <tr>
-                        <td colspan="6" class="empty-row">No task templates configured yet.</td>
-                      </tr>
-                    }
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      @for (template of group.templates; track template.id) {
+                        <tr>
+                          <td>{{ template.name }}</td>
+                          <td>{{ template.eventTypes.join(', ') }}</td>
+                          <td>{{ template.tasks.length }}</td>
+                          <td>{{ template.triggerStatus || template.autoApplyOnStatus }}</td>
+                          <td>{{ template.isActive ? 'Yes' : 'No' }}</td>
+                          <td>
+                            <button type="button" class="link" (click)="editTaskTemplate(template)">Edit</button>
+                            <button type="button" class="link" (click)="duplicateTaskTemplate(template.id)">Duplicate</button>
+                            <button type="button" class="link danger" (click)="deleteTaskTemplate(template.id)">Delete</button>
+                          </td>
+                        </tr>
+                      }
+                      @if (group.templates.length === 0) {
+                        <tr>
+                          <td colspan="6" class="empty-row">No templates for this trigger.</td>
+                        </tr>
+                      }
+                    </tbody>
+                  </table>
+                </div>
+              }
             </section>
           }
 

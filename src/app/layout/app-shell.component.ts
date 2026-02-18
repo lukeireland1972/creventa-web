@@ -1,10 +1,11 @@
-import { Component, DestroyRef, HostListener, OnInit, inject } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Component, DestroyRef, HostListener, OnInit, inject, signal } from '@angular/core';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ReactiveFormsModule, Validators, FormBuilder } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { distinctUntilChanged, map } from 'rxjs';
+import { animate, state, style, transition, trigger } from '@angular/animations';
+import { catchError, debounceTime, distinctUntilChanged, filter, map, of, switchMap, tap } from 'rxjs';
 import {
   AiAssistantActionDto,
   AiAssistantMessageResponse,
@@ -18,6 +19,7 @@ import {
   GlobalSearchIntentDto,
   GlobalSearchResultDto,
   NotificationItemDto,
+  RecentlyViewedBookingDto,
   RecentlyViewedDto,
   SameDateEnquiryConflictDto,
   VenueSummaryDto
@@ -51,7 +53,23 @@ interface AssistantUiMessage {
     selector: 'app-shell',
     imports: [RouterLink, RouterLinkActive, RouterOutlet, ReactiveFormsModule, FormsModule, DatePipe],
     templateUrl: './app-shell.component.html',
-    styleUrl: './app-shell.component.scss'
+    styleUrl: './app-shell.component.scss',
+    animations: [
+      trigger('availabilityPanel', [
+        state('hidden', style({ opacity: 0.6, transform: 'translateY(-6px)' })),
+        state('visible', style({ opacity: 1, transform: 'translateY(0)' })),
+        transition('hidden <=> visible', animate('180ms ease'))
+      ]),
+      trigger('availabilityGroup', [
+        transition(':enter', [
+          style({ opacity: 0, transform: 'translateY(6px)' }),
+          animate('180ms ease-out', style({ opacity: 1, transform: 'translateY(0)' }))
+        ]),
+        transition(':leave', [
+          animate('130ms ease-in', style({ opacity: 0, transform: 'translateY(-4px)' }))
+        ])
+      ])
+    ]
 })
 export class AppShellComponent implements OnInit {
   private formBuilder = new FormBuilder();
@@ -71,11 +89,16 @@ export class AppShellComponent implements OnInit {
   isSearchOpen = false;
   isAssistantOpen = false;
   isMobileNavOpen = false;
+  isSeedingRandomData = false;
+  randomDataMessage = '';
+  randomDataError = '';
 
   venues: VenueSummaryDto[] = [];
   selectedVenueId: string | null = null;
-  recentItems: RecentlyViewedDto[] = [];
-  availability: AvailabilitySidebarResponse | null = null;
+  recentItems: RecentlyViewedBookingDto[] = [];
+  readonly availabilityState = signal<AvailabilitySidebarResponse | null>(null);
+  readonly availabilityLoading = signal(false);
+  readonly availabilityError = signal('');
   duplicateCheck: EnquiryDuplicateCheckResponse | null = null;
   duplicateCheckLoading = false;
   dismissDuplicateAdvisory = false;
@@ -99,6 +122,7 @@ export class AppShellComponent implements OnInit {
   private duplicateCheckDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private duplicateCheckRequestId = 0;
   private realtimeNotificationsSubscribed = false;
+  private randomDataFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
 
   navItems: NavItem[] = [];
   isCreateVenueOpen = false;
@@ -291,6 +315,18 @@ export class AppShellComponent implements OnInit {
     return this.duplicateCheck?.sameDateConflicts ?? [];
   }
 
+  get selectedEventDate(): string {
+    return (this.enquiryForm.controls.eventDate.value ?? '').trim();
+  }
+
+  get hasAvailabilityDateSelected(): boolean {
+    return this.selectedEventDate.length > 0;
+  }
+
+  get availabilityPanelAnimationState(): 'hidden' | 'visible' {
+    return this.hasAvailabilityDateSelected ? 'visible' : 'hidden';
+  }
+
   ngOnInit(): void {
     this.setNavItems();
     this.selectedVenueId = this.auth.selectedVenueId;
@@ -314,6 +350,7 @@ export class AppShellComponent implements OnInit {
           this.assistantMessages = [];
           this.assistantError = '';
           this.hasLoadedInitialAssistantBriefing = false;
+          this.refreshAvailabilityPanel(this.enquiryForm.controls.eventDate.value);
         }
       });
 
@@ -337,21 +374,53 @@ export class AppShellComponent implements OnInit {
     this.loadTaskBadge();
     this.ensureRealtimeConnection();
     this.subscribeRealtimeNotifications();
+    this.router.events
+      .pipe(
+        filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+        map(() => this.currentEnquiryIdFromUrl),
+        distinctUntilChanged(),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((enquiryId) => {
+        if (enquiryId) {
+          this.loadRecent();
+        }
+      });
 
-    this.enquiryForm.controls.eventDate.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((date) => {
-      if (!date || !this.selectedVenueId) {
-        this.availability = null;
-      } else {
-        this.api
-          .getAvailability(this.selectedVenueId, date)
-          .pipe(takeUntilDestroyed(this.destroyRef))
-          .subscribe((availability) => {
-            this.availability = availability;
-          });
-      }
+    this.enquiryForm.controls.eventDate.valueChanges
+      .pipe(
+        debounceTime(300),
+        distinctUntilChanged(),
+        tap(() => {
+          this.scheduleDuplicateCheck();
+          if (!this.selectedVenueId || !this.selectedEventDate) {
+            this.availabilityState.set(null);
+            this.availabilityError.set('');
+            this.availabilityLoading.set(false);
+          }
+        }),
+        switchMap((date) => {
+          if (!date || !this.selectedVenueId) {
+            return of<AvailabilitySidebarResponse | null>(null);
+          }
 
-      this.scheduleDuplicateCheck();
-    });
+          this.availabilityLoading.set(true);
+          this.availabilityError.set('');
+
+          return this.api.getAvailability(this.selectedVenueId, date).pipe(
+            map((availability) => availability as AvailabilitySidebarResponse | null),
+            catchError(() => {
+              this.availabilityError.set('Unable to load same-date availability right now.');
+              return of<AvailabilitySidebarResponse | null>(null);
+            })
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((availability) => {
+        this.availabilityLoading.set(false);
+        this.availabilityState.set(availability);
+      });
 
     this.enquiryForm.controls.contactEmail.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.scheduleDuplicateCheck();
@@ -377,6 +446,9 @@ export class AppShellComponent implements OnInit {
     this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
     this.isRecentOpen = !this.isRecentOpen;
+    if (this.isRecentOpen) {
+      this.loadRecent();
+    }
   }
 
   toggleSettings(event: MouseEvent): void {
@@ -643,7 +715,41 @@ export class AppShellComponent implements OnInit {
 
   openDrawer(): void {
     this.isDrawerOpen = true;
+    this.refreshAvailabilityPanel(this.enquiryForm.controls.eventDate.value);
     this.scheduleDuplicateCheck();
+  }
+
+  seedRandomizedData(): void {
+    if (this.isSeedingRandomData) {
+      return;
+    }
+
+    const venueId = this.selectedVenueId ?? this.auth.selectedVenueId;
+    if (!venueId) {
+      this.setRandomDataFeedback('', 'Select a venue before adding randomised data.');
+      return;
+    }
+
+    this.isSeedingRandomData = true;
+    this.setRandomDataFeedback('', '');
+    this.api
+      .generateTestEnquiries({ venueId, count: 10 })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.isSeedingRandomData = false;
+          const created = Number(response?.created ?? 0);
+          const added = Number.isFinite(created) && created > 0 ? created : 10;
+          this.setRandomDataFeedback(`Added ${added} randomised enquiries.`, '');
+        },
+        error: (error) => {
+          this.isSeedingRandomData = false;
+          const message = typeof error?.error === 'string'
+            ? error.error
+            : 'Unable to add randomised data right now.';
+          this.setRandomDataFeedback('', message);
+        }
+      });
   }
 
   closeDrawer(): void {
@@ -652,7 +758,53 @@ export class AppShellComponent implements OnInit {
     this.showValidation = false;
     this.showDuplicateWarningModal = false;
     this.selectedDuplicateEnquiryId = '';
+    this.availabilityLoading.set(false);
+    this.availabilityError.set('');
     this.clearDuplicateAdvisories();
+  }
+
+  private refreshAvailabilityPanel(dateValue: string | null | undefined): void {
+    const date = (dateValue ?? '').trim();
+    if (!date || !this.selectedVenueId) {
+      this.availabilityState.set(null);
+      this.availabilityLoading.set(false);
+      this.availabilityError.set('');
+      return;
+    }
+
+    this.availabilityLoading.set(true);
+    this.availabilityError.set('');
+    this.api
+      .getAvailability(this.selectedVenueId, date)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (availability) => {
+          this.availabilityState.set(availability);
+          this.availabilityLoading.set(false);
+        },
+        error: () => {
+          this.availabilityState.set(null);
+          this.availabilityLoading.set(false);
+          this.availabilityError.set('Unable to load same-date availability right now.');
+        }
+      });
+  }
+
+  private setRandomDataFeedback(success: string, error: string): void {
+    this.randomDataMessage = success;
+    this.randomDataError = error;
+    if (this.randomDataFeedbackTimer) {
+      clearTimeout(this.randomDataFeedbackTimer);
+      this.randomDataFeedbackTimer = null;
+    }
+
+    if (success || error) {
+      this.randomDataFeedbackTimer = setTimeout(() => {
+        this.randomDataMessage = '';
+        this.randomDataError = '';
+        this.randomDataFeedbackTimer = null;
+      }, 6000);
+    }
   }
 
   logout(): void {
@@ -747,6 +899,9 @@ export class AppShellComponent implements OnInit {
 
           this.router.navigate(['/enquiries'], { queryParams: { created: created.id } });
           this.loadRecent();
+          this.availabilityState.set(null);
+          this.availabilityLoading.set(false);
+          this.availabilityError.set('');
           this.clearDuplicateAdvisories();
         },
         error: (error) => {
@@ -830,12 +985,10 @@ export class AppShellComponent implements OnInit {
     }
   }
 
-  openRecentItem(item: RecentlyViewedDto): void {
+  openRecentItem(item: RecentlyViewedBookingDto): void {
     this.isRecentOpen = false;
     this.closeMobileNav();
-    if (item.entityType === 'Enquiry') {
-      this.router.navigate(['/enquiries'], { queryParams: { enquiry: item.entityId } });
-    }
+    this.router.navigate(['/enquiries'], { queryParams: { enquiry: item.enquiryId } });
   }
 
   onSearchFocus(event: Event): void {
@@ -993,7 +1146,13 @@ export class AppShellComponent implements OnInit {
 
   private loadRecent(): void {
     this.api
-      .getRecentEnquiries()
+      .getMyRecentlyViewedBookings()
+      .pipe(
+        catchError(() =>
+          this.api.getRecentEnquiries().pipe(
+            map((items) => items.map((item) => this.mapLegacyRecentItem(item)))
+          ))
+      )
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (items) => {
@@ -1003,6 +1162,59 @@ export class AppShellComponent implements OnInit {
           this.recentItems = [];
         }
       });
+  }
+
+  recentStatusClass(status: string | null | undefined): string {
+    const normalized = (status ?? '').trim().toLowerCase();
+    if (normalized === 'confirmed' || normalized === 'completed') {
+      return 'status-good';
+    }
+
+    if (normalized === 'provisional' || normalized === 'openproposal' || normalized === 'open proposal' || normalized === 'tentative') {
+      return 'status-warn';
+    }
+
+    if (normalized === 'lost' || normalized === 'archived') {
+      return 'status-bad';
+    }
+
+    return 'status-neutral';
+  }
+
+  private mapLegacyRecentItem(item: RecentlyViewedDto): RecentlyViewedBookingDto {
+    const label = (item.label ?? '').trim();
+    const separatorIndex = label.indexOf(' - ');
+    const enquiryRef = separatorIndex > 0 ? label.slice(0, separatorIndex).trim() : label || 'Unknown';
+    const clientName = separatorIndex > 0 ? label.slice(separatorIndex + 3).trim() : 'Unknown client';
+    const eventDate = this.parseLegacyRecentEventDate(item.secondaryLine);
+
+    return {
+      enquiryId: item.entityId,
+      enquiryRef,
+      clientName,
+      eventDate,
+      status: item.status,
+      viewedAtUtc: item.viewedAtUtc
+    };
+  }
+
+  private parseLegacyRecentEventDate(secondaryLine: string | null | undefined): string | null {
+    if (!secondaryLine) {
+      return null;
+    }
+
+    const datePart = secondaryLine.split('|').map((segment) => segment.trim()).find((segment) => segment.length > 0);
+    if (!datePart) {
+      return null;
+    }
+
+    const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(datePart);
+    if (!match) {
+      return null;
+    }
+
+    const [, dd, mm, yyyy] = match;
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   private loadNotifications(): void {

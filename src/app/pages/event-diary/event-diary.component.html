@@ -113,6 +113,7 @@
             </button>
           </div>
           <button type="button" class="add-task-btn" (click)="openAddTask()">+ Add Task</button>
+          <button type="button" class="add-event-btn secondary" (click)="openAddAppointment()">+ New Appointment</button>
           <button type="button" class="add-event-btn" (click)="addEvent()">+ Add Event</button>
         }
       </div>
@@ -136,6 +137,7 @@
               class="day-cell"
               [class.outside-month]="!cell.inCurrentMonth"
               [ngClass]="heatmapClassForDate(cell.key)"
+              (click)="onMonthCellClick(cell, $event)"
               (dragover)="$event.preventDefault()"
               (drop)="onDropDay(cell.key)">
               <header class="day-header">
@@ -237,6 +239,7 @@
                     [class.empty]="!cell.isoDate"
                     [class.first-monday]="cell.isFirstMonday"
                     [ngClass]="heatmapClassForDate(cell.isoDate)"
+                    (click)="onTimelineCellClick(cell, $event)"
                     (dragover)="$event.preventDefault()"
                     (drop)="onDropTimelineCell(cell)">
                     @if (cell.dayNumber) {
@@ -319,6 +322,7 @@
                   class="room-track"
                   [style.height.px]="roomRowHeightPx(row)"
                   #roomTrack
+                  (click)="onRoomTrackClick(row, roomTrack, $event)"
                   (dragover)="$event.preventDefault()"
                   (drop)="onDropRoomTrack(row, $event, roomTrack)">
                   @for (label of timelineHeaderLabels; track $index) {
@@ -387,6 +391,7 @@
                     cdkDropList
                     [cdkDropListData]="day.events"
                     [cdkDropListSortingDisabled]="true"
+                    (click)="onWeekColumnClick(day.isoDate, weekColumn, $event)"
                     (cdkDropListDropped)="onWeekCdkDrop(day.isoDate, $event, weekColumn)"
                     (dragover)="$event.preventDefault()"
                     (drop)="onDropWeekColumn(day.isoDate, $event, weekColumn)">
@@ -452,6 +457,7 @@
                     cdkDropList
                     [cdkDropListData]="dayLane.events"
                     [cdkDropListSortingDisabled]="true"
+                    (click)="onWeekSpaceColumnClick(dayLane.isoDate, row.spaceId, weekSpaceColumn, $event)"
                     (cdkDropListDropped)="onWeekSpaceCdkDrop(dayLane.isoDate, row.spaceId, $event, weekSpaceColumn)"
                     (dragover)="$event.preventDefault()"
                     (drop)="onDropWeekSpaceColumn(dayLane.isoDate, row.spaceId, $event, weekSpaceColumn)">
@@ -519,6 +525,7 @@
                   cdkDropList
                   [cdkDropListData]="column.events"
                   [cdkDropListSortingDisabled]="true"
+                  (click)="onDaySpaceColumnClick(currentDayIso, column.spaceId, daySpaceColumn, $event)"
                   (cdkDropListDropped)="onDaySpaceCdkDrop(currentDayIso, column.spaceId, $event, daySpaceColumn)"
                   (dragover)="$event.preventDefault()"
                   (drop)="onDropDaySpaceColumn(currentDayIso, column.spaceId, $event, daySpaceColumn)">
@@ -715,6 +722,115 @@
       <button type="button" class="undo-btn" (click)="undoLastMove()" [disabled]="undo.undoing">
         {{ undo.undoing ? 'Undoing...' : 'Undo' }}
       </button>
+    </section>
+  }
+
+  @if (showAppointmentModal) {
+    <div class="move-modal-backdrop" (click)="closeAppointmentModal()"></div>
+    <section class="move-modal appointment-modal" role="dialog" aria-modal="true" aria-label="Create appointment">
+      <h3>Create Appointment</h3>
+      <div class="appointment-modal-grid">
+        <label>
+          Title
+          <input type="text" maxlength="200" [(ngModel)]="appointmentDraft.title" />
+        </label>
+        <label>
+          Type
+          <select [(ngModel)]="appointmentDraft.type">
+            <option value="Meeting">Meeting</option>
+            <option value="MenuTasting">Menu Tasting</option>
+            <option value="SiteVisit">Site Visit</option>
+            <option value="Rehearsal">Rehearsal</option>
+            <option value="Other">Other</option>
+          </select>
+        </label>
+        <label>
+          Date
+          <input type="date" [(ngModel)]="appointmentDraft.date" />
+        </label>
+        <label>
+          Start Time
+          <input type="time" [(ngModel)]="appointmentDraft.startTime" />
+        </label>
+        <label>
+          Duration (mins)
+          <input type="number" min="15" step="15" [(ngModel)]="appointmentDraft.durationMinutes" />
+        </label>
+        <label>
+          Status
+          <select [(ngModel)]="appointmentDraft.status">
+            <option value="Scheduled">Scheduled</option>
+            <option value="Completed">Completed</option>
+            <option value="Cancelled">Cancelled</option>
+            <option value="NoShow">No Show</option>
+          </select>
+        </label>
+        <label>
+          Space
+          <select [(ngModel)]="appointmentDraft.spaceId">
+            <option value="">No space</option>
+            @for (space of diary?.spaces ?? []; track space.spaceId) {
+              @if (space.spaceId !== '00000000-0000-0000-0000-000000000000') {
+                <option [value]="space.spaceId">{{ space.spaceName }}</option>
+              }
+            }
+          </select>
+        </label>
+        <label>
+          Assigned To
+          <select [(ngModel)]="appointmentDraft.assignedToUserId">
+            <option value="">Unassigned</option>
+            @for (user of appointmentUsers; track user.id) {
+              <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Attendees
+          <input type="text" maxlength="500" [(ngModel)]="appointmentDraft.attendees" placeholder="Client + team" />
+        </label>
+        <label class="full">
+          Notes
+          <textarea rows="3" maxlength="1000" [(ngModel)]="appointmentDraft.notes"></textarea>
+        </label>
+      </div>
+
+      <div class="appointment-related">
+        <h4>Related Enquiries</h4>
+        @if (loadingAppointmentLookups) {
+          <p>Loading enquiries...</p>
+        } @else if (appointmentEnquiryOptions.length === 0) {
+          <p>No enquiries available.</p>
+        } @else {
+          <div class="appointment-related-list">
+            @for (option of appointmentEnquiryOptions; track option.id) {
+              <label>
+                <input type="checkbox" [checked]="isAppointmentEnquirySelected(option.id)" (change)="toggleAppointmentEnquiry(option.id)" />
+                <span>{{ option.label }}</span>
+              </label>
+            }
+          </div>
+        }
+      </div>
+
+      @if (appointmentError) {
+        <p class="move-conflict-info">{{ appointmentError }}</p>
+      }
+      @if (appointmentConflictWarning) {
+        <p class="move-conflict-info">{{ appointmentConflictWarning }}</p>
+      }
+
+      <div class="move-modal-actions">
+        <button type="button" class="ghost" (click)="closeAppointmentModal()" [disabled]="appointmentSaving">Cancel</button>
+        @if (appointmentConflictWarning) {
+          <button type="button" class="warning" (click)="submitAppointment(true)" [disabled]="!canSaveAppointment">
+            {{ appointmentSaving ? 'Saving...' : 'Save Anyway' }}
+          </button>
+        }
+        <button type="button" class="primary" (click)="submitAppointment(false)" [disabled]="!canSaveAppointment">
+          {{ appointmentSaving ? 'Saving...' : 'Create Appointment' }}
+        </button>
+      </div>
     </section>
   }
 </section>

@@ -101,6 +101,9 @@ export class TicketDashboardComponent implements OnInit {
   groupByEventName = false;
   groupByEventDate = false;
   generatedAtUtc = '';
+  seedMessage = '';
+  seedErrorMessage = '';
+  isSeedingTestData = false;
 
   eventRows: EventRow[] = [];
   expandedEventKeys = new Set<string>();
@@ -259,6 +262,65 @@ export class TicketDashboardComponent implements OnInit {
 
   venueLabel(venueId: string): string {
     return this.venueNameById.get(venueId) ?? venueId;
+  }
+
+  get canSeedTestData(): boolean {
+    return this.resolveSeedVenueId() !== null;
+  }
+
+  seedTestData(): void {
+    const targetVenueId = this.resolveSeedVenueId();
+    if (!targetVenueId) {
+      this.seedMessage = '';
+      this.seedErrorMessage = 'Select a specific venue first before adding test ticket data.';
+      return;
+    }
+
+    if (this.isSeedingTestData) {
+      return;
+    }
+
+    this.seedMessage = '';
+    this.seedErrorMessage = '';
+    this.isSeedingTestData = true;
+
+    this.api
+      .seedTicketDashboardTestData({ venueId: targetVenueId })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.isSeedingTestData = false;
+          this.seedMessage = `Added ${response.eventsInserted} events and ${response.purchasesInserted} purchases for ${response.venueName}.`;
+          this.selectedVenueId = response.venueId;
+          this.loadDataset();
+        },
+        error: (error) => {
+          this.isSeedingTestData = false;
+          this.seedMessage = '';
+          const serverMessage = typeof error?.error === 'string'
+            ? error.error
+            : typeof error?.error?.message === 'string'
+              ? error.error.message
+              : '';
+          this.seedErrorMessage = serverMessage || 'Unable to add test ticket data right now.';
+        }
+      });
+  }
+
+  private resolveSeedVenueId(): string | null {
+    if (this.selectedVenueId && this.selectedVenueId !== 'all') {
+      return this.selectedVenueId;
+    }
+
+    if (this.shellSelectedVenueId && this.venueNameById.has(this.shellSelectedVenueId)) {
+      return this.shellSelectedVenueId;
+    }
+
+    if (this.venueOptions.length === 1) {
+      return this.venueOptions[0].id;
+    }
+
+    return null;
   }
 
   private loadDataset(): void {
@@ -509,6 +571,13 @@ export class TicketDashboardComponent implements OnInit {
           return left.eventDateSortMs - right.eventDateSortMs;
         }
 
+        if (this.groupByEventDate) {
+          const byName = left.name.localeCompare(right.name, undefined, { sensitivity: 'base' });
+          if (byName !== 0) {
+            return byName;
+          }
+        }
+
         if (this.isDepositsMode) {
           const leftDue = left.nextDueDateMs ?? Number.MAX_SAFE_INTEGER;
           const rightDue = right.nextDueDateMs ?? Number.MAX_SAFE_INTEGER;
@@ -564,26 +633,29 @@ export class TicketDashboardComponent implements OnInit {
 
     const segments = [record.venueId];
 
-    if (this.groupByEventName) {
-      const normalizedName = (record.eventName ?? '')
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, '-')
-        .replace(/^-+|-+$/g, '');
-
-      if (normalizedName.length > 0) {
-        segments.push(`name:${normalizedName}`);
-      } else {
-        const fallbackNameKey = record.eventKey || record.transactionId || record.id;
-        segments.push(`name-fallback:${fallbackNameKey}`);
-      }
-    }
-
     if (this.groupByEventDate) {
       segments.push(`date:${this.resolveEventDateGroupingKey(record)}`);
     }
 
+    if (this.groupByEventName || this.groupByEventDate) {
+      segments.push(`name:${this.resolveEventNameGroupingKey(record)}`);
+    }
+
     return segments.join('::');
+  }
+
+  private resolveEventNameGroupingKey(record: TicketRecord): string {
+    const normalizedName = (record.eventName ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    if (normalizedName.length > 0) {
+      return normalizedName;
+    }
+
+    return record.eventKey || record.transactionId || record.id;
   }
 
   private resolveEventDateGroupingKey(record: TicketRecord): string {
@@ -596,11 +668,12 @@ export class TicketDashboardComponent implements OnInit {
   }
 
   private resolveEventGroupName(record: TicketRecord): string {
-    if (this.groupByEventDate && !this.groupByEventName) {
-      return `Event Date ${this.formatEventDateLabel(record)}`;
+    const trimmedName = (record.eventName ?? '').trim();
+    if (trimmedName.length > 0) {
+      return trimmedName;
     }
 
-    return record.eventName;
+    return 'Untitled Event';
   }
 
   private formatEventDateLabel(record: TicketRecord): string {
@@ -622,7 +695,7 @@ export class TicketDashboardComponent implements OnInit {
     }
 
     if (this.groupByEventDate) {
-      return 'Grouped by event date, then guest.';
+      return 'Grouped by event date, then event name, then guest.';
     }
 
     return 'Grouped by event, then guest.';
@@ -638,7 +711,7 @@ export class TicketDashboardComponent implements OnInit {
     }
 
     if (this.groupByEventDate) {
-      return 'Outstanding balances grouped by event date and guest.';
+      return 'Outstanding balances grouped by event date, then event name, then guest.';
     }
 
     return 'Outstanding balances grouped by event and guest.';

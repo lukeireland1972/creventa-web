@@ -302,6 +302,12 @@
   box-shadow: 0 10px 18px rgba(37, 99, 235, 0.22);
 }
 
+.add-event-btn.secondary {
+  border-color: #0f766e;
+  background: #14b8a6;
+  box-shadow: 0 10px 18px rgba(20, 184, 166, 0.24);
+}
+
 .add-task-btn {
   border: 1px solid #0f766e;
   background: #14b8a6;
@@ -1723,6 +1729,74 @@
   border-color: #bfdbfe;
   background: #dbeafe;
   color: #1d4ed8;
+}
+
+.appointment-modal {
+  width: min(760px, calc(100% - 2rem));
+}
+
+.appointment-modal-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.appointment-modal-grid label {
+  display: grid;
+  gap: 0.2rem;
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.appointment-modal-grid label.full {
+  grid-column: 1 / -1;
+}
+
+.appointment-modal-grid input,
+.appointment-modal-grid select,
+.appointment-modal-grid textarea {
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  padding: 0.44rem 0.55rem;
+  font-size: 0.82rem;
+  color: #0f172a;
+  background: #fff;
+  font-family: inherit;
+}
+
+.appointment-related {
+  border: 1px solid #dbeafe;
+  background: #f8fbff;
+  border-radius: 12px;
+  padding: 0.58rem 0.66rem;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.appointment-related h4 {
+  margin: 0;
+  color: #1e3a8a;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.appointment-related-list {
+  display: grid;
+  gap: 0.34rem;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.appointment-related-list label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #334155;
+  font-size: 0.76rem;
 }
 
 .move-undo-toast {
