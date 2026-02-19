@@ -192,7 +192,7 @@ export class PortfolioComponent implements OnInit {
           this.dashboardData = null;
           this.dashboardError = error?.error?.message
             ?? error?.error
-            ?? 'Unable to load portfolio metrics.';
+            ?? 'Unable to load group portfolio metrics.';
         }
       });
   }
@@ -217,7 +217,7 @@ export class PortfolioComponent implements OnInit {
           this.loadingReport = false;
           this.reportError = error?.error?.message
             ?? error?.error
-            ?? 'Unable to load portfolio report.';
+            ?? 'Unable to load group portfolio report.';
         }
       });
   }

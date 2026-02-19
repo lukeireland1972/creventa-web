@@ -11,6 +11,13 @@ describe('EnquiriesComponent', () => {
   let router: jasmine.SpyObj<Router>;
   let api: jasmine.SpyObj<ApiService>;
   let queryParamSubject: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
+  let authSessionSubject: BehaviorSubject<any>;
+  let authStub: {
+    selectedVenueId: string | null;
+    session: any;
+    session$: ReturnType<BehaviorSubject<any>['asObservable']>;
+    setSelectedVenue: jasmine.Spy<(venueId: string) => void>;
+  };
 
   const emptyListResponse: EnquiryListResponse = {
     stats: {
@@ -79,10 +86,6 @@ describe('EnquiriesComponent', () => {
     activityLog: []
   };
 
-  const authStub = {
-    selectedVenueId: 'venue-1'
-  };
-
   beforeEach(async () => {
     router = jasmine.createSpyObj<Router>('Router', ['navigate']);
     queryParamSubject = new BehaviorSubject(
@@ -117,6 +120,32 @@ describe('EnquiriesComponent', () => {
     );
     api.getUsers.and.returnValue(of([]));
     api.getLostReasons.and.returnValue(of([]));
+
+    authSessionSubject = new BehaviorSubject({
+      venueId: 'venue-1',
+      tenantId: 'tenant-1',
+      venueRoles: [
+        {
+          venueId: 'venue-1',
+          venueName: 'Venue One',
+          role: 'VenueAdmin'
+        }
+      ]
+    });
+    authStub = {
+      selectedVenueId: 'venue-1',
+      session: authSessionSubject.value,
+      session$: authSessionSubject.asObservable(),
+      setSelectedVenue: jasmine.createSpy('setSelectedVenue').and.callFake((venueId: string) => {
+        authStub.selectedVenueId = venueId;
+        const next = {
+          ...authSessionSubject.value,
+          venueId
+        };
+        authStub.session = next;
+        authSessionSubject.next(next);
+      })
+    };
 
     await TestBed.configureTestingModule({
       imports: [EnquiriesComponent],

@@ -31,7 +31,8 @@ export const routes: Routes = [
     children: [
       { path: 'connect', component: ConnectComponent },
       { path: 'contacts', loadComponent: () => import('./pages/contacts/contacts.component').then((m) => m.ContactsComponent) },
-      { path: 'portfolio', loadComponent: () => import('./pages/portfolio/portfolio.component').then((m) => m.PortfolioComponent) },
+      { path: 'portfolio', redirectTo: 'group-portfolio', pathMatch: 'full' },
+      { path: 'group-portfolio', loadComponent: () => import('./pages/portfolio/portfolio.component').then((m) => m.PortfolioComponent) },
       { path: 'event-diary', component: EventDiaryComponent },
       { path: 'enquiries', component: EnquiriesComponent },
       { path: 'tasks', loadComponent: () => import('./pages/tasks/tasks.component').then((m) => m.TasksComponent) },

@@ -3,18 +3,20 @@
 
 /* Global design tokens aligned with Figma visual language. */
 :root {
-  --cf-bg: #f8fafc;
+  --cf-bg: #ffffff;
   --cf-surface: #ffffff;
-  --cf-border: #e2e8f0;
-  --cf-border-soft: #f1f5f9;
-  --cf-text: #0f172a;
-  --cf-text-muted: #64748b;
-  --cf-primary: #2563eb;
-  --cf-primary-hover: #1d4ed8;
-  --cf-primary-soft: #eff6ff;
-  --cf-danger: #dc2626;
-  --cf-warning: #d97706;
-  --cf-success: #16a34a;
+  --cf-border: #c7d9ec;
+  --cf-border-soft: #e6eef7;
+  --cf-text: #0f3f78;
+  --cf-text-muted: #3d6b9c;
+  --cf-primary: #1c65b4;
+  --cf-primary-hover: #184f8c;
+  --cf-primary-soft: #eef5fc;
+  --cf-danger: #e34a4b;
+  --cf-warning: #f3a11a;
+  --cf-success: #28b9d9;
+  --cf-accent-magenta: #b14595;
+  --cf-accent-navy: #1a4e95;
   --cf-radius-xl: 16px;
   --cf-radius-2xl: 20px;
   --cf-shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
@@ -25,6 +27,7 @@
 *::before,
 *::after {
   box-sizing: border-box;
+  background-image: none !important;
 }
 
 html,
@@ -56,13 +59,62 @@ a {
 }
 
 :focus-visible {
-  outline: 3px solid rgba(37, 99, 235, 0.35);
+  outline: 3px solid rgba(28, 101, 180, 0.35);
   outline-offset: 2px;
   border-radius: 8px;
 }
 
 ::selection {
-  background: rgba(37, 99, 235, 0.2);
+  background: rgba(28, 101, 180, 0.18);
+}
+
+button,
+input[type='button'],
+input[type='submit'],
+input[type='reset'] {
+  background: #ffffff !important;
+  border: 1px solid var(--cf-primary) !important;
+  color: var(--cf-primary) !important;
+}
+
+button:hover:not(:disabled),
+input[type='button']:hover:not(:disabled),
+input[type='submit']:hover:not(:disabled),
+input[type='reset']:hover:not(:disabled) {
+  background: #ffffff !important;
+  border-color: var(--cf-primary-hover) !important;
+  color: var(--cf-primary-hover) !important;
+}
+
+.card,
+[class$='-card'],
+[class*='-card '] {
+  background: #ffffff !important;
+  background-image: none !important;
+  border: 1px solid var(--cf-border) !important;
+  box-shadow: none !important;
+  transition: border-width 0.14s ease, border-color 0.14s ease;
+}
+
+.card:hover,
+.card:focus-within,
+.card.selected,
+.card.active,
+.card[aria-selected='true'],
+[class$='-card']:hover,
+[class$='-card']:focus-within,
+[class$='-card'].selected,
+[class$='-card'].active,
+[class$='-card'][aria-selected='true'],
+[class*='-card ']:hover,
+[class*='-card ']:focus-within,
+[class*='-card '].selected,
+[class*='-card '].active,
+[class*='-card '][aria-selected='true'] {
+  border-width: 4px !important;
+  border-color: var(--cf-primary) !important;
+  background: #ffffff !important;
+  background-image: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

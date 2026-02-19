@@ -39,6 +39,13 @@ export interface LoginResponse {
   venueRoles: UserVenueRoleDto[];
 }
 
+export interface SsoProviderDescriptor {
+  name: string;
+  protocol: string;
+  enabled: boolean;
+  clientId?: string | null;
+}
+
 export interface CurrentUserResponse {
   userId: string;
   tenantId?: string | null;
@@ -99,6 +106,25 @@ export class AuthService {
         }
       })
     );
+  }
+
+  loginWithGoogle(idToken: string, tenantSubdomain: string, venueId?: string | null): Observable<LoginResponse> {
+    return this.http.post<LoginResponse>('/api/auth/sso/google', {
+      idToken,
+      tenantSubdomain,
+      venueId: venueId ?? null
+    }).pipe(
+      timeout(15000),
+      tap((response) => {
+        if (response.accessToken) {
+          this.persistSession(response, tenantSubdomain);
+        }
+      })
+    );
+  }
+
+  getSsoProviders(): Observable<SsoProviderDescriptor[]> {
+    return this.http.get<SsoProviderDescriptor[]>('/api/auth/sso/providers').pipe(timeout(10000));
   }
 
   getCurrentUser(): Observable<CurrentUserResponse> {

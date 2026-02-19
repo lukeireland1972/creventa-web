@@ -1,6 +1,6 @@
 .registration-page {
   min-height: 100vh;
-  background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+  background: #f8fbff;
   padding: 1.2rem;
   display: flex;
   flex-direction: column;
@@ -146,7 +146,7 @@ button {
 }
 
 button.primary {
-  background: linear-gradient(135deg, #1d4ed8, #2563eb);
+  background: #1c65b4;
   color: #fff;
 }
 
@@ -214,4 +214,3 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
-

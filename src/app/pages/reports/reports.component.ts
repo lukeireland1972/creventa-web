@@ -782,32 +782,10 @@ export class ReportsComponent implements OnInit {
   get revenueByEventTypeDonutBackground(): string {
     const total = this.revenueByEventTypeTotal;
     if (total <= 0) {
-      return 'conic-gradient(#e2e8f0 0% 100%)';
+      return '#e2e8f0';
     }
 
-    let current = 0;
-    const segments: string[] = [];
-    this.revenueByEventTypeRows.forEach((row, index) => {
-      const percentage = total > 0 ? (row.totalRevenue / total) * 100 : 0;
-      if (percentage <= 0) {
-        return;
-      }
-
-      const color = this.eventTypePalette[index % this.eventTypePalette.length];
-      const next = Math.min(100, current + percentage);
-      segments.push(`${color} ${current.toFixed(2)}% ${next.toFixed(2)}%`);
-      current = next;
-    });
-
-    if (segments.length === 0) {
-      return 'conic-gradient(#e2e8f0 0% 100%)';
-    }
-
-    if (current < 100) {
-      segments.push(`#e2e8f0 ${current.toFixed(2)}% 100%`);
-    }
-
-    return `conic-gradient(${segments.join(', ')})`;
+    return this.eventTypePalette[0] ?? '#94a3b8';
   }
 
   getEventTypeColor(index: number): string {
@@ -944,22 +922,10 @@ export class ReportsComponent implements OnInit {
   get sourceDonutBackground(): string {
     const data = this.sourceRows.filter((row) => row.count > 0);
     if (data.length === 0) {
-      return 'conic-gradient(#e2e8f0 0% 100%)';
+      return '#e2e8f0';
     }
 
-    let current = 0;
-    const segments = data.map((row) => {
-      const next = current + row.percentage;
-      const segment = `${row.color} ${current.toFixed(2)}% ${Math.min(next, 100).toFixed(2)}%`;
-      current = next;
-      return segment;
-    });
-
-    if (current < 100) {
-      segments.push(`#e2e8f0 ${current.toFixed(2)}% 100%`);
-    }
-
-    return `conic-gradient(${segments.join(', ')})`;
+    return data[0]?.color ?? '#94a3b8';
   }
 
   get lostRows(): LostReasonRow[] {

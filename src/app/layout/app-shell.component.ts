@@ -1583,7 +1583,7 @@ export class AppShellComponent implements OnInit {
     this.navItems = [
       { label: 'Dashboard', section: 'primary', route: '/', exact: true },
       ...(this.canViewPortfolio
-        ? [{ label: 'Portfolio', section: 'primary', route: '/portfolio', exact: false } as NavItem]
+        ? [{ label: 'Group Portfolio', section: 'primary', route: '/group-portfolio', exact: false } as NavItem]
         : []),
       {
         label: 'Connect',
@@ -1594,6 +1594,7 @@ export class AppShellComponent implements OnInit {
       },
       { label: 'Contacts', section: 'primary', route: '/contacts', exact: false },
       { label: 'Enquiries', section: 'primary', route: '/enquiries', exact: false },
+      { label: 'Proposals', section: 'primary', route: '/proposals', exact: false },
       { label: 'Event Diary', section: 'primary', route: '/event-diary', exact: false },
       {
         label: 'Tasks',

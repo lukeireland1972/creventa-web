@@ -1,12 +1,12 @@
 <section class="portfolio-page">
   <header class="page-header">
     <div>
-      <h1>Portfolio Dashboard</h1>
+      <h1>Group Portfolio Dashboard</h1>
       <p>Group-level visibility across all venues with benchmarking, reporting, and settings cascade controls.</p>
     </div>
 
     <label class="venue-filter">
-      <span>Portfolio Scope</span>
+      <span>Group Portfolio Scope</span>
       <select [(ngModel)]="selectedVenueFilterId" (change)="onDashboardVenueFilterChange()">
         <option value="all">All Venues</option>
         @for (venue of venueOptions; track venue.id) {
@@ -21,7 +21,7 @@
   }
 
   @if (loadingDashboard) {
-    <section class="loading-card">Loading portfolio metrics...</section>
+    <section class="loading-card">Loading group portfolio metrics...</section>
   } @else if (dashboardData; as dashboard) {
     <section class="aggregate-grid">
       <article>
@@ -33,7 +33,7 @@
         <strong>{{ dashboard.aggregate.totalConfirmedEvents }}</strong>
       </article>
       <article>
-        <span>Portfolio Pipeline</span>
+        <span>Group Portfolio Pipeline</span>
         <strong>{{ dashboard.aggregate.totalPipelineValue | number: '1.0-2' }} {{ dashboard.aggregate.currencyCode }}</strong>
       </article>
       <article>
@@ -112,7 +112,7 @@
   <section class="card">
     <div class="card-heading">
       <h2>Group Reports</h2>
-      <span>Portfolio rollups with venue drill-down</span>
+      <span>Group portfolio rollups with venue drill-down</span>
     </div>
 
     <div class="report-controls">
@@ -161,7 +161,7 @@
       <p class="loading-inline">Loading report...</p>
     } @else if (groupReport; as report) {
       <article class="report-block">
-        <h3>Portfolio Aggregate</h3>
+        <h3>Group Portfolio Aggregate</h3>
         @if (report.aggregate.note) {
           <p class="hint">{{ report.aggregate.note }}</p>
         }

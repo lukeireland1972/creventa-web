@@ -128,6 +128,19 @@
   padding: 0.82rem;
   display: grid;
   gap: 0.25rem;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.stats article.stat-tab {
+  cursor: pointer;
+}
+
+.stats article.stat-tab:hover {
+  border-color: #9bbfe5;
+}
+
+.stats article.stat-tab.active {
+  border-color: var(--cf-primary);
 }
 
 .stat-top {
@@ -403,7 +416,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #2563eb, #38bdf8);
+  background: #1c65b4;
   transition: width 160ms ease-in-out;
 }
 
@@ -1571,7 +1584,7 @@ tbody tr.selected {
 .util-fill {
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #22c55e, #16a34a);
+  background: #22c55e;
 }
 
 .sub-event-day-timeline {
@@ -1631,7 +1644,7 @@ tbody tr.selected {
   top: 0.13rem;
   bottom: 0.13rem;
   border-radius: 8px;
-  background: linear-gradient(90deg, #2563eb, #3b82f6);
+  background: #1c65b4;
   color: #fff;
   font-size: 0.62rem;
   font-weight: 700;
@@ -1961,15 +1974,15 @@ tbody tr.selected {
 }
 
 .payment-progress-fill[data-status='green'] {
-  background: linear-gradient(90deg, #16a34a, #22c55e);
+  background: #16a34a;
 }
 
 .payment-progress-fill[data-status='amber'] {
-  background: linear-gradient(90deg, #d97706, #f59e0b);
+  background: #d97706;
 }
 
 .payment-progress-fill[data-status='red'] {
-  background: linear-gradient(90deg, #dc2626, #ef4444);
+  background: #dc2626;
 }
 
 .payment-progress p {

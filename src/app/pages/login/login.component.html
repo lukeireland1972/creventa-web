@@ -33,6 +33,16 @@
       <button type="submit" [disabled]="isSubmitting">
         {{ isSubmitting ? 'Signing in...' : requiresTotp ? 'Verify TOTP' : 'Sign in' }}
       </button>
+
+      @if (!requiresTotp && !googleSsoLoading && googleSsoEnabled && googleSsoClientId) {
+        <div class="sso-divider" aria-hidden="true">
+          <span>or</span>
+        </div>
+        <div class="sso-provider">
+          <div #googleButtonHost class="google-button-host"></div>
+          <small>Use your Google work account linked to this tenant.</small>
+        </div>
+      }
     </form>
   </article>
 </section>

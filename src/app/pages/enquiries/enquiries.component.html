@@ -40,7 +40,15 @@
 
 @if (listResponse; as list) {
   <section class="stats">
-    <article>
+    <article
+      class="stat-tab"
+      role="button"
+      tabindex="0"
+      [class.active]="activeTab === 'new-unanswered'"
+      [attr.aria-pressed]="activeTab === 'new-unanswered'"
+      (click)="setTab('new-unanswered')"
+      (keydown.enter)="setTab('new-unanswered')"
+      (keydown.space)="$event.preventDefault(); setTab('new-unanswered')">
       <div class="stat-top">
         <span>New Enquiries</span>
         <em class="trend positive">{{ list.stats.newEnquiriesDeltaPercent }}%</em>
@@ -48,7 +56,15 @@
       <strong>{{ list.stats.newEnquiries }}</strong>
       <p>vs previous period</p>
     </article>
-    <article>
+    <article
+      class="stat-tab"
+      role="button"
+      tabindex="0"
+      [class.active]="activeTab === 'proposals'"
+      [attr.aria-pressed]="activeTab === 'proposals'"
+      (click)="setTab('proposals')"
+      (keydown.enter)="setTab('proposals')"
+      (keydown.space)="$event.preventDefault(); setTab('proposals')">
       <div class="stat-top">
         <span>Proposals Sent</span>
         <em class="trend positive">{{ list.stats.proposalsSentDeltaPercent }}%</em>
@@ -56,7 +72,15 @@
       <strong>{{ list.stats.proposalsSent }}</strong>
       <p>active this period</p>
     </article>
-    <article>
+    <article
+      class="stat-tab"
+      role="button"
+      tabindex="0"
+      [class.active]="activeTab === 'confirmed'"
+      [attr.aria-pressed]="activeTab === 'confirmed'"
+      (click)="setTab('confirmed')"
+      (keydown.enter)="setTab('confirmed')"
+      (keydown.space)="$event.preventDefault(); setTab('confirmed')">
       <div class="stat-top">
         <span>Confirmed</span>
         <em class="trend positive">{{ list.stats.confirmedDeltaPercent }}%</em>
@@ -64,7 +88,15 @@
       <strong>{{ list.stats.confirmed }}</strong>
       <p>bookings converted</p>
     </article>
-    <article>
+    <article
+      class="stat-tab"
+      role="button"
+      tabindex="0"
+      [class.active]="activeTab === 'lost'"
+      [attr.aria-pressed]="activeTab === 'lost'"
+      (click)="setTab('lost')"
+      (keydown.enter)="setTab('lost')"
+      (keydown.space)="$event.preventDefault(); setTab('lost')">
       <div class="stat-top">
         <span>Lost</span>
         <em class="trend warning">{{ list.stats.lostRatePercent }}% rate</em>
@@ -939,7 +971,7 @@
               <p>Route to a sister venue when this date or layout cannot be accommodated locally.</p>
 
               @if (routingOptionsLoading) {
-                <p class="routing-muted">Checking shared availability across the portfolio...</p>
+                <p class="routing-muted">Checking shared availability across the group portfolio...</p>
               } @else if (routingOptionsError) {
                 <p class="routing-error">{{ routingOptionsError }}</p>
               } @else if (hasCrossVenueRoutingOptions) {
