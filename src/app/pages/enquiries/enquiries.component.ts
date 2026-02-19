@@ -4,7 +4,7 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormBuilder, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { catchError, concatMap, distinctUntilChanged, forkJoin, from, map, of, tap } from 'rxjs';
+import { catchError, concatMap, distinctUntilChanged, forkJoin, from, map, of, tap, throwError } from 'rxjs';
 import { DocumentsComponent } from './components/documents/documents.component';
 import { TasksTabComponent } from './components/tasks-tab/tasks-tab.component';
 import { QuickTaskCreatedEvent, TaskQuickCreateModalComponent } from '../../ui/task-quick-create-modal/task-quick-create-modal.component';
@@ -1078,9 +1078,7 @@ export class EnquiriesComponent implements OnInit {
           }
 
           this.creatingTestEnquiries = false;
-          const message = typeof error?.error === 'string'
-            ? error.error
-            : (typeof error?.error?.message === 'string' ? error.error.message : 'Unable to create test enquiries.');
+          const message = this.extractCreateTestEnquiriesError(error);
           this.bulkActionFeedback = message;
           this.setTestDataFeedback(message, 'error');
         }
@@ -1095,6 +1093,7 @@ export class EnquiriesComponent implements OnInit {
     const payloads = this.buildFallbackTestEnquiryPayloads(venueId, 10);
     let created = 0;
     let attempted = 0;
+    let firstFailureMessage = '';
 
     this.setTestDataFeedback('Using fallback generator to create 10 test enquiries...', 'info');
 
@@ -1103,7 +1102,18 @@ export class EnquiriesComponent implements OnInit {
         concatMap((payload) =>
           this.api.createEnquiry(payload).pipe(
             map(() => true),
-            catchError(() => of(false))
+            catchError((error) => {
+              if (!firstFailureMessage) {
+                firstFailureMessage = this.extractCreateTestEnquiriesError(error);
+              }
+
+              const status = Number((error as { status?: number } | null | undefined)?.status ?? 0);
+              if (status === 401 || status === 403) {
+                return throwError(() => error);
+              }
+
+              return of(false);
+            })
           )),
         tap((ok) => {
           attempted += 1;
@@ -1116,13 +1126,19 @@ export class EnquiriesComponent implements OnInit {
         takeUntilDestroyed(this.destroyRef)
       )
       .subscribe({
+        error: (error) => {
+          this.creatingTestEnquiries = false;
+          const message = this.extractCreateTestEnquiriesError(error);
+          this.bulkActionFeedback = message;
+          this.setTestDataFeedback(message, 'error');
+        },
         complete: () => {
-          this.finishTestEnquiryCreation(created, 10 - created);
+          this.finishTestEnquiryCreation(created, 10 - created, firstFailureMessage);
         }
       });
   }
 
-  private finishTestEnquiryCreation(created: number, failed: number): void {
+  private finishTestEnquiryCreation(created: number, failed: number, firstFailureMessage = ''): void {
     this.creatingTestEnquiries = false;
 
     if (created > 0 && failed === 0) {
@@ -1141,7 +1157,9 @@ export class EnquiriesComponent implements OnInit {
       return;
     }
 
-    const message = 'Unable to create test enquiries.';
+    const message = firstFailureMessage.trim().length > 0
+      ? firstFailureMessage
+      : 'Unable to create test enquiries.';
     this.bulkActionFeedback = message;
     this.setTestDataFeedback(message, 'error');
   }
@@ -1149,6 +1167,55 @@ export class EnquiriesComponent implements OnInit {
   private setTestDataFeedback(message: string, type: 'info' | 'success' | 'error'): void {
     this.testDataFeedbackMessage = message;
     this.testDataFeedbackType = type;
+  }
+
+  private extractCreateTestEnquiriesError(error: unknown): string {
+    const maybeError = error as {
+      status?: number;
+      message?: string;
+      error?: { message?: string; detail?: string; title?: string; code?: string } | string;
+    };
+
+    if (maybeError?.status === 401) {
+      return 'Your session has expired. Please sign in again.';
+    }
+    if (maybeError?.status === 403) {
+      return 'You do not have permission to create test enquiries for this venue.';
+    }
+    if (maybeError?.status === 502 || maybeError?.status === 503 || maybeError?.status === 504) {
+      return 'The API is unavailable right now. Please try again shortly.';
+    }
+
+    if (typeof maybeError?.error === 'string') {
+      const trimmed = maybeError.error.trim();
+      if (!trimmed) {
+        return 'Unable to create test enquiries.';
+      }
+
+      if (trimmed.startsWith('<')) {
+        return 'The API is unavailable right now. Please try again shortly.';
+      }
+
+      return trimmed;
+    }
+
+    if (typeof maybeError?.error === 'object' && maybeError.error) {
+      if (typeof maybeError.error.message === 'string' && maybeError.error.message.trim().length > 0) {
+        return maybeError.error.message;
+      }
+      if (typeof maybeError.error.detail === 'string' && maybeError.error.detail.trim().length > 0) {
+        return maybeError.error.detail;
+      }
+      if (typeof maybeError.error.title === 'string' && maybeError.error.title.trim().length > 0) {
+        return maybeError.error.title;
+      }
+    }
+
+    if (typeof maybeError?.message === 'string' && maybeError.message.trim().length > 0) {
+      return maybeError.message;
+    }
+
+    return 'Unable to create test enquiries.';
   }
 
   private buildFallbackTestEnquiryPayloads(venueId: string, count: number): CreateEnquiryRequest[] {

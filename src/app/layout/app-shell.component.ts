@@ -5,13 +5,14 @@ import { FormsModule } from '@angular/forms';
 import { ReactiveFormsModule, Validators, FormBuilder } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { animate, state, style, transition, trigger } from '@angular/animations';
-import { catchError, debounceTime, distinctUntilChanged, filter, map, of, switchMap, tap } from 'rxjs';
+import { catchError, concatMap, debounceTime, distinctUntilChanged, filter, from, map, of, switchMap, tap, throwError } from 'rxjs';
 import {
   AiAssistantActionDto,
   AiAssistantMessageResponse,
   AiAssistantSummaryResponse,
   ApiService,
   AvailabilitySidebarResponse,
+  CreateEnquiryRequest,
   CreateVenueRequest,
   DuplicateEnquiryMatchDto,
   EnquiryDuplicateCheckResponse,
@@ -743,13 +744,139 @@ export class AppShellComponent implements OnInit {
           this.setRandomDataFeedback(`Added ${added} randomised enquiries.`, '');
         },
         error: (error) => {
+          if (error?.status === 404 || error?.status === 405) {
+            this.createFallbackRandomizedData(venueId);
+            return;
+          }
+
           this.isSeedingRandomData = false;
-          const message = typeof error?.error === 'string'
-            ? error.error
-            : 'Unable to add randomised data right now.';
+          const message = this.extractRandomizedDataError(error);
           this.setRandomDataFeedback('', message);
         }
       });
+  }
+
+  private createFallbackRandomizedData(venueId: string): void {
+    const payloads = this.buildFallbackRandomizedPayloads(venueId, 10);
+    let attempted = 0;
+    let created = 0;
+    let firstFailureMessage = '';
+    this.setRandomDataFeedback('Using fallback generator for randomised enquiries...', '');
+
+    from(payloads)
+      .pipe(
+        concatMap((payload) =>
+          this.api.createEnquiry(payload).pipe(
+            map(() => true),
+            catchError((error) => {
+              if (!firstFailureMessage) {
+                firstFailureMessage = this.extractRandomizedDataError(error);
+              }
+
+              const status = Number((error as { status?: number } | null | undefined)?.status ?? 0);
+              if (status === 401 || status === 403) {
+                return throwError(() => error);
+              }
+
+              return of(false);
+            })
+          )),
+        tap((ok) => {
+          attempted += 1;
+          if (ok) {
+            created += 1;
+          }
+          this.setRandomDataFeedback(`Adding randomised enquiries... ${attempted}/${payloads.length}`, '');
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe({
+        error: (error) => {
+          this.isSeedingRandomData = false;
+          this.setRandomDataFeedback('', this.extractRandomizedDataError(error));
+        },
+        complete: () => {
+          this.finishRandomizedDataCreation(created, payloads.length - created, firstFailureMessage);
+        }
+      });
+  }
+
+  private finishRandomizedDataCreation(created: number, failed: number, firstFailureMessage = ''): void {
+    this.isSeedingRandomData = false;
+    if (created > 0 && failed === 0) {
+      this.setRandomDataFeedback(`Added ${created} randomised enquiries.`, '');
+      return;
+    }
+
+    if (created > 0) {
+      this.setRandomDataFeedback('', `${created} randomised enquiries added. ${failed} failed.`);
+      return;
+    }
+
+    if (firstFailureMessage.trim().length > 0) {
+      this.setRandomDataFeedback('', firstFailureMessage);
+      return;
+    }
+
+    this.setRandomDataFeedback('', 'Unable to add randomised data right now.');
+  }
+
+  private buildFallbackRandomizedPayloads(venueId: string, count: number): CreateEnquiryRequest[] {
+    const eventTypes = ['Wedding', 'Corporate Meeting', 'Private Dining', 'Conference', 'Birthday Party'];
+    const eventStyles = ['Meeting', '3-Course Dinner', 'Buffet', 'Reception/Standing', 'Drinks Reception'];
+    const sourceTypes = ['Phone', 'Email', 'Website Form', 'Referral', 'Venue Event'];
+    const firstNames = ['Emma', 'Oliver', 'Sophie', 'James', 'Charlotte', 'Liam', 'Amelia', 'Noah', 'Isla', 'George'];
+    const lastNames = ['Taylor', 'Wilson', 'Hughes', 'Patel', 'Edwards', 'Thompson', 'Davies', 'Roberts', 'Carter', 'Morgan'];
+    const now = new Date();
+    const uniqueToken = Date.now();
+
+    return Array.from({ length: count }, (_, index) => {
+      const eventStart = new Date(Date.UTC(
+        now.getUTCFullYear(),
+        now.getUTCMonth(),
+        now.getUTCDate() + 7 + index * 3,
+        12,
+        0,
+        0
+      ));
+      const eventEnd = new Date(eventStart.getTime() + 4 * 60 * 60 * 1000);
+      const guestsExpected = 40 + (index * 15);
+      const budgetMin = Math.round(guestsExpected * 30);
+      const budgetMax = Math.round(guestsExpected * 65);
+      const firstName = firstNames[index % firstNames.length];
+      const lastName = lastNames[(index + 2) % lastNames.length];
+
+      return {
+        venueId,
+        contactFirstName: firstName,
+        contactLastName: lastName,
+        contactEmail: `test.seed.${uniqueToken}.${index}@creventaflow.local`,
+        contactPhoneNumberE164: `+4477009${(10000 + index).toString().padStart(5, '0')}`,
+        secondaryContactName: undefined,
+        secondaryEmail: undefined,
+        secondaryPhoneNumberE164: undefined,
+        companyName: `Test Company ${index + 1}`,
+        marketingConsent: index % 2 === 0,
+        eventType: eventTypes[index % eventTypes.length],
+        eventName: `Seeded Event ${index + 1}`,
+        eventStartUtc: eventStart.toISOString(),
+        eventEndUtc: eventEnd.toISOString(),
+        hasFlexibleDates: index % 4 === 0,
+        flexibleDateNotes: index % 4 === 0 ? 'Flexible by one week either side.' : undefined,
+        guestsExpected,
+        eventStyle: eventStyles[index % eventStyles.length],
+        setupStyle: 'Banquet',
+        budgetMinAmount: budgetMin,
+        budgetMaxAmount: budgetMax,
+        currencyCode: 'GBP',
+        sourceType: sourceTypes[index % sourceTypes.length],
+        sourceDetail: undefined,
+        leadQuality: (index % 5) + 1,
+        specialRequirements: index % 3 === 0 ? 'Vegetarian options requested.' : undefined,
+        internalNotes: 'Generated via randomised fallback action.',
+        eventManagerUserId: undefined
+      };
+    });
   }
 
   closeDrawer(): void {
@@ -1572,6 +1699,55 @@ export class AppShellComponent implements OnInit {
     }
 
     return 'Unable to create venue.';
+  }
+
+  private extractRandomizedDataError(error: unknown): string {
+    const maybeError = error as {
+      status?: number;
+      message?: string;
+      error?: { message?: string; detail?: string; title?: string; code?: string } | string;
+    };
+
+    if (maybeError?.status === 401) {
+      return 'Your session has expired. Please sign in again.';
+    }
+    if (maybeError?.status === 403) {
+      return 'You do not have permission to add randomised data for this venue.';
+    }
+    if (maybeError?.status === 502 || maybeError?.status === 503 || maybeError?.status === 504) {
+      return 'The API is unavailable right now. Please try again shortly.';
+    }
+
+    if (typeof maybeError?.error === 'string') {
+      const trimmed = maybeError.error.trim();
+      if (!trimmed) {
+        return 'Unable to add randomised data right now.';
+      }
+
+      if (trimmed.startsWith('<')) {
+        return 'The API is unavailable right now. Please try again shortly.';
+      }
+
+      return trimmed;
+    }
+
+    if (typeof maybeError?.error === 'object' && maybeError.error) {
+      if (typeof maybeError.error.message === 'string' && maybeError.error.message.trim().length > 0) {
+        return maybeError.error.message;
+      }
+      if (typeof maybeError.error.detail === 'string' && maybeError.error.detail.trim().length > 0) {
+        return maybeError.error.detail;
+      }
+      if (typeof maybeError.error.title === 'string' && maybeError.error.title.trim().length > 0) {
+        return maybeError.error.title;
+      }
+    }
+
+    if (typeof maybeError?.message === 'string' && maybeError.message.trim().length > 0) {
+      return maybeError.message;
+    }
+
+    return 'Unable to add randomised data right now.';
   }
 
   private setNavItems(): void {
