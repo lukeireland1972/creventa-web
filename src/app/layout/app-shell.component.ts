@@ -305,6 +305,17 @@ export class AppShellComponent implements OnInit {
       return enquiryId.trim();
     }
 
+    const primary = tree.root.children['primary'];
+    const segments = primary?.segments ?? [];
+    for (let index = 0; index < segments.length - 1; index += 1) {
+      if (segments[index].path.toLowerCase() === 'enquiries') {
+        const routedId = segments[index + 1].path.trim();
+        if (routedId.length > 0) {
+          return routedId;
+        }
+      }
+    }
+
     return null;
   }
 
@@ -1048,8 +1059,8 @@ export class AppShellComponent implements OnInit {
 
   openExistingEnquiry(enquiryId: string): void {
     this.closeDrawer();
-    this.router.navigate(['/enquiries'], {
-      queryParams: { enquiry: enquiryId, statusTab: 'all' }
+    this.router.navigate(['/enquiries', enquiryId], {
+      queryParams: { statusTab: 'all' }
     });
   }
 
@@ -1103,10 +1114,9 @@ export class AppShellComponent implements OnInit {
     }
 
     if (first) {
-      this.router.navigate(['/enquiries'], {
+      this.router.navigate(['/enquiries', first], {
         queryParams: {
-          statusTab: 'all',
-          enquiry: first
+          statusTab: 'all'
         }
       });
     }
@@ -1115,7 +1125,7 @@ export class AppShellComponent implements OnInit {
   openRecentItem(item: RecentlyViewedBookingDto): void {
     this.isRecentOpen = false;
     this.closeMobileNav();
-    this.router.navigate(['/enquiries'], { queryParams: { enquiry: item.enquiryId } });
+    this.router.navigate(['/enquiries', item.enquiryId]);
   }
 
   onSearchFocus(event: Event): void {
@@ -1146,13 +1156,29 @@ export class AppShellComponent implements OnInit {
       return;
     }
 
-    this.router.navigate(['/enquiries'], { queryParams: { search: query, statusTab: 'all' } });
+    this.router.navigate(['/search'], { queryParams: { q: query, page: 1 } });
   }
 
   useRecentSearch(query: string): void {
     this.searchQuery = query;
     this.searchIntent = null;
     this.executeSearch();
+  }
+
+  removeRecentSearch(query: string, event: Event): void {
+    event.stopPropagation();
+    event.preventDefault();
+    this.api
+      .removeRecentSearch(query)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.recentSearches = this.recentSearches.filter((entry) => entry !== query);
+        },
+        error: () => {
+          this.recentSearches = this.recentSearches.filter((entry) => entry !== query);
+        }
+      });
   }
 
   openSearchResult(result: GlobalSearchResultDto): void {
@@ -1215,6 +1241,11 @@ export class AppShellComponent implements OnInit {
           this.loadNotifications();
         }
       });
+  }
+
+  openNotificationsPage(): void {
+    this.isNotificationsOpen = false;
+    this.router.navigate(['/notifications']);
   }
 
   markNotificationRead(item: NotificationItemDto): void {
@@ -1752,7 +1783,7 @@ export class AppShellComponent implements OnInit {
 
   private setNavItems(): void {
     if (this.operationsOnly) {
-      this.navItems = [{ label: 'Operations View', section: 'primary', route: '/event-diary', exact: false }];
+      this.navItems = [{ label: 'Operations View', section: 'primary', route: '/operations', exact: false }];
       return;
     }
 
@@ -1770,6 +1801,7 @@ export class AppShellComponent implements OnInit {
       },
       { label: 'Contacts', section: 'primary', route: '/contacts', exact: false },
       { label: 'Enquiries', section: 'primary', route: '/enquiries', exact: false },
+      { label: 'Appointments', section: 'primary', route: '/appointments', exact: false },
       { label: 'Proposals', section: 'primary', route: '/proposals', exact: false },
       { label: 'Event Diary', section: 'primary', route: '/event-diary', exact: false },
       {

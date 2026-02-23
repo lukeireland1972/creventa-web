@@ -5,9 +5,10 @@ import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Va
 import { ActivatedRoute, Router } from '@angular/router';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 import { QuillModule } from 'ngx-quill';
-import { forkJoin } from 'rxjs';
+import { catchError, forkJoin, of } from 'rxjs';
 import {
   AutomationActionDto,
+  AutomationAssignmentRouteDto,
   AutomationConditionDto,
   AutomationExecutionLogDto,
   AutomationRuleDto,
@@ -19,6 +20,7 @@ import {
   ApiService,
   BudgetByEventTypeDto,
   BudgetMonthDto,
+  HoldManagementSettingsDto,
   LostReasonSettingDto,
   NotificationPreferenceMatrixRowDto,
   ReportScheduleDto,
@@ -228,6 +230,12 @@ export class SettingsComponent implements OnInit {
   readonly dayOfWeekOptions = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   readonly proposalAcceptedStatuses = ['Provisional', 'Confirmed'];
   readonly enquiryStatuses = ['New', 'Tentative', 'OpenProposal', 'Provisional', 'Confirmed', 'Completed', 'Lost', 'Archived'];
+  readonly autoAssignmentStrategyOptions = [
+    { value: 'Disabled', label: 'Disabled' },
+    { value: 'RoundRobin', label: 'Round Robin' },
+    { value: 'ByEventType', label: 'By Event Type' },
+    { value: 'BySource', label: 'By Source' }
+  ];
   readonly automationTriggerOptions = [
     { value: 'EnquiryCreated', label: 'Enquiry created' },
     { value: 'WebFormSubmission', label: 'Website form submission' },
@@ -262,12 +270,17 @@ export class SettingsComponent implements OnInit {
   ];
   readonly taskTemplateAutoApplyOptions = [
     { value: 'none', label: 'None' },
+    { value: 'new', label: 'New' },
+    { value: 'tentative', label: 'Tentative' },
     { value: 'openproposal', label: 'Open Proposal' },
     { value: 'provisional', label: 'Provisional' },
-    { value: 'confirmed', label: 'Confirmed' }
+    { value: 'confirmed', label: 'Confirmed' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'lost', label: 'Lost' },
+    { value: 'archived', label: 'Archived' }
   ];
   readonly taskTemplateDueDateRuleOptions = [
-    { value: 'days-after-trigger', label: 'Days after trigger' },
+    { value: 'days-after-trigger', label: 'Days after status change / confirmation' },
     { value: 'days-before-event', label: 'Days before event' },
     { value: 'days-after-event', label: 'Days after event' }
   ];
@@ -429,6 +442,7 @@ export class SettingsComponent implements OnInit {
   automationRules: AutomationRuleDto[] = [];
   automationExecutionLog: AutomationExecutionLogDto[] = [];
   notificationMatrixRows: NotificationPreferenceMatrixRowDto[] = [];
+  notificationEmailTemplateOptions: VenueEmailTemplateDto[] = [];
   editingAutomationRuleId: string | null = null;
   guestProfileCustomFields: ContactCustomFieldDefinitionDto[] = [];
   emailTemplates: VenueEmailTemplateDto[] = [];
@@ -471,7 +485,8 @@ export class SettingsComponent implements OnInit {
     defaultHoldPeriodDays: [7, [Validators.required, Validators.min(1)]],
     holdWarningDays: [2, [Validators.required, Validators.min(0)]],
     holdAutoReleaseMode: ['NotifyOnly', Validators.required],
-    maxHoldsPerDateAndSpace: [1, [Validators.required, Validators.min(1)]]
+    maxHoldsPerDateAndSpace: [1, [Validators.required, Validators.min(1)]],
+    notifyClientOnHoldExpiry: [false]
   });
 
   readonly spaceForm = this.formBuilder.group({
@@ -584,7 +599,17 @@ export class SettingsComponent implements OnInit {
     proposalAcceptedTargetStatus: ['Provisional', Validators.required],
     followUpInactiveDays: [3, [Validators.required, Validators.min(1), Validators.max(30)]],
     autoArchiveEnabled: [true],
-    autoArchiveDays: [90, [Validators.required, Validators.min(7), Validators.max(3650)]]
+    autoArchiveDays: [90, [Validators.required, Validators.min(7), Validators.max(3650)]],
+    autoAssignmentStrategy: ['RoundRobin', Validators.required],
+    autoAssignmentRoutesText: [''],
+    autoCompleteAfterEventEnabled: [true],
+    autoCompleteAfterEventDays: [2, [Validators.required, Validators.min(0), Validators.max(30)]],
+    autoSendPostEventThankYou: [true],
+    postEventThankYouTemplateKey: ['post_event_thank_you'],
+    paymentReminderLeadDays: [3, [Validators.required, Validators.min(1), Validators.max(30)]],
+    paymentReminderOverdueCadenceDays: [3, [Validators.required, Validators.min(1), Validators.max(30)]],
+    webFormAutoAcknowledgementEnabled: [true],
+    webFormAutoAcknowledgementTemplateKey: ['enquiry_ack']
   });
 
   readonly automationRuleForm = this.formBuilder.group({
@@ -892,15 +917,20 @@ export class SettingsComponent implements OnInit {
       holdAutoReleaseMode: this.requiredText(value.holdAutoReleaseMode),
       maxHoldsPerDateAndSpace: Number(value.maxHoldsPerDateAndSpace ?? 1)
     };
+    const holdManagementPayload: HoldManagementSettingsDto = {
+      notifyClientOnHoldExpiry: Boolean(value.notifyClientOnHoldExpiry)
+    };
 
     this.setSectionSaving('venue-profile', true);
-    this.api
-      .updateVenueProfile(this.selectedVenueId, payload)
+    forkJoin({
+      profile: this.api.updateVenueProfile(this.selectedVenueId, payload),
+      holdSettings: this.api.upsertHoldManagementSettings(this.selectedVenueId, holdManagementPayload)
+    })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (profile) => {
+        next: ({ profile, holdSettings }) => {
           this.venueProfile = profile;
-          this.patchVenueForm(profile);
+          this.patchVenueForm(profile, holdSettings);
           this.setSectionSuccess('venue-profile', 'Venue profile saved.');
           this.setSectionSaving('venue-profile', false);
         },
@@ -2211,7 +2241,9 @@ export class SettingsComponent implements OnInit {
           triggerKey: row.triggerKey,
           inAppEnabled: Boolean(row.inAppEnabled),
           emailOperatorEnabled: Boolean(row.emailOperatorEnabled),
-          emailClientEnabled: Boolean(row.emailClientEnabled)
+          emailClientEnabled: Boolean(row.emailClientEnabled),
+          operatorEmailTemplateKey: this.optionalText(row.operatorEmailTemplateKey),
+          clientEmailTemplateKey: this.optionalText(row.clientEmailTemplateKey)
         })),
         this.selectedVenueId)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -2240,7 +2272,17 @@ export class SettingsComponent implements OnInit {
       proposalAcceptedTargetStatus: this.requiredText(value.proposalAcceptedTargetStatus),
       followUpInactiveDays: Number(value.followUpInactiveDays ?? 3),
       autoArchiveEnabled: Boolean(value.autoArchiveEnabled),
-      autoArchiveDays: Number(value.autoArchiveDays ?? 90)
+      autoArchiveDays: Number(value.autoArchiveDays ?? 90),
+      autoAssignmentStrategy: this.requiredText(value.autoAssignmentStrategy) || 'Disabled',
+      autoAssignmentRoutes: this.parseAutomationAssignmentRoutes(value.autoAssignmentRoutesText),
+      autoCompleteAfterEventEnabled: Boolean(value.autoCompleteAfterEventEnabled),
+      autoCompleteAfterEventDays: Number(value.autoCompleteAfterEventDays ?? 2),
+      autoSendPostEventThankYou: Boolean(value.autoSendPostEventThankYou),
+      postEventThankYouTemplateKey: this.optionalText(value.postEventThankYouTemplateKey) ?? 'post_event_thank_you',
+      paymentReminderLeadDays: Number(value.paymentReminderLeadDays ?? 3),
+      paymentReminderOverdueCadenceDays: Number(value.paymentReminderOverdueCadenceDays ?? 3),
+      webFormAutoAcknowledgementEnabled: Boolean(value.webFormAutoAcknowledgementEnabled),
+      webFormAutoAcknowledgementTemplateKey: this.optionalText(value.webFormAutoAcknowledgementTemplateKey) ?? 'enquiry_ack'
     };
 
     this.setSectionSaving('automation', true);
@@ -2253,7 +2295,17 @@ export class SettingsComponent implements OnInit {
             proposalAcceptedTargetStatus: response.proposalAcceptedTargetStatus,
             followUpInactiveDays: response.followUpInactiveDays,
             autoArchiveEnabled: response.autoArchiveEnabled,
-            autoArchiveDays: response.autoArchiveDays
+            autoArchiveDays: response.autoArchiveDays,
+            autoAssignmentStrategy: response.autoAssignmentStrategy,
+            autoAssignmentRoutesText: this.formatAutomationAssignmentRoutes(response.autoAssignmentRoutes),
+            autoCompleteAfterEventEnabled: response.autoCompleteAfterEventEnabled,
+            autoCompleteAfterEventDays: response.autoCompleteAfterEventDays,
+            autoSendPostEventThankYou: response.autoSendPostEventThankYou,
+            postEventThankYouTemplateKey: response.postEventThankYouTemplateKey ?? 'post_event_thank_you',
+            paymentReminderLeadDays: response.paymentReminderLeadDays,
+            paymentReminderOverdueCadenceDays: response.paymentReminderOverdueCadenceDays,
+            webFormAutoAcknowledgementEnabled: response.webFormAutoAcknowledgementEnabled,
+            webFormAutoAcknowledgementTemplateKey: response.webFormAutoAcknowledgementTemplateKey ?? 'enquiry_ack'
           });
           this.setSectionSuccess('automation', 'Automation settings saved.');
           this.setSectionSaving('automation', false);
@@ -2263,6 +2315,53 @@ export class SettingsComponent implements OnInit {
           this.setSectionSaving('automation', false);
         }
       });
+  }
+
+  private parseAutomationAssignmentRoutes(raw: string | null | undefined): AutomationAssignmentRouteDto[] {
+    if (!raw) {
+      return [];
+    }
+
+    const routes = raw
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => {
+        const separatorIndex = line.indexOf('=');
+        if (separatorIndex <= 0 || separatorIndex >= line.length - 1) {
+          return null;
+        }
+
+        const matchValue = line.slice(0, separatorIndex).trim();
+        const assigneeUserId = line.slice(separatorIndex + 1).trim();
+        if (!matchValue || !assigneeUserId) {
+          return null;
+        }
+
+        return { matchValue, assigneeUserId } as AutomationAssignmentRouteDto;
+      })
+      .filter((route): route is AutomationAssignmentRouteDto => Boolean(route));
+
+    const deduped = new Map<string, AutomationAssignmentRouteDto>();
+    for (const route of routes) {
+      const key = route.matchValue.toLowerCase();
+      if (!deduped.has(key)) {
+        deduped.set(key, route);
+      }
+    }
+
+    return Array.from(deduped.values()).slice(0, 100);
+  }
+
+  private formatAutomationAssignmentRoutes(routes: AutomationAssignmentRouteDto[] | null | undefined): string {
+    if (!routes || routes.length === 0) {
+      return '';
+    }
+
+    return routes
+      .filter((route) => route.matchValue && route.assigneeUserId)
+      .map((route) => `${route.matchValue}=${route.assigneeUserId}`)
+      .join('\n');
   }
 
   startNewAutomationRule(): void {
@@ -3647,13 +3746,15 @@ export class SettingsComponent implements OnInit {
 
     this.setSectionLoading('venue-profile', true);
 
-    this.api
-      .getVenueProfile(this.selectedVenueId)
+    forkJoin({
+      profile: this.api.getVenueProfile(this.selectedVenueId),
+      holdSettings: this.api.getHoldManagementSettings(this.selectedVenueId)
+    })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (profile) => {
+        next: ({ profile, holdSettings }) => {
           this.venueProfile = profile;
-          this.patchVenueForm(profile);
+          this.patchVenueForm(profile, holdSettings);
           this.setSectionLoading('venue-profile', false);
         },
         error: (error) => {
@@ -4080,7 +4181,17 @@ export class SettingsComponent implements OnInit {
             proposalAcceptedTargetStatus: settings.proposalAcceptedTargetStatus,
             followUpInactiveDays: settings.followUpInactiveDays,
             autoArchiveEnabled: settings.autoArchiveEnabled,
-            autoArchiveDays: settings.autoArchiveDays
+            autoArchiveDays: settings.autoArchiveDays,
+            autoAssignmentStrategy: settings.autoAssignmentStrategy,
+            autoAssignmentRoutesText: this.formatAutomationAssignmentRoutes(settings.autoAssignmentRoutes),
+            autoCompleteAfterEventEnabled: settings.autoCompleteAfterEventEnabled,
+            autoCompleteAfterEventDays: settings.autoCompleteAfterEventDays,
+            autoSendPostEventThankYou: settings.autoSendPostEventThankYou,
+            postEventThankYouTemplateKey: settings.postEventThankYouTemplateKey ?? 'post_event_thank_you',
+            paymentReminderLeadDays: settings.paymentReminderLeadDays,
+            paymentReminderOverdueCadenceDays: settings.paymentReminderOverdueCadenceDays,
+            webFormAutoAcknowledgementEnabled: settings.webFormAutoAcknowledgementEnabled,
+            webFormAutoAcknowledgementTemplateKey: settings.webFormAutoAcknowledgementTemplateKey ?? 'enquiry_ack'
           });
           this.automationRules = [...rules].sort((left, right) => left.sortOrder - right.sortOrder);
           this.automationExecutionLog = [...executionLog].sort((left, right) => right.timestampUtc.localeCompare(left.timestampUtc));
@@ -4107,16 +4218,22 @@ export class SettingsComponent implements OnInit {
     }
 
     this.setSectionLoading('notifications', true);
-    this.api
-      .getNotificationPreferenceMatrix(this.selectedVenueId)
+    forkJoin({
+      matrix: this.api.getNotificationPreferenceMatrix(this.selectedVenueId),
+      templates: this.api.getEmailTemplates(this.selectedVenueId).pipe(catchError(() => of([] as VenueEmailTemplateDto[])))
+    })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (response) => {
-          this.notificationMatrixRows = [...response.rows].sort((left, right) => left.label.localeCompare(right.label));
+        next: ({ matrix, templates }) => {
+          this.notificationMatrixRows = [...matrix.rows].sort((left, right) => left.label.localeCompare(right.label));
+          this.notificationEmailTemplateOptions = templates
+            .filter((template) => template.isActive)
+            .sort((left, right) => left.name.localeCompare(right.name));
           this.setSectionLoading('notifications', false);
         },
         error: (error) => {
           this.notificationMatrixRows = [];
+          this.notificationEmailTemplateOptions = [];
           this.setSectionError('notifications', this.resolveError(error, 'Unable to load notification settings.'));
           this.setSectionLoading('notifications', false);
         }
@@ -4358,7 +4475,8 @@ export class SettingsComponent implements OnInit {
       });
   }
 
-  private patchVenueForm(profile: VenueProfileDto): void {
+  private patchVenueForm(profile: VenueProfileDto, holdSettings?: HoldManagementSettingsDto): void {
+    const currentNotifyClientOnHoldExpiry = Boolean(this.venueForm.get('notifyClientOnHoldExpiry')?.value);
     this.venueForm.patchValue({
       name: profile.name,
       legalEntityName: profile.legalEntityName ?? '',
@@ -4384,7 +4502,8 @@ export class SettingsComponent implements OnInit {
       defaultHoldPeriodDays: profile.defaultHoldPeriodDays,
       holdWarningDays: profile.holdWarningDays,
       holdAutoReleaseMode: profile.holdAutoReleaseMode,
-      maxHoldsPerDateAndSpace: profile.maxHoldsPerDateAndSpace
+      maxHoldsPerDateAndSpace: profile.maxHoldsPerDateAndSpace,
+      notifyClientOnHoldExpiry: holdSettings?.notifyClientOnHoldExpiry ?? currentNotifyClientOnHoldExpiry
     });
   }
 

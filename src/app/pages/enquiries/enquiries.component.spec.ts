@@ -32,10 +32,12 @@ describe('EnquiriesComponent', () => {
     },
     statusTabCounts: {
       'new-unanswered': 0,
+      tentative: 0,
       proposals: 0,
       provisional: 0,
       confirmed: 0,
       lost: 0,
+      archived: 0,
       all: 0
     },
     page: {
@@ -101,6 +103,10 @@ describe('EnquiriesComponent', () => {
       'getEnquiries',
       'getEnquiry',
       'transitionEnquiryStatus',
+      'getEnquirySavedFilterViews',
+      'createEnquirySavedFilterView',
+      'updateEnquirySavedFilterView',
+      'deleteEnquirySavedFilterView',
       'getUsers',
       'getLostReasons'
     ]);
@@ -118,6 +124,38 @@ describe('EnquiriesComponent', () => {
         generatedTaskCount: 0
       })
     );
+    api.getEnquirySavedFilterViews.and.returnValue(of({ views: [] }));
+    api.createEnquirySavedFilterView.and.returnValue(of({
+      id: 'view-1',
+      venueId: 'venue-1',
+      name: 'Saved View',
+      statusTab: 'proposals',
+      search: '',
+      quickFilter: '',
+      source: '',
+      conversionScoreMin: '',
+      conversionScoreMax: '',
+      sort: '',
+      pageSize: 25,
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString()
+    }));
+    api.updateEnquirySavedFilterView.and.returnValue(of({
+      id: 'view-1',
+      venueId: 'venue-1',
+      name: 'Saved View',
+      statusTab: 'proposals',
+      search: '',
+      quickFilter: '',
+      source: '',
+      conversionScoreMin: '',
+      conversionScoreMax: '',
+      sort: '',
+      pageSize: 25,
+      createdAtUtc: new Date().toISOString(),
+      updatedAtUtc: new Date().toISOString()
+    }));
+    api.deleteEnquirySavedFilterView.and.returnValue(of(void 0));
     api.getUsers.and.returnValue(of([]));
     api.getLostReasons.and.returnValue(of([]));
 

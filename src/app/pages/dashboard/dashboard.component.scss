@@ -300,6 +300,26 @@
   background: #fff7f7;
 }
 
+.payment-milestone-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.payment-milestone-list li {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 0.38rem 0.5rem;
+}
+
+.payment-milestone-list li:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
 .chart-widget {
   align-content: start;
 }
@@ -453,6 +473,11 @@
   background: #eff6ff;
 }
 
+.simple-list li.today {
+  border-color: #93c5fd;
+  background: #eff6ff;
+}
+
 .row-action-btn {
   border: 0;
   background: transparent;
@@ -480,6 +505,85 @@
 .action-list strong {
   font-size: 0.84rem;
   color: #0f172a;
+}
+
+.upcoming-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.status-badge {
+  border-radius: 999px;
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 0.08rem 0.34rem;
+}
+
+.status-badge[data-status='confirmed'] {
+  border-color: #bbf7d0;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-badge[data-status='provisional'] {
+  border-color: #fcd34d;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge[data-status='tentative'] {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.status-badge[data-status='completed'] {
+  border-color: #86efac;
+  background: #f0fdf4;
+  color: #166534;
+}
+
+.status-badge[data-status='lost'] {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.status-badge[data-status='archived'] {
+  border-color: #d1d5db;
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.status-badge[data-status='proposal'] {
+  border-color: #dbeafe;
+  background: #f8fafc;
+  color: #1e3a8a;
+}
+
+.status-badge[data-status='due-soon'] {
+  border-color: #fcd34d;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge[data-status='upcoming'] {
+  border-color: #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.status-badge[data-status='overdue'] {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
 }
 
 .action-priority {

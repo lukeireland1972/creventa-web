@@ -1,77 +1,39 @@
-<div class="workspace" (click)="closeMenus()">
+<div class="workspace" [class.operations-only]="operationsOnly" (click)="closeMenus()">
   @if (isMobileNavOpen && !operationsOnly) {
     <button type="button" class="mobile-nav-backdrop" (click)="closeMobileNav()" aria-label="Close navigation"></button>
   }
 
-  <aside class="sidebar" [class.open]="isMobileNavOpen" (click)="$event.stopPropagation()">
-    <div class="sidebar-top">
-      <a class="brand" [routerLink]="operationsOnly ? '/event-diary' : '/'" (click)="closeMobileNav()">
-        <span class="brand-copy">
-          <strong>{{ selectedVenueName }}</strong>
-          <small>{{ operationsOnly ? 'Operations View' : 'Enquiry Management' }}</small>
-        </span>
-      </a>
+  @if (!operationsOnly) {
+    <aside class="sidebar" [class.open]="isMobileNavOpen" (click)="$event.stopPropagation()">
+      <div class="sidebar-top">
+        <a class="brand" [routerLink]="operationsOnly ? '/operations' : '/'" (click)="closeMobileNav()">
+          <span class="brand-copy">
+            <strong>{{ selectedVenueName }}</strong>
+            <small>{{ operationsOnly ? 'Operations View' : 'Enquiry Management' }}</small>
+          </span>
+        </a>
 
-      <label class="venue-field">
-        <span>Venue</span>
-        <select [ngModel]="selectedVenueId" (ngModelChange)="selectVenue($event)">
-          @for (venue of venues; track venue.id) {
-            <option [value]="venue.id">{{ venue.name }}</option>
-          }
-        </select>
-      </label>
-
-      @if (canCreateVenue) {
-        <button type="button" class="superadmin-btn" (click)="openCreateVenueModal($event)">
-          Superadmin: + New Venue
-        </button>
-      }
-    </div>
-
-    <div class="sidebar-scroll">
-      <section class="sidebar-group">
-        <p class="sidebar-heading">Workspace</p>
-        <nav class="sidebar-nav">
-          @for (item of primaryNavItems; track item.label) {
-            @if (item.disabled) {
-              <a
-                aria-disabled="true"
-                tabindex="-1"
-                [attr.title]="item.disabledReason || 'Unavailable'"
-                style="opacity:.45;cursor:not-allowed;pointer-events:none">
-                <span>{{ item.label }}</span>
-                @if (item.badge) {
-                  <em class="badge">{{ item.badge }}</em>
-                }
-              </a>
-            } @else if (item.route) {
-              <a
-                [routerLink]="item.route"
-                routerLinkActive="active"
-                [routerLinkActiveOptions]="{ exact: item.exact }"
-                (click)="closeMobileNav()">
-                <span>{{ item.label }}</span>
-                @if (item.badge) {
-                  <em class="badge">{{ item.badge }}</em>
-                }
-              </a>
-            } @else if (item.externalUrl) {
-              <a [href]="item.externalUrl" target="_blank" rel="noreferrer" (click)="closeMobileNav()">
-                <span>{{ item.label }}</span>
-                @if (item.badge) {
-                  <em class="badge">{{ item.badge }}</em>
-                }
-              </a>
+        <label class="venue-field">
+          <span>Venue</span>
+          <select [ngModel]="selectedVenueId" (ngModelChange)="selectVenue($event)">
+            @for (venue of venues; track venue.id) {
+              <option [value]="venue.id">{{ venue.name }}</option>
             }
-          }
-        </nav>
-      </section>
+          </select>
+        </label>
 
-      @if (!operationsOnly && reportNavItems.length > 0) {
+        @if (canCreateVenue) {
+          <button type="button" class="superadmin-btn" (click)="openCreateVenueModal($event)">
+            Superadmin: + New Venue
+          </button>
+        }
+      </div>
+
+      <div class="sidebar-scroll">
         <section class="sidebar-group">
-          <p class="sidebar-heading">Reports</p>
+          <p class="sidebar-heading">Workspace</p>
           <nav class="sidebar-nav">
-            @for (item of reportNavItems; track item.label) {
+            @for (item of primaryNavItems; track item.label) {
               @if (item.disabled) {
                 <a
                   aria-disabled="true"
@@ -79,6 +41,9 @@
                   [attr.title]="item.disabledReason || 'Unavailable'"
                   style="opacity:.45;cursor:not-allowed;pointer-events:none">
                   <span>{{ item.label }}</span>
+                  @if (item.badge) {
+                    <em class="badge">{{ item.badge }}</em>
+                  }
                 </a>
               } @else if (item.route) {
                 <a
@@ -87,46 +52,83 @@
                   [routerLinkActiveOptions]="{ exact: item.exact }"
                   (click)="closeMobileNav()">
                   <span>{{ item.label }}</span>
+                  @if (item.badge) {
+                    <em class="badge">{{ item.badge }}</em>
+                  }
                 </a>
               } @else if (item.externalUrl) {
                 <a [href]="item.externalUrl" target="_blank" rel="noreferrer" (click)="closeMobileNav()">
                   <span>{{ item.label }}</span>
+                  @if (item.badge) {
+                    <em class="badge">{{ item.badge }}</em>
+                  }
                 </a>
               }
             }
           </nav>
         </section>
-      }
 
-      @if (!operationsOnly && adminNavItems.length > 0) {
-        <section class="sidebar-group">
-          <p class="sidebar-heading">Administration</p>
-          <nav class="sidebar-nav">
-            @for (item of adminNavItems; track item.label) {
-              <a
-                [routerLink]="item.route"
-                routerLinkActive="active"
-                [routerLinkActiveOptions]="{ exact: item.exact }"
-                (click)="closeMobileNav()">
-                <span>{{ item.label }}</span>
-              </a>
-            }
-          </nav>
-        </section>
-      }
-    </div>
+        @if (!operationsOnly && reportNavItems.length > 0) {
+          <section class="sidebar-group">
+            <p class="sidebar-heading">Reports</p>
+            <nav class="sidebar-nav">
+              @for (item of reportNavItems; track item.label) {
+                @if (item.disabled) {
+                  <a
+                    aria-disabled="true"
+                    tabindex="-1"
+                    [attr.title]="item.disabledReason || 'Unavailable'"
+                    style="opacity:.45;cursor:not-allowed;pointer-events:none">
+                    <span>{{ item.label }}</span>
+                  </a>
+                } @else if (item.route) {
+                  <a
+                    [routerLink]="item.route"
+                    routerLinkActive="active"
+                    [routerLinkActiveOptions]="{ exact: item.exact }"
+                    (click)="closeMobileNav()">
+                    <span>{{ item.label }}</span>
+                  </a>
+                } @else if (item.externalUrl) {
+                  <a [href]="item.externalUrl" target="_blank" rel="noreferrer" (click)="closeMobileNav()">
+                    <span>{{ item.label }}</span>
+                  </a>
+                }
+              }
+            </nav>
+          </section>
+        }
 
-    <div class="sidebar-footer">
-      <div class="sidebar-user-card">
-        <span class="avatar">{{ initials }}</span>
-        <span class="identity">
-          <strong>{{ displayName }}</strong>
-          <small>Signed in</small>
-        </span>
+        @if (!operationsOnly && adminNavItems.length > 0) {
+          <section class="sidebar-group">
+            <p class="sidebar-heading">Administration</p>
+            <nav class="sidebar-nav">
+              @for (item of adminNavItems; track item.label) {
+                <a
+                  [routerLink]="item.route"
+                  routerLinkActive="active"
+                  [routerLinkActiveOptions]="{ exact: item.exact }"
+                  (click)="closeMobileNav()">
+                  <span>{{ item.label }}</span>
+                </a>
+              }
+            </nav>
+          </section>
+        }
       </div>
-      <button type="button" class="signout-btn" (click)="logout()">Sign out</button>
-    </div>
-  </aside>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user-card">
+          <span class="avatar">{{ initials }}</span>
+          <span class="identity">
+            <strong>{{ displayName }}</strong>
+            <small>Signed in</small>
+          </span>
+        </div>
+        <button type="button" class="signout-btn" (click)="logout()">Sign out</button>
+      </div>
+    </aside>
+  }
 
   <section class="main-panel">
     <header class="topbar" (click)="$event.stopPropagation()">
@@ -143,13 +145,20 @@
             </button>
           }
 
-          <div class="breadcrumbs">
-            <span class="crumb-primary">Events</span>
-            <span class="crumb-sep">&rsaquo;</span>
-            <span class="crumb-muted">{{ selectedVenueName }}</span>
-            <span class="crumb-sep">&rsaquo;</span>
-            <span class="crumb-current">{{ currentSectionLabel }}</span>
-          </div>
+          @if (operationsOnly) {
+            <a class="ops-brand" [routerLink]="'/operations'">
+              <span class="ops-brand-name">CreventaFlow</span>
+              <span class="ops-brand-mode">Operations</span>
+            </a>
+          } @else {
+            <div class="breadcrumbs">
+              <span class="crumb-primary">Events</span>
+              <span class="crumb-sep">&rsaquo;</span>
+              <span class="crumb-muted">{{ selectedVenueName }}</span>
+              <span class="crumb-sep">&rsaquo;</span>
+              <span class="crumb-current">{{ currentSectionLabel }}</span>
+            </div>
+          }
         </div>
 
         <div class="topbar-right">
@@ -181,9 +190,18 @@
                   @if (searchQuery.trim().length < 3 && recentSearches.length > 0) {
                     <div class="search-section-title">Recent searches</div>
                     @for (query of recentSearches; track query) {
-                      <button type="button" (click)="useRecentSearch(query)">
-                        <strong>{{ query }}</strong>
-                      </button>
+                      <div class="search-recent-item">
+                        <button type="button" class="search-recent-open" (click)="useRecentSearch(query)">
+                          <strong>{{ query }}</strong>
+                        </button>
+                        <button
+                          type="button"
+                          class="search-recent-remove"
+                          aria-label="Remove recent search"
+                          (click)="removeRecentSearch(query, $event)">
+                          &times;
+                        </button>
+                      </div>
                     }
                   }
 
@@ -263,6 +281,9 @@
                   @if (notifications.length === 0) {
                     <p class="empty">No notifications.</p>
                   }
+                  <div class="notifications-footer">
+                    <button type="button" (click)="openNotificationsPage()">View all</button>
+                  </div>
                 </div>
               }
             </div>
@@ -315,7 +336,11 @@
             }
           }
 
-          <button class="avatar" (click)="logout()" [title]="displayName + ' (Sign out)'">{{ initials }}</button>
+          @if (operationsOnly) {
+            <button class="ghost-btn ops-signout" (click)="logout()">Sign out</button>
+          } @else {
+            <button class="avatar" (click)="logout()" [title]="displayName + ' (Sign out)'">{{ initials }}</button>
+          }
         </div>
       </div>
     </header>
@@ -702,7 +727,7 @@
                   }
                 </header>
                 @if (group.events.length === 0) {
-                  <p class="availability-empty">No events scheduled in this space.</p>
+                  <p class="availability-empty">Available</p>
                 }
                 @for (event of group.events; track event.recordId) {
                   <div class="availability-event">
@@ -718,6 +743,7 @@
                       @if (event.eventStyle) {
                         <span> · {{ event.eventStyle }}</span>
                       }
+                      <span> · {{ event.spaceName }}</span>
                     </span>
                     @if (event.clientName || event.enquiryReference || event.covers) {
                       <span>

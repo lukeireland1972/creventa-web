@@ -40,10 +40,15 @@
         <button class="kpi-card" type="button" (click)="openKpi(card)">
           <div class="kpi-head">
             <span>{{ card.label }}</span>
-            <em [class.negative]="card.deltaPercent < 0">{{ card.deltaPercent | number: '1.0-1' }}%</em>
+            @if (showKpiDelta(card)) {
+              <em [class.negative]="card.deltaPercent < 0">{{ card.deltaPercent | number: '1.0-1' }}%</em>
+            }
           </div>
           <strong>{{ card.displayValue }}</strong>
           <p>{{ card.secondaryText }}</p>
+          @if (showKpiDelta(card)) {
+            <small class="kpi-help">{{ kpiDeltaContext(card) }}</small>
+          }
           @if (card.key === 'sales-delivered' || card.key === 'salesDelivered') {
             <small class="kpi-help">Revenue earned from events completed this month.</small>
           }
@@ -199,6 +204,28 @@
             <strong>{{ model.upcomingPayments.currencyCode }} {{ model.upcomingPayments.thirtyDaysAmount | number: '1.0-0' }}</strong>
           </button>
         </div>
+
+        <ul class="payment-milestone-list">
+          @for (milestone of model.upcomingPaymentMilestones; track milestone.milestoneId) {
+            <li>
+              <button type="button" class="row-action-btn" (click)="openUpcomingPaymentMilestone(milestone)">
+                <div class="upcoming-head">
+                  <span>{{ milestone.enquiryReference }} · {{ milestone.milestoneName }}</span>
+                  <span class="status-badge" [attr.data-status]="upcomingPaymentStatusToken(milestone.status)">
+                    {{ milestone.status === 'DueSoon' ? 'Due Soon' : milestone.status }}
+                  </span>
+                </div>
+                <small>
+                  {{ milestone.dueDate | date: 'dd/MM/yyyy' }} ·
+                  {{ milestone.currencyCode }} {{ milestone.balanceAmount | number: '1.0-0' }}
+                </small>
+              </button>
+            </li>
+          }
+          @if (model.upcomingPaymentMilestones.length === 0) {
+            <li class="empty">No upcoming unpaid milestones in the next 30 days.</li>
+          }
+        </ul>
       </article>
 
       <article class="widget">
@@ -357,10 +384,32 @@
 
         <ul class="simple-list">
           @for (event of model.upcomingEvents; track event.enquiryId) {
-            <li>
+            <li [class.today]="isUpcomingEventToday(event)">
               <button type="button" class="row-action-btn" (click)="openUpcomingEvent(event)">
-              <span>{{ event.eventName }}</span>
-              <small>{{ event.clientName }} · {{ event.eventStartUtc | date: 'dd/MM HH:mm' }} · {{ event.guests }} covers</small>
+                <div class="upcoming-head">
+                  <span>{{ event.eventName }}</span>
+                  <span class="status-badge" [attr.data-status]="upcomingStatusToken(event.status)">{{ event.status }}</span>
+                </div>
+                <small>
+                  {{ event.clientName }} · {{ event.eventStartUtc | date: 'dd/MM HH:mm' }}
+                  @if (event.spaceName) {
+                    · {{ event.spaceName }}
+                  }
+                  · {{ event.guests }} covers
+                </small>
+                <small>
+                  @if (event.eventStyle) {
+                    {{ event.eventStyle }}
+                  } @else {
+                    Event
+                  }
+                  @if (event.eventManagerName) {
+                    · {{ event.eventManagerName }}
+                  }
+                  @if (isUpcomingEventToday(event)) {
+                    · Today
+                  }
+                </small>
               </button>
             </li>
           }
@@ -372,20 +421,20 @@
 
       <article class="widget widget-wide">
         <header>
-          <h2>Recently Viewed</h2>
+          <h2>Recent Activity</h2>
         </header>
 
         <ul class="activity-list">
           @for (activity of model.recentActivity; track activity.id) {
             <li>
               <button type="button" class="row-action-btn" (click)="openActivity(activity)">
-              <span>{{ activity.actionType }}</span>
-              <small>{{ activity.userName || 'System' }} · {{ activity.createdAtUtc | date: 'dd/MM HH:mm' }}</small>
+                <span>{{ activity.summary || activity.actionType }}</span>
+                <small>{{ activity.userName || 'System' }} · {{ activity.createdAtUtc | date: 'dd/MM HH:mm' }}</small>
               </button>
             </li>
           }
           @if (model.recentActivity.length === 0) {
-            <li class="empty">No recently viewed records.</li>
+            <li class="empty">No recent activity yet.</li>
           }
         </ul>
       </article>

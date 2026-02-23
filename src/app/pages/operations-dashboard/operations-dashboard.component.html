@@ -1,8 +1,20 @@
 <section class="operations-page">
   <header>
-    <h1>Operations Dashboard</h1>
-    <p>Yesterday, today, and tomorrow at a glance.</p>
+    <div>
+      <h1>Operations Dashboard</h1>
+      <p>Yesterday, today, and tomorrow at a glance.</p>
+    </div>
+    <button type="button" class="refresh-btn" (click)="refresh()" [disabled]="loading">
+      {{ loading ? 'Refreshing...' : 'Refresh' }}
+    </button>
   </header>
+
+  @if (errorMessage) {
+    <p class="state-error">{{ errorMessage }}</p>
+  }
+  @if (loading) {
+    <p class="state-loading">Loading operations schedule...</p>
+  }
 
   <div class="columns">
     @for (column of columns; track column) {

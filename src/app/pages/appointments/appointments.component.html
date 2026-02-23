@@ -1,0 +1,200 @@
+<section class="appointments-page">
+  <header class="page-header">
+    <div>
+      <h1>Appointments</h1>
+      <p>Manage meetings, tastings, site visits, rehearsals, and group appointments.</p>
+    </div>
+    <button type="button" (click)="openCreateForm()">+ New Appointment</button>
+  </header>
+
+  @if (errorMessage) {
+    <p class="state-message error">{{ errorMessage }}</p>
+  }
+
+  <section class="filters">
+    <label>
+      <span>Type</span>
+      <select [(ngModel)]="filterType" (change)="applyFilters()">
+        <option value="">All</option>
+        @for (type of appointmentTypeOptions; track type) {
+          <option [value]="type">{{ type }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>Status</span>
+      <select [(ngModel)]="filterStatus" (change)="applyFilters()">
+        <option value="">All</option>
+        @for (status of appointmentStatusOptions; track status) {
+          <option [value]="status">{{ appointmentStatusLabel(status) }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>Assigned To</span>
+      <select [(ngModel)]="filterAssignedToUserId" (change)="applyFilters()">
+        <option value="">All</option>
+        @for (user of users; track user.id) {
+          <option [value]="user.id">{{ userDisplayName(user) }}</option>
+        }
+      </select>
+    </label>
+    <label>
+      <span>From</span>
+      <input type="date" [(ngModel)]="filterFromDate" (change)="applyFilters()" />
+    </label>
+    <label>
+      <span>To</span>
+      <input type="date" [(ngModel)]="filterToDate" (change)="applyFilters()" />
+    </label>
+    <label class="search-field">
+      <span>Search</span>
+      <input type="search" [(ngModel)]="filterSearch" (input)="applyLocalFilters()" placeholder="Title, attendees, linked enquiry..." />
+    </label>
+    <button type="button" class="ghost" (click)="resetFilters()">Reset</button>
+  </section>
+
+  @if (showForm) {
+    <section class="form-panel">
+      <h2>{{ formMode === 'edit' ? 'Edit Appointment' : 'New Appointment' }}</h2>
+
+      <div class="form-grid">
+        <label>
+          <span>Title</span>
+          <input type="text" maxlength="200" [(ngModel)]="draft.title" />
+        </label>
+        <label>
+          <span>Type</span>
+          <select [(ngModel)]="draft.type">
+            @for (type of appointmentTypeOptions; track type) {
+              <option [value]="type">{{ type }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <span>Date</span>
+          <input type="date" [(ngModel)]="draft.date" />
+        </label>
+        <label>
+          <span>Start Time</span>
+          <input type="time" [(ngModel)]="draft.startTime" />
+        </label>
+        <label>
+          <span>Duration (mins)</span>
+          <input type="number" min="15" step="15" [(ngModel)]="draft.durationMinutes" />
+        </label>
+        <label>
+          <span>Status</span>
+          <select [(ngModel)]="draft.status">
+            @for (status of appointmentStatusOptions; track status) {
+              <option [value]="status">{{ appointmentStatusLabel(status) }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <span>Space (optional)</span>
+          <select [(ngModel)]="draft.spaceId">
+            <option value="">No space</option>
+            @for (space of spaces; track space.id) {
+              <option [value]="space.id">{{ space.name }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <span>Assigned To</span>
+          <select [(ngModel)]="draft.assignedToUserId">
+            <option value="">Unassigned</option>
+            @for (user of users; track user.id) {
+              <option [value]="user.id">{{ userDisplayName(user) }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          <span>Attendees</span>
+          <input type="text" maxlength="500" [(ngModel)]="draft.attendees" />
+        </label>
+        <label class="full-width">
+          <span>Notes</span>
+          <textarea rows="3" [(ngModel)]="draft.notes"></textarea>
+        </label>
+      </div>
+
+      <div class="related-enquiries">
+        <h3>Related Enquiries</h3>
+        <input type="search" [(ngModel)]="relatedSearchTerm" placeholder="Search by ref, contact, event type..." />
+        <div class="related-list">
+          @for (option of filteredRelatedEnquiryOptions; track option.id) {
+            <label>
+              <input type="checkbox" [checked]="isRelatedEnquirySelected(option.id)" (change)="toggleRelatedEnquiry(option.id)" />
+              <span>{{ option.reference }} · {{ option.contactName }} · {{ option.eventDate | date: 'dd/MM/yyyy' }}</span>
+            </label>
+          }
+        </div>
+      </div>
+
+      @if (formError) {
+        <p class="state-message error compact">{{ formError }}</p>
+      }
+      @if (formConflictWarning) {
+        <p class="state-message warning compact">{{ formConflictWarning }}</p>
+      }
+
+      <div class="form-actions">
+        <button type="button" class="ghost" (click)="cancelForm()" [disabled]="saving">Cancel</button>
+        @if (formCanOverrideConflict) {
+          <button type="button" class="ghost" (click)="saveAppointment(true)" [disabled]="saving">
+            {{ saving ? 'Saving...' : 'Save Anyway' }}
+          </button>
+        }
+        <button type="button" (click)="saveAppointment()" [disabled]="saving">
+          {{ saving ? 'Saving...' : (formMode === 'edit' ? 'Update Appointment' : 'Create Appointment') }}
+        </button>
+      </div>
+    </section>
+  }
+
+  @if (loading) {
+    <p class="state-message">Loading appointments...</p>
+  } @else if (filteredAppointments.length === 0) {
+    <p class="state-message">No appointments found.</p>
+  } @else {
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th><button type="button" class="sort-btn" (click)="toggleSort('title')">Title</button></th>
+            <th><button type="button" class="sort-btn" (click)="toggleSort('type')">Type</button></th>
+            <th><button type="button" class="sort-btn" (click)="toggleSort('date')">Date/Time</button></th>
+            <th>Duration</th>
+            <th>Space</th>
+            <th><button type="button" class="sort-btn" (click)="toggleSort('assignee')">Assigned To</button></th>
+            <th><button type="button" class="sort-btn" (click)="toggleSort('status')">Status</button></th>
+            <th>Related Enquiries</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (appointment of filteredAppointments; track appointment.id) {
+            <tr>
+              <td>{{ appointment.title }}</td>
+              <td>{{ appointment.type }}</td>
+              <td>{{ appointment.startUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+              <td>{{ appointment.durationMinutes }} min</td>
+              <td>{{ appointment.spaceName || 'Unassigned' }}</td>
+              <td>{{ appointment.assignedToName || 'Unassigned' }}</td>
+              <td>{{ appointmentStatusLabel(appointment.status) }}</td>
+              <td>{{ relatedEnquirySummary(appointment) }}</td>
+              <td class="actions">
+                <button type="button" class="ghost" (click)="openEditForm(appointment.id)">Edit</button>
+                <button type="button" class="ghost" (click)="updateAppointmentStatus(appointment.id, 'Completed')">Complete</button>
+                <button type="button" class="ghost" (click)="updateAppointmentStatus(appointment.id, 'NoShow')">No-Show</button>
+                <button type="button" class="ghost" (click)="updateAppointmentStatus(appointment.id, 'Cancelled')">Cancel</button>
+                <button type="button" class="danger" (click)="deleteAppointment(appointment.id)">Delete</button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

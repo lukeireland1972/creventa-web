@@ -15,9 +15,11 @@ import {
   DashboardResponse,
   ReportResponse,
   TaskDueDto,
-  UpcomingEventDto
+  UpcomingEventDto,
+  UpcomingPaymentMilestoneDto
 } from '../../services/api.service';
 import { AuthService } from '../../services/auth.service';
+import { ActivityRealtimeService } from '../../services/activity-realtime.service';
 import { QuickTaskCreatedEvent, TaskQuickCreateModalComponent } from '../../ui/task-quick-create-modal/task-quick-create-modal.component';
 
 interface SourceSlice {
@@ -47,6 +49,7 @@ ChartJs.register(...registerables);
 export class DashboardComponent implements OnInit {
   private api = inject(ApiService);
   private auth = inject(AuthService);
+  private activityRealtime = inject(ActivityRealtimeService);
   private destroyRef = inject(DestroyRef);
   private router = inject(Router);
 
@@ -56,6 +59,7 @@ export class DashboardComponent implements OnInit {
   errorMessage = '';
   private currentVenueId: string | null = null;
   private recoveringVenue = false;
+  private realtimeRefreshHandle: ReturnType<typeof setTimeout> | null = null;
   private sourceChart: ChartJsInstance | null = null;
   private revenueChart: ChartJsInstance | null = null;
 
@@ -85,11 +89,27 @@ export class DashboardComponent implements OnInit {
 
   ngOnInit(): void {
     this.destroyRef.onDestroy(() => this.destroyCharts());
+    this.destroyRef.onDestroy(() => {
+      if (this.realtimeRefreshHandle) {
+        clearTimeout(this.realtimeRefreshHandle);
+        this.realtimeRefreshHandle = null;
+      }
+    });
 
     if (this.auth.isOperationsOnly()) {
       this.router.navigateByUrl('/operations');
       return;
     }
+
+    this.activityRealtime.events$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (!this.currentVenueId || this.isLoading) {
+          return;
+        }
+
+        this.scheduleRealtimeRefresh();
+      });
 
     this.auth.session$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((session) => {
       const venueId = session?.venueId ?? null;
@@ -108,6 +128,7 @@ export class DashboardComponent implements OnInit {
       }
 
       this.currentVenueId = venueId;
+      void this.activityRealtime.ensureConnected(session?.tenantId ?? '', venueId);
       this.loadDashboard();
     });
   }
@@ -119,6 +140,24 @@ export class DashboardComponent implements OnInit {
 
   openKpi(card: DashboardKpiCardDto): void {
     this.router.navigateByUrl(card.clickRoute);
+  }
+
+  kpiDeltaContext(card: DashboardKpiCardDto): string {
+    const key = (card.key || '').trim().toLowerCase();
+    if (key === 'sales-delivered' || key === 'sales-created' || key === 'monthly-payments') {
+      return 'vs same month last year';
+    }
+
+    if (key === 'total-outstanding') {
+      return 'informational';
+    }
+
+    return 'vs previous equivalent period';
+  }
+
+  showKpiDelta(card: DashboardKpiCardDto): boolean {
+    const key = (card.key || '').trim().toLowerCase();
+    return key !== 'total-outstanding' && key !== 'tasks';
   }
 
   openEnquiriesTab(statusTab: string): void {
@@ -202,7 +241,7 @@ export class DashboardComponent implements OnInit {
   }
 
   openTask(task: TaskDueDto): void {
-    this.router.navigate(['/enquiries'], { queryParams: { enquiry: task.enquiryId, tab: 'tasks', statusTab: 'all' } });
+    this.router.navigate(['/enquiries', task.enquiryId], { queryParams: { tab: 'tasks', statusTab: 'all' } });
   }
 
   completeTaskFromWidget(task: TaskDueDto): void {
@@ -224,7 +263,75 @@ export class DashboardComponent implements OnInit {
   }
 
   openUpcomingEvent(event: UpcomingEventDto): void {
-    this.router.navigate(['/enquiries'], { queryParams: { enquiry: event.enquiryId, statusTab: 'all' } });
+    this.router.navigate(['/enquiries', event.enquiryId], { queryParams: { statusTab: 'all' } });
+  }
+
+  openUpcomingPaymentMilestone(item: UpcomingPaymentMilestoneDto): void {
+    this.router.navigate(['/enquiries', item.enquiryId], {
+      queryParams: {
+        tab: 'payments',
+        milestone: item.milestoneId,
+        statusTab: 'all'
+      }
+    });
+  }
+
+  upcomingPaymentStatusToken(status: string | null | undefined): 'overdue' | 'due-soon' | 'upcoming' {
+    const normalized = (status ?? '').trim().toLowerCase();
+    if (normalized === 'overdue') {
+      return 'overdue';
+    }
+
+    if (normalized === 'duesoon' || normalized === 'due-soon' || normalized === 'due soon') {
+      return 'due-soon';
+    }
+
+    return 'upcoming';
+  }
+
+  upcomingStatusToken(status: string | null | undefined): 'confirmed' | 'provisional' | 'tentative' | 'completed' | 'lost' | 'archived' | 'new' | 'proposal' {
+    const normalized = (status ?? '').trim().toLowerCase();
+    if (normalized === 'confirmed') {
+      return 'confirmed';
+    }
+
+    if (normalized === 'provisional') {
+      return 'provisional';
+    }
+
+    if (normalized === 'tentative') {
+      return 'tentative';
+    }
+
+    if (normalized === 'completed') {
+      return 'completed';
+    }
+
+    if (normalized === 'lost') {
+      return 'lost';
+    }
+
+    if (normalized === 'archived') {
+      return 'archived';
+    }
+
+    if (normalized === 'openproposal' || normalized === 'open proposal') {
+      return 'proposal';
+    }
+
+    return 'new';
+  }
+
+  isUpcomingEventToday(event: UpcomingEventDto): boolean {
+    const parsed = new Date(event.eventStartUtc);
+    if (Number.isNaN(parsed.getTime())) {
+      return false;
+    }
+
+    const now = new Date();
+    return parsed.getFullYear() === now.getFullYear()
+      && parsed.getMonth() === now.getMonth()
+      && parsed.getDate() === now.getDate();
   }
 
   openActivity(activity: ActivityFeedItemDto): void {
@@ -234,7 +341,7 @@ export class DashboardComponent implements OnInit {
     }
 
     if (activity.entityType === 'Enquiry') {
-      this.router.navigate(['/enquiries'], { queryParams: { enquiry: activity.entityId, statusTab: 'all' } });
+      this.router.navigate(['/enquiries', activity.entityId], { queryParams: { statusTab: 'all' } });
     }
   }
 
@@ -275,6 +382,19 @@ export class DashboardComponent implements OnInit {
 
   retryLoad(): void {
     this.loadDashboard();
+  }
+
+  private scheduleRealtimeRefresh(): void {
+    if (this.realtimeRefreshHandle) {
+      clearTimeout(this.realtimeRefreshHandle);
+    }
+
+    this.realtimeRefreshHandle = setTimeout(() => {
+      this.realtimeRefreshHandle = null;
+      if (!this.isLoading && this.currentVenueId) {
+        this.loadDashboard();
+      }
+    }, 800);
   }
 
   private loadDashboard(): void {
@@ -418,12 +538,12 @@ export class DashboardComponent implements OnInit {
     }
 
     const palette: Record<string, string> = {
-      Phone: '#3b82f6',
-      Email: '#0ea5e9',
-      'Website Form': '#6366f1',
-      'Social Media': '#8b5cf6',
-      Referral: '#14b8a6',
-      'Venue Event': '#f59e0b',
+      Phone: '#1c65b4',
+      Email: '#28b9d9',
+      'Website Form': '#1a4e95',
+      'Social Media': '#b14595',
+      Referral: '#0d9488',
+      'Venue Event': '#f3a11a',
       'Returning Client': '#22c55e'
     };
 
@@ -577,9 +697,9 @@ export class DashboardComponent implements OnInit {
           {
             label: 'Confirmed Revenue',
             data: confirmed,
-            borderColor: '#16a34a',
-            backgroundColor: 'rgba(22,163,74,0.14)',
-            pointBackgroundColor: '#16a34a',
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34,197,94,0.14)',
+            pointBackgroundColor: '#22c55e',
             pointRadius: 3,
             borderWidth: 2,
             tension: 0.28,
@@ -590,8 +710,8 @@ export class DashboardComponent implements OnInit {
                 {
                   label: 'Budget Target',
                   data: budget,
-                  borderColor: '#3b82f6',
-                  pointBackgroundColor: '#3b82f6',
+                  borderColor: '#1c65b4',
+                  pointBackgroundColor: '#1c65b4',
                   borderWidth: 2,
                   pointRadius: 2,
                   tension: 0.2,

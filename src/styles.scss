@@ -72,18 +72,18 @@ button,
 input[type='button'],
 input[type='submit'],
 input[type='reset'] {
-  background: #ffffff !important;
+  background: var(--cf-primary) !important;
   border: 1px solid var(--cf-primary) !important;
-  color: var(--cf-primary) !important;
+  color: #ffffff !important;
 }
 
 button:hover:not(:disabled),
 input[type='button']:hover:not(:disabled),
 input[type='submit']:hover:not(:disabled),
 input[type='reset']:hover:not(:disabled) {
-  background: #ffffff !important;
+  background: var(--cf-primary-hover) !important;
   border-color: var(--cf-primary-hover) !important;
-  color: var(--cf-primary-hover) !important;
+  color: #ffffff !important;
 }
 
 .card,

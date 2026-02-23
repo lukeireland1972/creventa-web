@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { catchError, distinctUntilChanged, forkJoin, map, of } from 'rxjs';
 import { Chart as ChartJs, registerables } from 'chart.js';
-import { ApiService, ReportFilterParams, ReportResponse, ReportScheduleDto } from '../../services/api.service';
+import { ApiService, ReportFilterParams, ReportResponse, ReportScheduleDto, SpaceSummaryDto } from '../../services/api.service';
 import { AuthService } from '../../services/auth.service';
 
 type DatePreset = 'this-month' | 'last-30d' | 'last-90d' | 'this-year' | 'custom';
@@ -29,6 +29,8 @@ interface SalesBarPoint {
 interface PipelineConversionRow {
   stage: string;
   count: number;
+  value: number;
+  currencyCode: string;
   conversionFromPreviousPercent: number;
   conversionFromNewPercent: number;
 }
@@ -88,6 +90,20 @@ interface PaceBarPoint {
   totalOnBooksHeightPercent: number;
   budgetHeightPercent: number;
   lyHeightPercent: number;
+}
+
+interface DayMonthAvailabilityCell {
+  month: string;
+  dayOfWeek: string;
+  bookingCount: number;
+  covers: number;
+  intensity: number;
+}
+
+interface DayMonthAvailabilityRow {
+  month: string;
+  monthLabel: string;
+  cells: DayMonthAvailabilityCell[];
 }
 
 interface SustainabilityRow {
@@ -203,7 +219,7 @@ export class ReportsComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
-  private readonly pipelineOrder: string[] = ['New', 'Tentative', 'Open Proposal', 'Provisional', 'Confirmed', 'Lost'];
+  private readonly pipelineOrder: string[] = ['New', 'Tentative', 'Open Proposal', 'Provisional', 'Confirmed', 'Completed', 'Lost', 'Archived'];
   private readonly leadSources: string[] = [
     'Phone',
     'Email',
@@ -214,15 +230,15 @@ export class ReportsComponent implements OnInit {
     'Returning Client'
   ];
   private readonly sourcePalette: Record<string, string> = {
-    Phone: '#3b82f6',
-    Email: '#0ea5e9',
-    'Website Form': '#6366f1',
-    'Social Media': '#8b5cf6',
-    Referral: '#14b8a6',
-    'Venue Event': '#f59e0b',
+    Phone: '#1c65b4',
+    Email: '#28b9d9',
+    'Website Form': '#1a4e95',
+    'Social Media': '#b14595',
+    Referral: '#0d9488',
+    'Venue Event': '#f3a11a',
     'Returning Client': '#22c55e'
   };
-  private readonly eventTypePalette = ['#1d4ed8', '#2563eb', '#7c3aed', '#0ea5e9', '#14b8a6', '#22c55e', '#f59e0b', '#f97316', '#ec4899'];
+  private readonly eventTypePalette = ['#1c65b4', '#1a4e95', '#28b9d9', '#0d9488', '#22c55e', '#f3a11a', '#f97316', '#e34a4b', '#b14595'];
 
   readonly eventTypes: string[] = [
     'all',
@@ -237,6 +253,18 @@ export class ReportsComponent implements OnInit {
     'Team Building',
     'Other'
   ];
+  readonly enquiryStatusOptions: Array<{ value: string; label: string }> = [
+    { value: 'all', label: 'All Statuses' },
+    { value: 'new', label: 'New' },
+    { value: 'tentative', label: 'Tentative' },
+    { value: 'openproposal', label: 'Open Proposal' },
+    { value: 'provisional', label: 'Provisional' },
+    { value: 'confirmed', label: 'Confirmed' },
+    { value: 'completed', label: 'Completed' },
+    { value: 'lost', label: 'Lost' },
+    { value: 'archived', label: 'Archived' }
+  ];
+  readonly dayOfWeekOrder = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   readonly reportScheduleFrequencyOptions: Array<'daily' | 'weekly' | 'monthly'> = ['daily', 'weekly', 'monthly'];
   readonly reportScheduleFormatOptions: Array<'csv' | 'pdf' | 'both'> = ['csv', 'pdf', 'both'];
   readonly reportScheduleDayOptions = [
@@ -258,6 +286,7 @@ export class ReportsComponent implements OnInit {
     'budget-pace-event-type': 'Budget / Pace by Event Type',
     'revenue-forecast': 'Revenue Forecast vs Budget',
     pace: 'Pace Report',
+    'day-month-availability-grid': 'Day / Month Availability Grid',
     sustainability: 'Sustainability',
     'source-analysis': 'Source Analysis',
     'lost-reason-analysis': 'Lost Reason Analysis'
@@ -291,6 +320,9 @@ export class ReportsComponent implements OnInit {
   compareFromDate = '';
   compareToDate = '';
   eventType = 'all';
+  statusFilter = 'all';
+  spaceFilterId = 'all';
+  spaces: SpaceSummaryDto[] = [];
 
   salesPerformanceReport: ReportResponse | null = null;
   pipelineConversionReport: ReportResponse | null = null;
@@ -299,6 +331,7 @@ export class ReportsComponent implements OnInit {
   lostReasonReport: ReportResponse | null = null;
   sustainabilityReport: ReportResponse | null = null;
   paceReport: ReportResponse | null = null;
+  dayMonthAvailabilityReport: ReportResponse | null = null;
   revenueBySpaceReport: ReportResponse | null = null;
   revenueByEventTypeReport: ReportResponse | null = null;
   salesTeamPerformanceReport: ReportResponse | null = null;
@@ -326,11 +359,14 @@ export class ReportsComponent implements OnInit {
       .subscribe((venueId) => {
         this.venueId = venueId;
         if (!venueId) {
+          this.spaces = [];
+          this.spaceFilterId = 'all';
           this.clearReportData();
           this.errorMessage = 'Select a venue to load reports.';
           return;
         }
 
+        this.loadSpaceOptions(venueId);
         this.loadReports();
       });
   }
@@ -406,6 +442,9 @@ export class ReportsComponent implements OnInit {
       lost: this.api.getLostReasonAnalysisReport(filters).pipe(catchError(() => of(this.emptyReport('lost-reason-analysis', 'Lost Reason Analysis')))),
       sustainability: this.api.getSustainabilityReport(filters).pipe(catchError(() => of(this.emptyReport('sustainability', 'Sustainability')))),
       pace: this.api.getReport('pace', filters).pipe(catchError(() => of(this.emptyReport('pace', 'Pace Report')))),
+      dayMonthAvailability: this.api.getReport('day-month-availability-grid', this.buildDayMonthFilterParams()).pipe(
+        catchError(() => of(this.emptyReport('day-month-availability-grid', 'Day / Month Availability Grid')))
+      ),
       schedules: this.api.getReportSchedules(venueId).pipe(catchError(() => of({ items: [] as ReportScheduleDto[] })))
     })
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -423,6 +462,7 @@ export class ReportsComponent implements OnInit {
           this.lostReasonReport = result.lost;
           this.sustainabilityReport = result.sustainability;
           this.paceReport = result.pace;
+          this.dayMonthAvailabilityReport = result.dayMonthAvailability;
           this.reportSchedules = result.schedules.items
             .slice()
             .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
@@ -451,7 +491,9 @@ export class ReportsComponent implements OnInit {
         to: this.toDate || undefined,
         compareFrom: this.compareEnabled ? this.compareFromDate || undefined : undefined,
         compareTo: this.compareEnabled ? this.compareToDate || undefined : undefined,
-        eventType: this.eventType === 'all' ? undefined : this.eventType
+        eventType: this.eventType === 'all' ? undefined : this.eventType,
+        status: this.statusFilter === 'all' ? undefined : this.statusFilter,
+        spaceId: this.spaceFilterId === 'all' ? undefined : this.spaceFilterId
       })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
@@ -656,10 +698,12 @@ export class ReportsComponent implements OnInit {
       .map((row) => ({
         stage: this.getString(row, 'stage'),
         count: this.getNumber(row, 'count'),
+        value: this.getNumber(row, 'value'),
+        currencyCode: this.getString(row, 'currencyCode') || 'GBP',
         conversionFromPreviousPercent: this.getNumber(row, 'conversionFromPreviousPercent'),
         conversionFromNewPercent: this.getNumber(row, 'conversionFromNewPercent')
       }))
-      .sort((a, b) => this.pipelineOrder.indexOf(a.stage) - this.pipelineOrder.indexOf(b.stage));
+      .sort((a, b) => this.pipelineStageRank(a.stage) - this.pipelineStageRank(b.stage));
   }
 
   get pipelineFunnelRows(): PipelineFunnelRow[] {
@@ -1080,6 +1124,76 @@ export class ReportsComponent implements OnInit {
     return 'neutral';
   }
 
+  get dayMonthAvailabilityRows(): DayMonthAvailabilityRow[] {
+    const rows = this.dayMonthAvailabilityReport?.rows ?? [];
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const normalizedCells = rows
+      .map((row) => ({
+        month: this.getString(row, 'month'),
+        dayOfWeek: this.normalizeDayOfWeekLabel(this.getString(row, 'dayOfWeek')),
+        bookingCount: this.getNumber(row, 'bookingCount'),
+        covers: this.getNumber(row, 'covers'),
+        intensity: this.getNumber(row, 'intensity')
+      }))
+      .filter((row) => /^\d{4}-\d{2}$/.test(row.month) && this.dayOfWeekOrder.includes(row.dayOfWeek));
+
+    const intensityMax = Math.max(...normalizedCells.map((cell) => cell.intensity), 0);
+    const bookingsMax = Math.max(...normalizedCells.map((cell) => cell.bookingCount), 0);
+    const byKey = new Map<string, DayMonthAvailabilityCell>();
+    normalizedCells.forEach((cell) => {
+      const normalizedIntensity = intensityMax > 0
+        ? Math.round((cell.intensity / intensityMax) * 100)
+        : (bookingsMax > 0 ? Math.round((cell.bookingCount / bookingsMax) * 100) : 0);
+      byKey.set(`${cell.month}|${cell.dayOfWeek}`, {
+        ...cell,
+        intensity: Math.max(0, Math.min(100, normalizedIntensity))
+      });
+    });
+
+    const months = Array.from(new Set(normalizedCells.map((cell) => cell.month))).sort((left, right) => left.localeCompare(right));
+    return months.map((month) => ({
+      month,
+      monthLabel: this.formatMonth(month),
+      cells: this.dayOfWeekOrder.map((day) => byKey.get(`${month}|${day}`) ?? {
+        month,
+        dayOfWeek: day,
+        bookingCount: 0,
+        covers: 0,
+        intensity: 0
+      })
+    }));
+  }
+
+  dayMonthCellColor(intensity: number): string {
+    const clamped = Math.max(0, Math.min(100, intensity));
+    const alpha = clamped <= 0 ? 0.07 : Number((0.16 + (clamped / 100) * 0.72).toFixed(2));
+    return `rgba(37, 99, 235, ${alpha})`;
+  }
+
+  dayMonthCellLabel(cell: DayMonthAvailabilityCell): string {
+    return `${cell.bookingCount} bookings · ${cell.covers} covers`;
+  }
+
+  openDayMonthCell(cell: DayMonthAvailabilityCell): void {
+    const targetDate = this.resolveMonthWeekdayDate(cell.month, cell.dayOfWeek);
+    if (!targetDate) {
+      return;
+    }
+
+    this.router.navigate(['/event-diary'], {
+      queryParams: {
+        view: 'day',
+        startDate: targetDate,
+        eventTypeFilter: this.eventType === 'all' ? null : this.eventType,
+        statusFilter: this.statusFilter === 'all' ? null : this.statusFilter,
+        spaces: this.spaceFilterId === 'all' ? null : `space:${this.spaceFilterId}`
+      }
+    });
+  }
+
   drillIntoBudgetPaceRow(row: BudgetPaceByEventTypeRow): void {
     if (row.rowType !== 'month' || !/^\d{4}-\d{2}$/.test(row.month)) {
       return;
@@ -1125,6 +1239,24 @@ export class ReportsComponent implements OnInit {
     return active ?? matches[0];
   }
 
+  private loadSpaceOptions(venueId: string): void {
+    this.api
+      .getVenueSpaces(venueId)
+      .pipe(
+        catchError(() => of([] as SpaceSummaryDto[])),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((spaces) => {
+        this.spaces = spaces
+          .filter((space) => space.isActive)
+          .sort((left, right) => left.name.localeCompare(right.name, undefined, { sensitivity: 'base' }));
+
+        if (this.spaceFilterId !== 'all' && !this.spaces.some((space) => space.id === this.spaceFilterId)) {
+          this.spaceFilterId = 'all';
+        }
+      });
+  }
+
   private normalizeEmail(value: string | null | undefined): string | null {
     const candidate = (value ?? '').trim();
     if (!candidate) {
@@ -1143,8 +1275,103 @@ export class ReportsComponent implements OnInit {
       to: this.toDate || undefined,
       compareFrom: includeComparison ? this.compareFromDate : undefined,
       compareTo: includeComparison ? this.compareToDate : undefined,
-      eventType: this.eventType === 'all' ? undefined : this.eventType
+      eventType: this.eventType === 'all' ? undefined : this.eventType,
+      status: this.statusFilter === 'all' ? undefined : this.statusFilter,
+      spaceId: this.spaceFilterId === 'all' ? undefined : this.spaceFilterId
     };
+  }
+
+  private buildDayMonthFilterParams(): ReportFilterParams {
+    const start = new Date();
+    const startMonth = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    const endMonth = new Date(Date.UTC(startMonth.getUTCFullYear(), startMonth.getUTCMonth() + 12, 0));
+
+    return {
+      venueId: this.venueId!,
+      from: this.toInputDate(startMonth),
+      to: this.toInputDate(endMonth),
+      eventType: this.eventType === 'all' ? undefined : this.eventType,
+      status: this.statusFilter === 'all' ? undefined : this.statusFilter,
+      spaceId: this.spaceFilterId === 'all' ? undefined : this.spaceFilterId
+    };
+  }
+
+  private resolveMonthWeekdayDate(month: string, dayLabel: string): string | null {
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      return null;
+    }
+
+    const [yearRaw, monthRaw] = month.split('-');
+    const year = Number(yearRaw);
+    const monthIndex = Number(monthRaw) - 1;
+    if (!Number.isFinite(year) || !Number.isFinite(monthIndex)) {
+      return null;
+    }
+
+    const targetDay = this.dayOfWeekToJsIndex(dayLabel);
+    if (targetDay < 0) {
+      return null;
+    }
+
+    const cursor = new Date(Date.UTC(year, monthIndex, 1));
+    const end = new Date(Date.UTC(year, monthIndex + 1, 0));
+    while (cursor <= end) {
+      if (cursor.getUTCDay() === targetDay) {
+        return this.toInputDate(cursor);
+      }
+
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+
+    return null;
+  }
+
+  private dayOfWeekToJsIndex(dayLabel: string): number {
+    switch (this.normalizeDayOfWeekLabel(dayLabel)) {
+      case 'Monday':
+        return 1;
+      case 'Tuesday':
+        return 2;
+      case 'Wednesday':
+        return 3;
+      case 'Thursday':
+        return 4;
+      case 'Friday':
+        return 5;
+      case 'Saturday':
+        return 6;
+      case 'Sunday':
+        return 0;
+      default:
+        return -1;
+    }
+  }
+
+  private normalizeDayOfWeekLabel(value: string): string {
+    const normalized = value.trim().toLowerCase();
+    if (normalized.startsWith('mon')) {
+      return 'Monday';
+    }
+    if (normalized.startsWith('tue')) {
+      return 'Tuesday';
+    }
+    if (normalized.startsWith('wed')) {
+      return 'Wednesday';
+    }
+    if (normalized.startsWith('thu')) {
+      return 'Thursday';
+    }
+    if (normalized.startsWith('fri')) {
+      return 'Friday';
+    }
+    if (normalized.startsWith('sat')) {
+      return 'Saturday';
+    }
+    if (normalized.startsWith('sun')) {
+      return 'Sunday';
+    }
+
+    return value;
   }
 
   private emptyReport(key: string, name: string): ReportResponse {
@@ -1222,9 +1449,9 @@ export class ReportsComponent implements OnInit {
           {
             label: 'Confirmed Revenue',
             data: confirmed,
-            borderColor: '#16a34a',
-            backgroundColor: 'rgba(22, 163, 74, 0.12)',
-            pointBackgroundColor: '#16a34a',
+            borderColor: '#22c55e',
+            backgroundColor: 'rgba(34, 197, 94, 0.12)',
+            pointBackgroundColor: '#22c55e',
             borderWidth: 2,
             pointRadius: 3,
             tension: 0.28,
@@ -1233,8 +1460,8 @@ export class ReportsComponent implements OnInit {
           {
             label: 'Predicted Revenue',
             data: predicted,
-            borderColor: '#7c3aed',
-            pointBackgroundColor: '#7c3aed',
+            borderColor: '#1a4e95',
+            pointBackgroundColor: '#1a4e95',
             borderWidth: 2,
             pointRadius: 3,
             tension: 0.22,
@@ -1245,8 +1472,8 @@ export class ReportsComponent implements OnInit {
                 {
                   label: 'Budget Target',
                   data: budget,
-                  borderColor: '#3b82f6',
-                  pointBackgroundColor: '#3b82f6',
+                  borderColor: '#1c65b4',
+                  pointBackgroundColor: '#1c65b4',
                   borderWidth: 2,
                   pointRadius: 2,
                   tension: 0.2,
@@ -1325,8 +1552,8 @@ export class ReportsComponent implements OnInit {
           {
             label: 'Confirmed Value',
             data: confirmed,
-            borderColor: '#2563eb',
-            backgroundColor: 'rgba(37, 99, 235, 0.32)',
+            borderColor: '#1c65b4',
+            backgroundColor: 'rgba(28, 101, 180, 0.24)',
             pointRadius: 2,
             borderWidth: 2,
             tension: 0.3,
@@ -1336,8 +1563,8 @@ export class ReportsComponent implements OnInit {
           {
             label: 'Weighted Pipeline Value',
             data: weighted,
-            borderColor: '#8b5cf6',
-            backgroundColor: 'rgba(139, 92, 246, 0.3)',
+            borderColor: '#28b9d9',
+            backgroundColor: 'rgba(40, 185, 217, 0.28)',
             pointRadius: 2,
             borderWidth: 2,
             tension: 0.3,
@@ -1349,8 +1576,8 @@ export class ReportsComponent implements OnInit {
                 {
                   label: 'Budget Target',
                   data: budget,
-                  borderColor: '#16a34a',
-                  pointBackgroundColor: '#16a34a',
+                  borderColor: '#22c55e',
+                  pointBackgroundColor: '#22c55e',
                   borderWidth: 2,
                   pointRadius: 2,
                   tension: 0.2,
@@ -1415,10 +1642,17 @@ export class ReportsComponent implements OnInit {
     this.lostReasonReport = null;
     this.sustainabilityReport = null;
     this.paceReport = null;
+    this.dayMonthAvailabilityReport = null;
     this.reportSchedules = [];
     this.closeScheduleDialog();
     this.isLoading = false;
     this.destroyCharts();
+  }
+
+  private pipelineStageRank(stage: string): number {
+    const normalized = stage.trim().toLowerCase();
+    const index = this.pipelineOrder.findIndex((item) => item.toLowerCase() === normalized);
+    return index >= 0 ? index : this.pipelineOrder.length + 1;
   }
 
   private toInputDate(value: Date): string {

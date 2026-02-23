@@ -19,6 +19,7 @@ import {
   ProposalDetailResponse,
   ProposalListItemDto,
   ProposalListResponse,
+  PaymentScheduleResponse,
   ProposalSectionDto,
   ProposalSignatureEnvelopeDto,
   ProposalTemplateSettingDto,
@@ -31,13 +32,16 @@ import { ProposalStatusBadgeComponent } from '../../ui/proposal-status-badge/pro
 
 const DEFAULT_BUILDER_SECTIONS: ProposalSectionDto[] = [
   { key: 'coverPage', title: 'Cover Page', isEnabled: true, sortOrder: 1 },
-  { key: 'eventDetails', title: 'Event Details', isEnabled: true, sortOrder: 2 },
-  { key: 'menuPackages', title: 'Menu / Package Selection', isEnabled: true, sortOrder: 3 },
-  { key: 'additionalServices', title: 'Additional Services', isEnabled: true, sortOrder: 4 },
-  { key: 'pricingSummary', title: 'Pricing Summary', isEnabled: true, sortOrder: 5 },
-  { key: 'sustainabilityImpact', title: 'Sustainability Impact', isEnabled: false, sortOrder: 6 },
-  { key: 'termsConditions', title: 'Terms & Conditions', isEnabled: true, sortOrder: 7 },
-  { key: 'acceptanceBlock', title: 'Acceptance Block', isEnabled: true, sortOrder: 8 }
+  { key: 'introductionWelcome', title: 'Introduction / Welcome Message', isEnabled: true, sortOrder: 2 },
+  { key: 'eventSummary', title: 'Event Summary', isEnabled: true, sortOrder: 3 },
+  { key: 'venueSpaceDetails', title: 'Venue / Space Details', isEnabled: true, sortOrder: 4 },
+  { key: 'menuPackages', title: 'Menu / Catering', isEnabled: true, sortOrder: 5 },
+  { key: 'additionalServices', title: 'Additional Services', isEnabled: true, sortOrder: 6 },
+  { key: 'pricingSummary', title: 'Pricing Summary', isEnabled: true, sortOrder: 7 },
+  { key: 'paymentSchedule', title: 'Payment Schedule', isEnabled: true, sortOrder: 8 },
+  { key: 'sustainabilityImpact', title: 'Sustainability Impact', isEnabled: false, sortOrder: 9 },
+  { key: 'termsConditions', title: 'Terms & Conditions', isEnabled: true, sortOrder: 10 },
+  { key: 'acceptanceBlock', title: 'Acceptance Block', isEnabled: true, sortOrder: 11 }
 ];
 
 type LineSectionType = 'MenuPackage' | 'AdditionalServices';
@@ -116,6 +120,7 @@ export class ProposalsComponent implements OnInit, OnDestroy {
   savingTemplate = false;
   builderEnquiryDetail: EnquiryDetailResponse | null = null;
   builderEnquirySustainability: EnquirySustainabilityResponse | null = null;
+  builderPaymentSchedule: PaymentScheduleResponse | null = null;
   venueProfile: VenueProfileDto | null = null;
   sendEmailDraft = '';
   private pendingManualSignedProposalId: string | null = null;
@@ -756,6 +761,10 @@ export class ProposalsComponent implements OnInit, OnDestroy {
     return this.builderSections.some((section) => section.key === sectionKey && section.isEnabled);
   }
 
+  sectionEnabledAny(sectionKeys: string[]): boolean {
+    return sectionKeys.some((sectionKey) => this.sectionEnabled(sectionKey));
+  }
+
   sectionSubtotal(section: LineSectionType): number {
     return this.builderSectionSubtotals[section] ?? 0;
   }
@@ -927,9 +936,7 @@ export class ProposalsComponent implements OnInit, OnDestroy {
     this.builderNotice = '';
     this.comparison = null;
     this.sendEmailDraft = this.builderEnquiryDetail?.contactEmail ?? this.sendEmailDraft;
-    this.builderSections = proposal.sections.length > 0
-      ? [...proposal.sections].sort((left, right) => left.sortOrder - right.sortOrder)
-      : [...DEFAULT_BUILDER_SECTIONS];
+    this.builderSections = this.mergeBuilderSections(proposal.sections);
 
     this.applyingTemplate = true;
     this.builderForm.patchValue({
@@ -1143,6 +1150,13 @@ export class ProposalsComponent implements OnInit, OnDestroy {
     }
 
     return '0.00';
+  }
+
+  comparisonChangeToken(changeType: string): string {
+    const normalized = (changeType ?? '').trim().toLowerCase();
+    return normalized === 'added' || normalized === 'removed' || normalized === 'modified'
+      ? normalized
+      : 'unchanged';
   }
 
   private sendProposalByPrompt(proposalId: string, suggestedEmail?: string): void {
@@ -1488,6 +1502,7 @@ export class ProposalsComponent implements OnInit, OnDestroy {
       this.templateOptions = [];
       this.builderEnquiryDetail = null;
       this.builderEnquirySustainability = null;
+      this.builderPaymentSchedule = null;
       this.aiPricingRecommendation = null;
       this.aiPricingLoading = false;
       this.aiPricingMessage = 'Select an enquiry with a space assignment to unlock AI pricing suggestions.';
@@ -1535,11 +1550,13 @@ export class ProposalsComponent implements OnInit, OnDestroy {
           );
           this.syncTermsSelectionForEventType(detail.eventType);
           this.loadBuilderSustainability(detail.id);
+          this.loadBuilderPaymentSchedule(detail.id);
           this.loadAiPricingRecommendation(detail);
         },
         error: () => {
           this.builderEnquiryDetail = null;
           this.builderEnquirySustainability = null;
+          this.builderPaymentSchedule = null;
           this.aiPricingRecommendation = null;
           this.aiPricingLoading = false;
           this.aiPricingMessage = 'Unable to load AI pricing guidance for this enquiry.';
@@ -1618,6 +1635,21 @@ export class ProposalsComponent implements OnInit, OnDestroy {
       });
   }
 
+  private loadBuilderPaymentSchedule(enquiryId: string): void {
+    this.builderPaymentSchedule = null;
+    this.api
+      .getPaymentSchedule(enquiryId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (schedule) => {
+          this.builderPaymentSchedule = schedule;
+        },
+        error: () => {
+          this.builderPaymentSchedule = null;
+        }
+      });
+  }
+
   private loadSignatureEnvelope(proposalId: string): void {
     this.signatureLoading = true;
     this.api
@@ -1672,14 +1704,7 @@ export class ProposalsComponent implements OnInit, OnDestroy {
     this.applyingTemplate = false;
 
     if (template.defaultSections && template.defaultSections.length > 0) {
-      this.builderSections = [...template.defaultSections]
-        .sort((left, right) => left.sortOrder - right.sortOrder)
-        .map((section, index) => ({
-          key: section.key || `section-${index + 1}`,
-          title: section.title || section.key || `Section ${index + 1}`,
-          isEnabled: section.isEnabled !== false,
-          sortOrder: section.sortOrder > 0 ? section.sortOrder : index + 1
-        }));
+      this.builderSections = this.mergeBuilderSections(template.defaultSections);
       this.resetBuilderSectionCollapse();
     }
 
@@ -1981,6 +2006,55 @@ export class ProposalsComponent implements OnInit, OnDestroy {
     }, {});
   }
 
+  private mergeBuilderSections(sections: ReadonlyArray<ProposalSectionDto> | null | undefined): ProposalSectionDto[] {
+    const normalized = (sections ?? [])
+      .map((section, index) => ({
+        key: this.normalizeBuilderSectionKey(section.key),
+        title: section.title,
+        isEnabled: section.isEnabled,
+        sortOrder: section.sortOrder > 0 ? section.sortOrder : index + 1
+      }))
+      .filter((section) => !!section.key)
+      .sort((left, right) => left.sortOrder - right.sortOrder);
+
+    const merged = normalized.length > 0
+      ? [...normalized]
+      : DEFAULT_BUILDER_SECTIONS.map((section) => ({ ...section }));
+
+    const existingKeys = new Set(merged.map((section) => section.key));
+    for (const defaultSection of DEFAULT_BUILDER_SECTIONS) {
+      if (existingKeys.has(defaultSection.key)) {
+        continue;
+      }
+
+      merged.push({
+        ...defaultSection,
+        sortOrder: merged.length + 1
+      });
+      existingKeys.add(defaultSection.key);
+    }
+
+    return merged
+      .sort((left, right) => left.sortOrder - right.sortOrder)
+      .map((section, index) => ({
+        ...section,
+        sortOrder: index + 1
+      }));
+  }
+
+  private normalizeBuilderSectionKey(key: string): string {
+    const normalized = (key ?? '').trim();
+    if (!normalized) {
+      return '';
+    }
+
+    if (normalized.toLowerCase() === 'eventdetails') {
+      return 'eventSummary';
+    }
+
+    return normalized;
+  }
+
   private handleVenueChange(venueId: string | null): void {
     this.resetVenueScopedState();
     if (!venueId) {
@@ -2009,6 +2083,7 @@ export class ProposalsComponent implements OnInit, OnDestroy {
     this.venueProfile = null;
     this.builderEnquiryDetail = null;
     this.builderEnquirySustainability = null;
+    this.builderPaymentSchedule = null;
     this.aiPricingRecommendation = null;
     this.aiPricingMessage = '';
     this.closeBuilder();

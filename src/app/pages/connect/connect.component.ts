@@ -12,7 +12,8 @@ import {
   ConnectInlineAttachmentDto,
   ConnectTimelineItemDto,
   EnquiryDetailResponse,
-  UnmatchedEmailDto
+  UnmatchedEmailDto,
+  UserSummaryDto
 } from '../../services/api.service';
 import { AuthService } from '../../services/auth.service';
 import { QuickTaskCreatedEvent, TaskQuickCreateModalComponent } from '../../ui/task-quick-create-modal/task-quick-create-modal.component';
@@ -91,6 +92,15 @@ export class ConnectComponent implements OnInit {
   selectedChannelId: string | null = null;
   chatMessages: ChatMessageDto[] = [];
   chatDraft = '';
+  users: UserSummaryDto[] = [];
+  loadingUsers = false;
+  chatError = '';
+  showCreateChannelForm = false;
+  showCreateDirectMessageForm = false;
+  newChannelName = '';
+  newChannelIsPrivate = false;
+  newChannelMemberIds: string[] = [];
+  newDirectMessageUserId = '';
 
   isLoadingTimeline = false;
   isLoadingChat = false;
@@ -106,6 +116,25 @@ export class ConnectComponent implements OnInit {
 
   get canCompose(): boolean {
     return this.selectedEnquiryId.length > 0;
+  }
+
+  get activeUsers(): UserSummaryDto[] {
+    return this.users.filter((user) => user.isActive);
+  }
+
+  get teamChannels(): ChatChannelDto[] {
+    return this.channels.filter((channel) => !channel.isDirectMessage);
+  }
+
+  get directMessageChannels(): ChatChannelDto[] {
+    return this.channels.filter((channel) => channel.isDirectMessage);
+  }
+
+  get availableDirectMessageUsers(): UserSummaryDto[] {
+    const currentUserEmail = (this.auth.session?.email || '').trim().toLowerCase();
+    return this.activeUsers
+      .filter((user) => user.email.trim().toLowerCase() !== currentUserEmail)
+      .sort((left, right) => this.userDisplayName(left).localeCompare(this.userDisplayName(right), undefined, { sensitivity: 'base' }));
   }
 
   get selectedChannel(): ChatChannelDto | null {
@@ -231,8 +260,13 @@ export class ConnectComponent implements OnInit {
       return;
     }
 
+    const mentionedUserIds = this.extractMentionedUserIds(this.noteDraft);
+
     this.api
-      .addInternalNote(this.selectedEnquiryId, { body: this.noteDraft.trim() })
+      .addInternalNote(this.selectedEnquiryId, {
+        body: this.noteDraft.trim(),
+        mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : undefined
+      })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: () => {
@@ -496,6 +530,7 @@ export class ConnectComponent implements OnInit {
   }
 
   loadChannels(): void {
+    this.chatError = '';
     this.api
       .getChatChannels(this.venueId ?? undefined)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -509,6 +544,7 @@ export class ConnectComponent implements OnInit {
         error: () => {
           this.channels = [];
           this.chatMessages = [];
+          this.chatError = 'Unable to load channels.';
         }
       });
   }
@@ -530,6 +566,7 @@ export class ConnectComponent implements OnInit {
         error: () => {
           this.chatMessages = [];
           this.isLoadingChat = false;
+          this.chatError = 'Unable to load this channel right now.';
         }
       });
   }
@@ -539,16 +576,150 @@ export class ConnectComponent implements OnInit {
       return;
     }
 
+    const body = this.chatDraft.trim();
+    const mentionedUserIds = this.extractMentionedUserIds(body);
+
     this.api
-      .sendChatMessage(this.selectedChannelId, { body: this.chatDraft.trim() })
+      .sendChatMessage(this.selectedChannelId, {
+        body,
+        mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : undefined
+      })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (message) => {
           this.chatMessages = [...this.chatMessages, message];
           this.chatDraft = '';
+          this.chatError = '';
           this.loadChannels();
+        },
+        error: () => {
+          this.chatError = 'Unable to send message right now.';
         }
       });
+  }
+
+  toggleCreateChannelForm(): void {
+    this.showCreateChannelForm = !this.showCreateChannelForm;
+    if (!this.showCreateChannelForm) {
+      this.resetChannelForm();
+    }
+  }
+
+  toggleCreateDirectMessageForm(): void {
+    this.showCreateDirectMessageForm = !this.showCreateDirectMessageForm;
+    if (!this.showCreateDirectMessageForm) {
+      this.newDirectMessageUserId = '';
+    }
+  }
+
+  toggleChannelMember(userId: string): void {
+    const next = new Set(this.newChannelMemberIds);
+    if (next.has(userId)) {
+      next.delete(userId);
+    } else {
+      next.add(userId);
+    }
+
+    this.newChannelMemberIds = Array.from(next);
+  }
+
+  isChannelMemberSelected(userId: string): boolean {
+    return this.newChannelMemberIds.includes(userId);
+  }
+
+  createChannel(): void {
+    if (!this.venueId || !this.newChannelName.trim()) {
+      return;
+    }
+
+    const members = this.newChannelMemberIds.filter((id) => !!id);
+    this.chatError = '';
+
+    this.api
+      .createChatChannel({
+        name: this.newChannelName.trim(),
+        venueId: this.venueId,
+        isPrivate: this.newChannelIsPrivate,
+        isDirectMessage: false,
+        memberUserIds: members
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (channel) => {
+          this.resetChannelForm();
+          this.showCreateChannelForm = false;
+          this.loadChannels();
+          this.openChannel(channel);
+        },
+        error: (error) => {
+          this.chatError = typeof error?.error?.error === 'string'
+            ? error.error.error
+            : 'Unable to create channel.';
+        }
+      });
+  }
+
+  createDirectMessage(): void {
+    if (!this.venueId || !this.newDirectMessageUserId) {
+      return;
+    }
+
+    const target = this.users.find((user) => user.id === this.newDirectMessageUserId);
+    if (!target) {
+      this.chatError = 'Select a valid team member.';
+      return;
+    }
+
+    const targetName = this.userDisplayName(target);
+    const existing = this.directMessageChannels.find((channel) => channel.name.toLowerCase() === `dm: ${targetName}`.toLowerCase());
+    if (existing) {
+      this.showCreateDirectMessageForm = false;
+      this.newDirectMessageUserId = '';
+      this.openChannel(existing);
+      return;
+    }
+
+    this.chatError = '';
+    this.api
+      .createChatChannel({
+        name: `DM: ${targetName}`,
+        venueId: this.venueId,
+        isPrivate: true,
+        isDirectMessage: true,
+        memberUserIds: [target.id]
+      })
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (channel) => {
+          this.showCreateDirectMessageForm = false;
+          this.newDirectMessageUserId = '';
+          this.loadChannels();
+          this.openChannel(channel);
+        },
+        error: (error) => {
+          this.chatError = typeof error?.error?.error === 'string'
+            ? error.error.error
+            : 'Unable to start direct message.';
+        }
+      });
+  }
+
+  insertMentionIntoNote(userId: string): void {
+    const user = this.users.find((item) => item.id === userId);
+    if (!user) {
+      return;
+    }
+
+    this.noteDraft = `${this.noteDraft.trimEnd()} @${this.userMentionToken(user)} `.trimStart();
+  }
+
+  insertMentionIntoChat(userId: string): void {
+    const user = this.users.find((item) => item.id === userId);
+    if (!user) {
+      return;
+    }
+
+    this.chatDraft = `${this.chatDraft.trimEnd()} @${this.userMentionToken(user)} `.trimStart();
   }
 
   private loadTemplates(): void {
@@ -679,7 +850,7 @@ export class ConnectComponent implements OnInit {
     const managerName = enquiry?.eventManagerName || this.auth.session?.fullName || '';
     const enquiryRef = enquiry?.reference || '';
     const origin = typeof window === 'undefined' ? '' : window.location.origin;
-    const proposalLink = enquiry ? `${origin}/enquiries?enquiry=${enquiry.id}&tab=proposals` : '';
+    const proposalLink = enquiry ? `${origin}/enquiries/${enquiry.id}?tab=proposals` : '';
     const paymentLink = enquiry ? `${origin}/payments?enquiry=${enquiry.id}` : '';
     const portalLink = origin ? `${origin}/portal` : '';
     const totalValueAmount = enquiry?.budgetMaxAmount ?? enquiry?.budgetMinAmount ?? 0;
@@ -823,7 +994,76 @@ export class ConnectComponent implements OnInit {
     this.loadTimeline();
     this.loadTemplates();
     this.loadUnmatchedInbox();
+    this.loadUsers();
     this.loadChannels();
+  }
+
+  private loadUsers(): void {
+    if (!this.venueId) {
+      this.users = [];
+      return;
+    }
+
+    this.loadingUsers = true;
+    this.api
+      .getUsers(this.venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (users) => {
+          this.users = (users ?? []).filter((user) => user.isActive);
+          this.loadingUsers = false;
+        },
+        error: () => {
+          this.users = [];
+          this.loadingUsers = false;
+        }
+      });
+  }
+
+  userDisplayName(user: UserSummaryDto): string {
+    return `${user.firstName} ${user.lastName}`.trim();
+  }
+
+  userMentionToken(user: UserSummaryDto): string {
+    const name = this.userDisplayName(user).toLowerCase().replace(/[^a-z0-9]+/g, '.').replace(/^\.+|\.+$/g, '');
+    if (name) {
+      return name;
+    }
+
+    return user.email.split('@')[0].toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  }
+
+  private extractMentionedUserIds(input: string): string[] {
+    const mentionTokens = Array.from((input || '').matchAll(/@([a-z0-9._-]+)/gi))
+      .map((match) => (match[1] || '').toLowerCase())
+      .filter((token) => token.length > 0);
+
+    if (mentionTokens.length === 0) {
+      return [];
+    }
+
+    const tokenToUserId = new Map<string, string>();
+    for (const user of this.activeUsers) {
+      const mentionToken = this.userMentionToken(user);
+      if (mentionToken) {
+        tokenToUserId.set(mentionToken.toLowerCase(), user.id);
+      }
+
+      const emailToken = (user.email || '').split('@')[0]?.toLowerCase() ?? '';
+      if (emailToken) {
+        tokenToUserId.set(emailToken, user.id);
+      }
+    }
+
+    const ids = new Set<string>();
+    for (const token of mentionTokens) {
+      const match = tokenToUserId.get(token);
+      if (match) {
+        ids.add(match);
+      }
+    }
+
+    return Array.from(ids);
   }
 
   private resetVenueScopedState(): void {
@@ -834,6 +1074,7 @@ export class ConnectComponent implements OnInit {
     this.selectedChannelId = null;
     this.selectedEnquiryId = '';
     this.selectedEnquiry = null;
+    this.users = [];
     this.unmatchedEmailCount = 0;
     this.unreadMentionCount = 0;
     this.noteDraft = '';
@@ -845,5 +1086,16 @@ export class ConnectComponent implements OnInit {
     this.composeError = '';
     this.composeSuccess = '';
     this.showTemplatePicker = false;
+    this.chatError = '';
+    this.resetChannelForm();
+    this.showCreateChannelForm = false;
+    this.showCreateDirectMessageForm = false;
+    this.newDirectMessageUserId = '';
+  }
+
+  private resetChannelForm(): void {
+    this.newChannelName = '';
+    this.newChannelIsPrivate = false;
+    this.newChannelMemberIds = [];
   }
 }

@@ -1,3 +1,4 @@
+@if (!isDedicatedDetailRoute) {
 <section class="page-header">
   <div>
     <h1>Enquiry Management</h1>
@@ -11,9 +12,15 @@
       [disabled]="creatingTestEnquiries">
       {{ creatingTestEnquiries ? 'Creating...' : 'Create 10 Test Enquiries' }}
     </button>
+    <button
+      type="button"
+      class="seed-enquiries-btn range"
+      (click)="createFebruaryMarchEvents()"
+      [disabled]="creatingTestEnquiries">
+      {{ creatingTestEnquiries ? 'Creating...' : 'Fill Feb/Mar Daily' }}
+    </button>
     <button type="button" class="website-preview-btn" (click)="openWebsiteEnquiryPreview()">Preview Website Form</button>
     <button type="button" class="add-task-btn" (click)="openAddTask()">+ Add Task</button>
-    <span class="period-pill">This Month</span>
   </div>
 </section>
 
@@ -104,6 +111,50 @@
       <strong>{{ list.stats.lost }}</strong>
       <p>conversion drop-off</p>
     </article>
+
+    <div class="stats-controls">
+      <label>
+        Period
+        <select [value]="statsPeriod" (change)="statsPeriod = $any($event.target).value; onStatsFiltersChanged()">
+          @for (option of periodOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
+      @if (isCustomPeriodSelected) {
+        <label>
+          From
+          <input type="date" [value]="statsCustomStart" (change)="statsCustomStart = $any($event.target).value; onStatsFiltersChanged()" />
+        </label>
+        <label>
+          To
+          <input type="date" [value]="statsCustomEnd" (change)="statsCustomEnd = $any($event.target).value; onStatsFiltersChanged()" />
+        </label>
+      }
+      <label>
+        Event Manager
+        <select [value]="statsEventManagerUserId" (change)="statsEventManagerUserId = $any($event.target).value; onStatsFiltersChanged()">
+          <option value="">All managers</option>
+          @for (user of assignableUsers; track user.id) {
+            <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Event Type
+        <input
+          type="text"
+          [value]="statsEventType"
+          list="enquiry-event-type-options"
+          placeholder="All event types"
+          (change)="statsEventType = $any($event.target).value; onStatsFiltersChanged()" />
+      </label>
+      <datalist id="enquiry-event-type-options">
+        @for (eventType of statsEventTypeOptions; track eventType) {
+          <option [value]="eventType"></option>
+        }
+      </datalist>
+    </div>
   </section>
 }
 
@@ -132,6 +183,57 @@
       <option [value]="quickFilter.value">{{ quickFilter.label }}</option>
     }
   </select>
+  <select [value]="statsEventManagerUserId" (change)="statsEventManagerUserId = $any($event.target).value; onStatsFiltersChanged()">
+    <option value="">All managers</option>
+    @for (user of assignableUsers; track user.id) {
+      <option [value]="user.id">{{ user.firstName }} {{ user.lastName }}</option>
+    }
+  </select>
+  <input
+    type="text"
+    [value]="statsEventType"
+    list="enquiry-filter-event-type-options"
+    placeholder="All event types"
+    (change)="statsEventType = $any($event.target).value; onStatsFiltersChanged()" />
+  <datalist id="enquiry-filter-event-type-options">
+    @for (eventType of statsEventTypeOptions; track eventType) {
+      <option [value]="eventType"></option>
+    }
+  </datalist>
+  <select [value]="sourceFilter" (change)="onSourceFilterChanged($any($event.target).value)">
+    <option value="">All sources</option>
+    @for (source of sourceTypeOptions; track source) {
+      <option [value]="source">{{ source }}</option>
+    }
+  </select>
+  <select formControlName="eventStyle">
+    <option value="">All styles</option>
+    @for (style of eventStyleOptions; track style) {
+      <option [value]="style">{{ style }}</option>
+    }
+  </select>
+  <label class="score-field">
+    <span>Date from</span>
+    <input type="date" formControlName="dateFrom" />
+  </label>
+  <label class="score-field">
+    <span>Date to</span>
+    <input type="date" formControlName="dateTo" />
+  </label>
+  <select formControlName="spaceId">
+    <option value="">All spaces</option>
+    @for (space of venueSpaces; track space.id) {
+      <option [value]="space.id">{{ space.name }}</option>
+    }
+  </select>
+  <label class="score-field">
+    <span>Value min</span>
+    <input type="number" min="0" step="1" formControlName="valueMin" placeholder="0" />
+  </label>
+  <label class="score-field">
+    <span>Value max</span>
+    <input type="number" min="0" step="1" formControlName="valueMax" placeholder="0" />
+  </label>
   <label class="score-field">
     <span>Score Min</span>
     <input type="number" min="0" max="100" step="1" formControlName="conversionScoreMin" placeholder="0" />
@@ -151,7 +253,29 @@
     <option [value]="50">50 per page</option>
     <option [value]="100">100 per page</option>
   </select>
+  <select
+    [value]="selectedSavedViewId"
+    (change)="onSavedViewSelected($any($event.target).value)"
+    [disabled]="savedViewsLoading">
+    <option value="">Saved views</option>
+    @for (view of savedViews; track view.id) {
+      <option [value]="view.id">{{ view.name }}</option>
+    }
+  </select>
+  <button type="button" class="inline-action" (click)="saveCurrentFilterView()" [disabled]="savingSavedView || savedViewsLoading">
+    {{ savingSavedView ? 'Saving...' : 'Save View' }}
+  </button>
+  <button type="button" class="inline-action" (click)="renameSelectedSavedView()" [disabled]="!selectedSavedView || renamingSavedView">
+    {{ renamingSavedView ? 'Renaming...' : 'Rename' }}
+  </button>
+  <button type="button" class="inline-action danger" (click)="deleteSelectedSavedView()" [disabled]="!selectedSavedView || deletingSavedView">
+    {{ deletingSavedView ? 'Deleting...' : 'Delete' }}
+  </button>
 </form>
+
+@if (savedViewsError) {
+  <p class="saved-views-error">{{ savedViewsError }}</p>
+}
 
 @if (bulkActionFeedback && selectedCount === 0) {
   <p class="bulk-feedback-banner">{{ bulkActionFeedback }}</p>
@@ -235,9 +359,20 @@
     }
   </section>
 }
+}
+
+@if (isDedicatedDetailRoute) {
+  @if (selectedEnquiry; as detail) {
+    <section class="detail-route-header">
+      <button type="button" class="inline-action" (click)="backToEnquiryList()">Back to Enquiries</button>
+      <h1>{{ detail.reference }} · {{ detail.contactFirstName }} {{ detail.contactLastName }}</h1>
+    </section>
+  }
+}
 
 @if (!loading) {
-  <section class="layout">
+  <section class="layout" [class.detail-only]="isDedicatedDetailRoute">
+    @if (!isDedicatedDetailRoute) {
     <article class="list-panel">
       <table>
         <thead>
@@ -249,23 +384,91 @@
                 [indeterminate]="partiallyVisibleSelected"
                 (change)="toggleSelectAll($any($event.target).checked)" />
             </th>
-            <th>Ref</th>
-            <th>Contact</th>
-            <th>Event</th>
-            <th>Date</th>
-            <th>Guests</th>
-            <th>Status</th>
-            <th>Score</th>
-            <th>Value</th>
-            <th>Owner</th>
-            <th>Last Activity</th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('reference')">
+                Ref
+                <span>{{ tableSortDirection('reference') === 'asc' ? '↑' : tableSortDirection('reference') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('contact')">
+                Contact
+                <span>{{ tableSortDirection('contact') === 'asc' ? '↑' : tableSortDirection('contact') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('source')">
+                Source
+                <span>{{ tableSortDirection('source') === 'asc' ? '↑' : tableSortDirection('source') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('eventType')">
+                Event
+                <span>{{ tableSortDirection('eventType') === 'asc' ? '↑' : tableSortDirection('eventType') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('eventDate')">
+                Date
+                <span>{{ tableSortDirection('eventDate') === 'asc' ? '↑' : tableSortDirection('eventDate') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('guests')">
+                Guests
+                <span>{{ tableSortDirection('guests') === 'asc' ? '↑' : tableSortDirection('guests') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('status')">
+                Status
+                <span>{{ tableSortDirection('status') === 'asc' ? '↑' : tableSortDirection('status') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('holdExpiry')">
+                Hold Expiry
+                <span>{{ tableSortDirection('holdExpiry') === 'asc' ? '↑' : tableSortDirection('holdExpiry') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('conversionScore')">
+                Score
+                <span>{{ tableSortDirection('conversionScore') === 'asc' ? '↑' : tableSortDirection('conversionScore') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('value')">
+                Value
+                <span>{{ tableSortDirection('value') === 'asc' ? '↑' : tableSortDirection('value') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('owner')">
+                Owner
+                <span>{{ tableSortDirection('owner') === 'asc' ? '↑' : tableSortDirection('owner') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('lastActivity')">
+                Last Activity
+                <span>{{ tableSortDirection('lastActivity') === 'asc' ? '↑' : tableSortDirection('lastActivity') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
+            <th>
+              <button type="button" class="column-sort" (click)="toggleTableSort('daysSinceContact')">
+                Days since contact
+                <span>{{ tableSortDirection('daysSinceContact') === 'asc' ? '↑' : tableSortDirection('daysSinceContact') === 'desc' ? '↓' : '↕' }}</span>
+              </button>
+            </th>
           </tr>
         </thead>
         <tbody>
           @for (enquiry of enquiries; track enquiry) {
             <tr
               [class.selected]="enquiry.id === selectedEnquiryId"
-              (click)="selectEnquiry(enquiry.id)"
+              (click)="openEnquiryDetail(enquiry.id)"
               >
               <td class="checkbox-col" (click)="$event.stopPropagation()">
                 <input
@@ -277,7 +480,11 @@
               <td class="ref-cell">{{ enquiry.reference }}</td>
               <td>
                 <div class="cell-main">{{ enquiry.contactName }}</div>
-                <div class="cell-sub">{{ enquiry.sourceType }}</div>
+              </td>
+              <td>
+                <span class="source-badge" [attr.data-source]="sourceBadgeToken(enquiry.sourceType)">
+                  {{ enquiry.sourceType }}
+                </span>
               </td>
               <td>
                 <div class="cell-main">{{ enquiry.eventType }}</div>
@@ -292,6 +499,12 @@
                 <span class="status" [attr.data-status]="statusToken(enquiry.status)">
                   {{ enquiry.status }}
                 </span>
+              </td>
+              <td>
+                <div class="cell-main">{{ listHoldCountdownLabel(enquiry) }}</div>
+                @if (enquiry.status === 'Provisional') {
+                  <div class="cell-sub">{{ holdExpiryLabel(enquiry.holdExpiresAtUtc) }}</div>
+                }
               </td>
               <td>
                 <div class="conversion-score-cell">
@@ -313,12 +526,16 @@
               <td>{{ enquiry.eventManagerName || 'Unassigned' }}</td>
               <td>
                 <div class="cell-main">{{ enquiry.lastActivityAtUtc | date: 'dd/MM HH:mm' }}</div>
-                <div class="cell-sub">{{ enquiry.daysSinceContact }} days</div>
+              </td>
+              <td>
+                <span class="days-contact" [attr.data-age]="daysSinceContactBand(enquiry.daysSinceContact)">
+                  {{ enquiry.daysSinceContact }} days
+                </span>
               </td>
             </tr>
           } @empty {
             <tr>
-              <td colspan="11" class="enquiries-empty-cell">
+              <td colspan="14" class="enquiries-empty-cell">
                 <p>
                   @if (hasEnquiryFiltersApplied) {
                     No enquiries match the current filters.
@@ -334,10 +551,18 @@
           }
         </tbody>
       </table>
+      @if (listResponse; as list) {
+        <div class="list-pagination">
+          <button type="button" (click)="goToListPage(list.page.page - 1)" [disabled]="!canGoToPreviousPage">Previous</button>
+          <span>Page {{ list.page.page }} of {{ totalListPages }}</span>
+          <button type="button" (click)="goToListPage(list.page.page + 1)" [disabled]="!canGoToNextPage">Next</button>
+        </div>
+      }
       @if (enquiries.length === 0) {
         <p class="empty">No enquiries matched the current filters.</p>
       }
     </article>
+    }
 
     @if (selectedEnquiry; as detail) {
       <aside class="detail-panel">
@@ -366,6 +591,12 @@
             <span class="status" [attr.data-status]="statusToken(detail.status)">{{ detail.status }}</span>
           </div>
         </header>
+
+        @if (detail.status === 'Provisional') {
+          <p class="hold-countdown">
+            Hold: {{ holdCountdownLabel(detail.holdExpiresAtUtc) }} (expires {{ holdExpiryLabel(detail.holdExpiresAtUtc) }})
+          </p>
+        }
 
         <section class="nudge-panel">
           <header>
@@ -424,6 +655,11 @@
         </section>
 
         <div class="actions">
+          @if (detail.status === 'Archived') {
+            <button (click)="changeStatus('New')">Reopen as New</button>
+          } @else {
+            <button class="danger" (click)="changeStatus('Archived')">Archive</button>
+          }
           <button (click)="changeStatus('Tentative')">Tentative</button>
           <button (click)="changeStatus('OpenProposal')">Open Proposal</button>
           <button (click)="changeStatus('Provisional')">Provisional</button>
@@ -435,14 +671,15 @@
           <button [class.active]="detailTab === 'overview'" (click)="changeDetailTab('overview')">Overview</button>
           <button [class.active]="detailTab === 'events'" (click)="changeDetailTab('events')">Events</button>
           <button [class.active]="detailTab === 'appointments'" (click)="changeDetailTab('appointments')">Appointments</button>
-          <button [class.active]="detailTab === 'tasks'" (click)="changeDetailTab('tasks')">Tasks</button>
           <button [class.active]="detailTab === 'proposals'" (click)="changeDetailTab('proposals')">Proposals</button>
+          <button [class.active]="detailTab === 'communications'" (click)="changeDetailTab('communications')">Communications</button>
           @if (canShowPaymentsTab) {
             <button [class.active]="detailTab === 'payments'" (click)="changeDetailTab('payments')">Payments</button>
           }
-          <button [class.active]="detailTab === 'sustainability'" (click)="changeDetailTab('sustainability')">Sustainability</button>
           <button [class.active]="detailTab === 'documents'" (click)="changeDetailTab('documents')">Documents</button>
-          <button [class.active]="detailTab === 'activity'" (click)="changeDetailTab('activity')">Activity</button>
+          <button [class.active]="detailTab === 'activity'" (click)="changeDetailTab('activity')">Activity Log</button>
+          <button [class.active]="detailTab === 'tasks'" (click)="changeDetailTab('tasks')">Tasks</button>
+          <button [class.active]="detailTab === 'sustainability'" (click)="changeDetailTab('sustainability')">Sustainability</button>
         </nav>
 
         @if (detailTab === 'overview') {
@@ -468,6 +705,16 @@
                 </article>
               }
             }
+
+            <div class="overview-quick-actions">
+              <button type="button" (click)="createProposalForSelectedEnquiry()">Create Proposal</button>
+              <button type="button" (click)="openCreateAppointmentForm()">Add Appointment</button>
+              <button type="button" (click)="changeDetailTab('events')">Manage Sub-Events</button>
+              @if (canShowPaymentsTab) {
+                <button type="button" (click)="changeDetailTab('payments')">Open Payments</button>
+              }
+              <button type="button" class="ghost" (click)="openSelectedEnquiryInConnect()">Open in Connect</button>
+            </div>
 
             <div class="overview-grid">
               <article class="overview-field" [class.editing]="isOverviewEditing('contactName')" [class.saved]="isOverviewFieldSaved('contactName')">
@@ -911,6 +1158,10 @@
                     <span>Scheduled hours</span>
                     <strong>{{ subEventTotalDurationHours | number: '1.1-1' }}</strong>
                   </article>
+                  <article>
+                    <span>Total sub-event value</span>
+                    <strong>{{ subEventTotalPriceAmount | number: '1.2-2' }} {{ detail.currencyCode }}</strong>
+                  </article>
                 </div>
               </div>
             }
@@ -927,7 +1178,7 @@
 
                 @if (sameDateAvailabilityExpanded) {
                   <div class="same-date-body" [@expandSection]>
-                    @for (group of detail.sameDateAvailability.spaces; track group) {
+                    @for (group of detail.sameDateAvailability.spaces; track group.spaceId) {
                       <article>
                         <header>
                           <strong>{{ group.spaceName }}</strong>
@@ -954,10 +1205,40 @@
                             }
                           </div>
                         </header>
-                        @for (event of group.events; track event) {
-                          <p>
-                            {{ event.label }} · {{ event.recordType }} · {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}
-                          </p>
+                        @if (group.events.length === 0) {
+                          <p class="same-date-available">Available</p>
+                        }
+                        @for (event of group.events; track event.recordId) {
+                          <div class="same-date-event">
+                            <div class="same-date-event-title">
+                              <strong>{{ event.label }}</strong>
+                              <span class="status-pill">{{ event.enquiryStatus || event.recordType }}</span>
+                            </div>
+                            <span>
+                              {{ event.startUtc | date: 'HH:mm' }}-{{ event.endUtc | date: 'HH:mm' }}
+                              · {{ event.eventType || event.recordType }}
+                              @if (event.eventStyle) {
+                                <span> · {{ event.eventStyle }}</span>
+                              }
+                              <span> · {{ event.spaceName }}</span>
+                            </span>
+                            @if (event.clientName || event.enquiryReference || event.covers || event.eventManagerName) {
+                              <span>
+                                @if (event.clientName) {
+                                  {{ event.clientName }}
+                                }
+                                @if (event.enquiryReference) {
+                                  <span> · {{ event.enquiryReference }}</span>
+                                }
+                                @if (event.covers) {
+                                  <span> · {{ event.covers }} covers</span>
+                                }
+                                @if (event.eventManagerName) {
+                                  <span> · {{ event.eventManagerName }}</span>
+                                }
+                              </span>
+                            }
+                          </div>
                         }
                       </article>
                     }
@@ -1059,6 +1340,10 @@
                 <span>Total Scheduled Hours</span>
                 <strong>{{ subEventTotalDurationHours | number: '1.1-1' }}</strong>
               </article>
+              <article>
+                <span>Total Sub-Event Value</span>
+                <strong>{{ subEventTotalPriceAmount | number: '1.2-2' }} {{ detail.currencyCode }}</strong>
+              </article>
             </div>
 
             @if (subEventSpaceUtilisation.length > 0) {
@@ -1120,6 +1405,15 @@
                   <label>
                     <span>Guest Count</span>
                     <input type="number" min="1" [value]="newSubEventDraft.guestCount" (input)="updateNewSubEventDraft({ guestCount: $any($event.target).valueAsNumber || 0 })" />
+                  </label>
+                  <label>
+                    <span>Price</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      [value]="newSubEventDraft.priceAmount ?? ''"
+                      (input)="updateNewSubEventDraft({ priceAmount: $any($event.target).value === '' ? null : ($any($event.target).valueAsNumber || 0) })" />
                   </label>
                   <label>
                     <span>Space</span>
@@ -1224,7 +1518,11 @@
                       <button type="button" class="sub-event-summary-main" (click)="toggleSubEventExpanded(subEvent)">
                         <strong>{{ subEvent.name }}</strong>
                         <span>{{ subEvent.startUtc | date: 'dd/MM HH:mm' }} - {{ subEvent.endUtc | date: 'HH:mm' }}</span>
-                        <span>{{ subEvent.guestCount }} guests · {{ getSubEventSpaceName(subEvent) }} · {{ subEvent.setupStyle || 'Custom' }} · {{ subEvent.status }}</span>
+                        <span>{{ subEvent.guestCount }} guests · {{ getSubEventSpaceName(subEvent) }} · {{ subEvent.setupStyle || 'Custom' }} · {{ subEvent.status }}
+                          @if (subEvent.priceAmount !== null && subEvent.priceAmount !== undefined) {
+                            <span> · {{ subEvent.priceAmount | number: '1.2-2' }} {{ subEvent.currencyCode }}</span>
+                          }
+                        </span>
                       </button>
                       <div class="sub-event-summary-actions">
                         <button type="button" class="ghost" (click)="toggleSubEventExpanded(subEvent)">
@@ -1278,6 +1576,15 @@
                           <label>
                             <span>Guest Count</span>
                             <input type="number" min="1" [value]="subEventDraft(subEvent.id).guestCount" (input)="updateSubEventDraftField(subEvent.id, { guestCount: $any($event.target).valueAsNumber || 0 })" />
+                          </label>
+                          <label>
+                            <span>Price</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              [value]="subEventDraft(subEvent.id).priceAmount ?? ''"
+                              (input)="updateSubEventDraftField(subEvent.id, { priceAmount: $any($event.target).value === '' ? null : ($any($event.target).valueAsNumber || 0) })" />
                           </label>
                           <label>
                             <span>Space</span>
@@ -1367,11 +1674,9 @@
                   <label>
                     Type
                     <select [(ngModel)]="appointmentDraft.type" [ngModelOptions]="{ standalone: true }">
-                      <option value="Meeting">Meeting</option>
-                      <option value="MenuTasting">Menu Tasting</option>
-                      <option value="SiteVisit">Site Visit</option>
-                      <option value="Rehearsal">Rehearsal</option>
-                      <option value="Other">Other</option>
+                      @for (appointmentType of appointmentTypeOptions; track appointmentType) {
+                        <option [value]="appointmentType">{{ appointmentType }}</option>
+                      }
                     </select>
                   </label>
                   <label>
@@ -1403,7 +1708,7 @@
                       <option value="Scheduled">Scheduled</option>
                       <option value="Completed">Completed</option>
                       <option value="Cancelled">Cancelled</option>
-                      <option value="NoShow">No Show</option>
+                      <option value="NoShow">No-Show</option>
                     </select>
                   </label>
                   <label>
@@ -1445,11 +1750,19 @@
 
                 <div class="appointment-related">
                   <h5>Related Enquiries</h5>
+                  <input
+                    type="search"
+                    maxlength="120"
+                    [(ngModel)]="appointmentEnquirySearchTerm"
+                    [ngModelOptions]="{ standalone: true }"
+                    placeholder="Search by ref, contact, or event..." />
                   @if (appointmentEnquiryOptions.length === 0) {
                     <p class="empty">No enquiries available to link.</p>
+                  } @else if (filteredAppointmentEnquiryOptions.length === 0) {
+                    <p class="empty">No enquiries match your search.</p>
                   } @else {
                     <div class="appointment-related-list">
-                      @for (option of appointmentEnquiryOptions; track option.id) {
+                      @for (option of filteredAppointmentEnquiryOptions; track option.id) {
                         <label>
                           <input
                             type="checkbox"
@@ -1459,6 +1772,9 @@
                         </label>
                       }
                     </div>
+                  }
+                  @if (appointmentEnquiryOptions.length > 0 && appointmentDraft.relatedEnquiryIds.length === 0) {
+                    <p class="appointment-related-required">Select at least one related enquiry.</p>
                   }
                 </div>
 
@@ -1488,7 +1804,8 @@
                 <div>
                   <strong>{{ appointment.title }}</strong>
                   <span>{{ appointment.startUtc | date: 'dd/MM/yyyy HH:mm' }} · {{ appointment.durationMinutes }} mins</span>
-                  <span>{{ appointment.spaceName || 'No space' }} · {{ appointment.status }}</span>
+                  <span>{{ appointmentTypeLabel(appointment.type) }} · {{ appointment.spaceName || 'No space' }} · {{ appointmentStatusLabel(appointment.status) }}</span>
+                  <span>{{ appointment.assignedToName || 'Unassigned' }} · {{ appointment.attendees || 'No attendees listed' }}</span>
                 </div>
                 <div class="row-actions">
                   <button type="button" (click)="editAppointment(appointment)">Edit</button>
@@ -1544,6 +1861,33 @@
           </section>
         }
 
+        @if (detailTab === 'communications') {
+          <section class="tab-panel communications-panel">
+            <div class="proposal-actions">
+              <button type="button" (click)="openSelectedEnquiryInConnect()">Open Full Conversation in Connect</button>
+            </div>
+
+            @if (communicationActivityEntries.length > 0) {
+              @for (entry of communicationActivityEntries; track entry.id) {
+                <article class="row communication-row">
+                  <div>
+                    <strong>{{ entry.actionLabel }}</strong>
+                    <span>{{ entry.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</span>
+                  </div>
+                  <div>
+                    <span>{{ entry.userName || 'System' }}</span>
+                    @if (entry.details) {
+                      <small>{{ entry.details }}</small>
+                    }
+                  </div>
+                </article>
+              }
+            } @else {
+              <p class="empty">No communication activity recorded yet for this enquiry.</p>
+            }
+          </section>
+        }
+
         @if (detailTab === 'payments') {
           <section class="tab-panel payments-panel">
             @if (paymentScheduleError) {
@@ -1575,11 +1919,20 @@
                 </article>
               </div>
 
-              <div class="payment-progress">
-                <div class="payment-progress-track">
-                  <div class="payment-progress-fill" [attr.data-status]="paymentProgressStatusToken" [style.width.%]="paymentProgressPercent"></div>
+              <div class="progress-pair">
+                <div class="payment-progress">
+                  <div class="payment-progress-track">
+                    <div class="payment-progress-fill" [attr.data-status]="paymentProgressStatusToken" [style.width.%]="paymentProgressPercent"></div>
+                  </div>
+                  <p>{{ paymentProgressPercent | number: '1.0-0' }}% paid · {{ schedule.totalPaid | number: '1.2-2' }} / {{ schedule.proposalTotal | number: '1.2-2' }} {{ paymentSummaryCurrency }}</p>
                 </div>
-                <p>{{ paymentProgressPercent | number: '1.0-0' }}% paid · {{ schedule.totalPaid | number: '1.2-2' }} / {{ schedule.proposalTotal | number: '1.2-2' }} {{ paymentSummaryCurrency }}</p>
+
+                <div class="planning-progress">
+                  <div class="planning-progress-track">
+                    <div class="planning-progress-fill" [style.width.%]="planningProgressPercent"></div>
+                  </div>
+                  <p>{{ planningProgressPercent | number: '1.0-0' }}% planning complete · {{ planningProgressCompleted }}/{{ planningProgressTotal }} milestones</p>
+                </div>
               </div>
 
               <div class="payment-actions">
@@ -1974,6 +2327,12 @@
           </section>
         }
       </aside>
+    }
+
+    @if (isDedicatedDetailRoute && selectedEnquiryId && !selectedEnquiry) {
+      <article class="detail-panel detail-loading">
+        <p class="empty">Loading enquiry details...</p>
+      </article>
     }
   </section>
 } @else {

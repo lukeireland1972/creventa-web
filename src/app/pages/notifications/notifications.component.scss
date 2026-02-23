@@ -1,0 +1,168 @@
+.notifications-page {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.page-header {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  justify-content: space-between;
+}
+
+.page-header h1 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.55rem;
+  font-weight: 800;
+}
+
+.page-header p {
+  margin: 0.2rem 0 0;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+
+.header-actions {
+  align-items: center;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.badge {
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 0.24rem 0.55rem;
+}
+
+.primary,
+.secondary {
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.45rem 0.7rem;
+}
+
+.primary {
+  border: 1px solid #1c65b4;
+  background: #1c65b4;
+  color: #fff;
+}
+
+.secondary {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+}
+
+.filter-row {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.filter-row button {
+  border: 1px solid #dbe4ef;
+  background: #fff;
+  border-radius: 999px;
+  color: #475569;
+  font-size: 0.74rem;
+  font-weight: 700;
+  padding: 0.34rem 0.62rem;
+}
+
+.filter-row button.active {
+  border-color: #1c65b4;
+  background: #eff6ff;
+  color: #1c65b4;
+}
+
+.state {
+  margin: 0.1rem 0;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.state.error {
+  color: #b91c1c;
+}
+
+.groups {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.group {
+  border: 1px solid #dbe4ef;
+  border-radius: 14px;
+  background: #fff;
+  padding: 0.7rem;
+}
+
+.group h2 {
+  margin: 0 0 0.45rem;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.group-items {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.item {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+  cursor: pointer;
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.6rem 0.7rem;
+  text-align: left;
+}
+
+.item.unread {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.item-row strong {
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+
+.item-row time {
+  color: #94a3b8;
+  font-size: 0.7rem;
+}
+
+.item p {
+  margin: 0;
+  color: #475569;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.trigger {
+  color: #94a3b8;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}

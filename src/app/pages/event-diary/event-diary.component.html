@@ -96,6 +96,41 @@
             }
           </div>
 
+          <label class="diary-filter-control">
+            <span>Status</span>
+            <select [(ngModel)]="selectedStatusFilterKey" (ngModelChange)="onDiaryFilterChange()">
+              <option value="">All statuses</option>
+              @for (option of statusFilterOptions; track option.key) {
+                <option [value]="option.key">{{ option.label }} ({{ option.count }})</option>
+              }
+            </select>
+          </label>
+
+          <label class="diary-filter-control">
+            <span>Event type</span>
+            <select [(ngModel)]="selectedEventTypeFilterKey" (ngModelChange)="onDiaryFilterChange()">
+              <option value="">All event types</option>
+              @for (option of eventTypeFilterOptions; track option.key) {
+                <option [value]="option.key">{{ option.label }} ({{ option.count }})</option>
+              }
+            </select>
+          </label>
+
+          <label class="diary-filter-control">
+            <span>Event style</span>
+            <select [(ngModel)]="selectedEventStyleFilterKey" (ngModelChange)="onDiaryFilterChange()">
+              <option value="">All styles</option>
+              @for (option of eventStyleFilterOptions; track option.key) {
+                <option [value]="option.key">{{ option.label }} ({{ option.count }})</option>
+              }
+            </select>
+          </label>
+
+          <label class="inline-toggle">
+            <input type="checkbox" [(ngModel)]="hideEmptySpaces" (change)="onHideEmptySpacesToggle()" />
+            <span>Hide empty spaces</span>
+          </label>
+
           <div class="legend-inline">
             <span><i class="legend-chip status-confirmed"></i> Confirmed</span>
             <span><i class="legend-chip status-provisional"></i> Provisional</span>
@@ -111,6 +146,9 @@
             <button type="button" class="export-btn" [disabled]="!!exportState" (click)="exportDiary('pdf')">
               {{ isExporting('pdf') ? 'Exporting PDF...' : 'Download PDF' }}
             </button>
+            @if (selectedView === 'day' || selectedView === 'week') {
+              <button type="button" class="export-btn" (click)="printBriefingSheet()">Print Briefing</button>
+            }
           </div>
           <button type="button" class="add-task-btn" (click)="openAddTask()">+ Add Task</button>
           <button type="button" class="add-event-btn secondary" (click)="openAddAppointment()">+ New Appointment</button>
@@ -577,6 +615,53 @@
           <p class="day-empty">No events scheduled for this day.</p>
         }
       </div>
+    } @else if (selectedView === 'list') {
+      <div class="list-wrap">
+        <div class="list-table-scroll">
+          <table class="list-table">
+            <thead>
+              <tr>
+                <th><button type="button" (click)="toggleListSort('date')">Date {{ listSortIndicator('date') }}</button></th>
+                <th><button type="button" (click)="toggleListSort('time')">Time {{ listSortIndicator('time') }}</button></th>
+                <th><button type="button" (click)="toggleListSort('name')">Event Name {{ listSortIndicator('name') }}</button></th>
+                <th><button type="button" (click)="toggleListSort('client')">Client {{ listSortIndicator('client') }}</button></th>
+                <th><button type="button" (click)="toggleListSort('space')">Space {{ listSortIndicator('space') }}</button></th>
+                <th><button type="button" (click)="toggleListSort('covers')">Covers {{ listSortIndicator('covers') }}</button></th>
+                <th><button type="button" (click)="toggleListSort('status')">Status {{ listSortIndicator('status') }}</button></th>
+                <th><button type="button" (click)="toggleListSort('manager')">Event Manager {{ listSortIndicator('manager') }}</button></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (event of sortedListEvents; track eventKey(event)) {
+                <tr>
+                  <td>{{ event.startUtc | date: 'EEE dd MMM yyyy' }}</td>
+                  <td>{{ event.startUtc | date: 'HH:mm' }} - {{ event.endUtc | date: 'HH:mm' }}</td>
+                  <td>
+                    <button type="button" class="list-link" (click)="openDetails(event)">
+                      {{ eventDisplayLabel(event) }}
+                    </button>
+                  </td>
+                  <td>{{ event.contactName || '-' }}</td>
+                  <td>{{ event.spaceName || 'Unassigned' }}</td>
+                  <td>{{ event.covers ?? '-' }}</td>
+                  <td>
+                    <span class="status-pill" [ngClass]="eventChipClass(event)">
+                      {{ statusLabel(event) }}
+                    </span>
+                    @if (isProvisionalEvent(event)) {
+                      <small class="hold-countdown">{{ holdCountdownLabel(event.holdExpiresAtUtc) }}</small>
+                    }
+                  </td>
+                  <td>{{ event.eventManagerName || 'Unassigned' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        @if (sortedListEvents.length === 0) {
+          <p class="day-empty">No events scheduled in this range.</p>
+        }
+      </div>
     } @else {
       <section class="operations-wrap">
         <div class="operations-grid">
@@ -626,6 +711,9 @@
             [event]="activePopoverEvent"
             [headline]="activePopoverHeadline || undefined"
             [expanded]="popoverExpanded"
+            [paymentSchedule]="popoverPaymentSchedule"
+            [paymentScheduleLoading]="popoverPaymentScheduleLoading"
+            [paymentScheduleError]="popoverPaymentScheduleError"
             (toggleExpanded)="onPopoverToggleExpanded()"
             (viewDetails)="onPopoverViewDetails()">
           </app-diary-event-popover>
@@ -737,11 +825,9 @@
         <label>
           Type
           <select [(ngModel)]="appointmentDraft.type">
-            <option value="Meeting">Meeting</option>
-            <option value="MenuTasting">Menu Tasting</option>
-            <option value="SiteVisit">Site Visit</option>
-            <option value="Rehearsal">Rehearsal</option>
-            <option value="Other">Other</option>
+            @for (appointmentType of appointmentTypeOptions; track appointmentType) {
+              <option [value]="appointmentType">{{ appointmentType }}</option>
+            }
           </select>
         </label>
         <label>
@@ -762,7 +848,7 @@
             <option value="Scheduled">Scheduled</option>
             <option value="Completed">Completed</option>
             <option value="Cancelled">Cancelled</option>
-            <option value="NoShow">No Show</option>
+            <option value="NoShow">No-Show</option>
           </select>
         </label>
         <label>
@@ -797,19 +883,29 @@
 
       <div class="appointment-related">
         <h4>Related Enquiries</h4>
+        <input
+          type="search"
+          maxlength="120"
+          [(ngModel)]="appointmentEnquirySearchTerm"
+          placeholder="Search by ref, contact, or event..." />
         @if (loadingAppointmentLookups) {
           <p>Loading enquiries...</p>
         } @else if (appointmentEnquiryOptions.length === 0) {
           <p>No enquiries available.</p>
+        } @else if (filteredAppointmentEnquiryOptions.length === 0) {
+          <p>No enquiries match your search.</p>
         } @else {
           <div class="appointment-related-list">
-            @for (option of appointmentEnquiryOptions; track option.id) {
+            @for (option of filteredAppointmentEnquiryOptions; track option.id) {
               <label>
                 <input type="checkbox" [checked]="isAppointmentEnquirySelected(option.id)" (change)="toggleAppointmentEnquiry(option.id)" />
                 <span>{{ option.label }}</span>
               </label>
             }
           </div>
+        }
+        @if (!loadingAppointmentLookups && appointmentEnquiryOptions.length > 0 && appointmentDraft.relatedEnquiryIds.length === 0) {
+          <p class="appointment-related-required">Select at least one related enquiry.</p>
         }
       </div>
 
@@ -829,6 +925,101 @@
         }
         <button type="button" class="primary" (click)="submitAppointment(false)" [disabled]="!canSaveAppointment">
           {{ appointmentSaving ? 'Saving...' : 'Create Appointment' }}
+        </button>
+      </div>
+    </section>
+  }
+
+  @if (showCreateEnquiryModal) {
+    <div class="move-modal-backdrop" (click)="closeCreateEnquiryModal()"></div>
+    <section class="move-modal appointment-modal enquiry-modal" role="dialog" aria-modal="true" aria-label="Create enquiry">
+      <h3>Create Enquiry</h3>
+      <div class="appointment-modal-grid">
+        <label>
+          First Name
+          <input type="text" maxlength="120" [(ngModel)]="quickEnquiryDraft.contactFirstName" />
+        </label>
+        <label>
+          Last Name
+          <input type="text" maxlength="120" [(ngModel)]="quickEnquiryDraft.contactLastName" />
+        </label>
+        <label>
+          Email
+          <input type="email" maxlength="320" [(ngModel)]="quickEnquiryDraft.contactEmail" />
+        </label>
+        <label>
+          Phone (E.164)
+          <input type="tel" maxlength="30" placeholder="+447700900123" [(ngModel)]="quickEnquiryDraft.contactPhoneNumberE164" />
+        </label>
+        <label>
+          Event Type
+          <select [(ngModel)]="quickEnquiryDraft.eventType">
+            @for (eventType of quickEnquiryEventTypeOptions; track eventType) {
+              <option [value]="eventType">{{ eventType }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Event Name
+          <input type="text" maxlength="200" [(ngModel)]="quickEnquiryDraft.eventName" />
+        </label>
+        <label>
+          Date
+          <input type="date" [(ngModel)]="quickEnquiryDraft.date" />
+        </label>
+        <label>
+          Start Time
+          <input type="time" [(ngModel)]="quickEnquiryDraft.startTime" />
+        </label>
+        <label>
+          Duration (mins)
+          <input type="number" min="30" step="15" [(ngModel)]="quickEnquiryDraft.durationMinutes" />
+        </label>
+        <label>
+          Guests
+          <input type="number" min="1" step="1" [(ngModel)]="quickEnquiryDraft.guestsExpected" />
+        </label>
+        <label>
+          Space
+          <select [(ngModel)]="quickEnquiryDraft.spaceId">
+            <option [value]="'00000000-0000-0000-0000-000000000000'">Unassigned</option>
+            @for (space of diary?.spaces ?? []; track space.spaceId) {
+              @if (space.spaceId !== '00000000-0000-0000-0000-000000000000') {
+                <option [value]="space.spaceId">{{ space.spaceName }}</option>
+              }
+            }
+          </select>
+        </label>
+        <label>
+          Source
+          <select [(ngModel)]="quickEnquiryDraft.sourceType">
+            @for (sourceType of quickEnquirySourceTypeOptions; track sourceType) {
+              <option [value]="sourceType">{{ sourceType }}</option>
+            }
+          </select>
+        </label>
+        <label>
+          Event Style
+          <input type="text" maxlength="120" [(ngModel)]="quickEnquiryDraft.eventStyle" />
+        </label>
+        <label>
+          Setup Style
+          <input type="text" maxlength="120" [(ngModel)]="quickEnquiryDraft.setupStyle" />
+        </label>
+        <label class="full">
+          Special Requirements
+          <textarea rows="3" maxlength="1000" [(ngModel)]="quickEnquiryDraft.specialRequirements"></textarea>
+        </label>
+      </div>
+
+      @if (quickEnquiryError) {
+        <p class="move-conflict-info">{{ quickEnquiryError }}</p>
+      }
+
+      <div class="move-modal-actions">
+        <button type="button" class="ghost" (click)="closeCreateEnquiryModal()" [disabled]="quickEnquirySaving">Cancel</button>
+        <button type="button" class="primary" (click)="submitCreateEnquiry()" [disabled]="!canSaveQuickEnquiry">
+          {{ quickEnquirySaving ? 'Creating...' : 'Create Enquiry' }}
         </button>
       </div>
     </section>

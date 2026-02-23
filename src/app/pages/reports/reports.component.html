@@ -31,6 +31,23 @@
           }
         </select>
       </label>
+      <label>
+        Status
+        <select [(ngModel)]="statusFilter">
+          @for (status of enquiryStatusOptions; track status.value) {
+            <option [value]="status.value">{{ status.label }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Space
+        <select [(ngModel)]="spaceFilterId">
+          <option value="all">All Spaces</option>
+          @for (space of spaces; track space.id) {
+            <option [value]="space.id">{{ space.name }}</option>
+          }
+        </select>
+      </label>
       <button type="button" class="apply-btn" (click)="loadReports()">Apply Filters</button>
     </div>
 
@@ -167,6 +184,7 @@
               <tr>
                 <th>Stage</th>
                 <th>Count</th>
+                <th>Value</th>
                 <th>From Previous</th>
                 <th>From New</th>
               </tr>
@@ -176,6 +194,7 @@
                 <tr>
                   <td>{{ row.stage }}</td>
                   <td>{{ row.count }}</td>
+                  <td>{{ formatCurrency(row.value, row.currencyCode) }}</td>
                   <td>{{ formatPercent(row.conversionFromPreviousPercent) }}</td>
                   <td>{{ formatPercent(row.conversionFromNewPercent) }}</td>
                 </tr>
@@ -652,6 +671,73 @@
                   <td>{{ row.sameMonthLyAtThisPoint > 0 ? formatCurrency(row.sameMonthLyAtThisPoint, row.currencyCode) : 'N/A' }}</td>
                   <td [class]="varianceClass(row.varianceVsBudget)">{{ formatCurrency(row.varianceVsBudget, row.currencyCode) }}</td>
                   <td [class]="paceStatusClass(row.paceStatus)">{{ row.paceStatus }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="report-card report-wide">
+        <header class="card-header">
+          <div>
+            <h2>Day / Month Availability Grid</h2>
+            <p>12-month heatmap of booking density by day of week. Click a cell to open Event Diary.</p>
+          </div>
+          <div class="actions">
+            <button
+              type="button"
+              class="ghost"
+              [disabled]="isExporting('day-month-availability-grid', 'csv')"
+              (click)="exportSection('day-month-availability-grid', 'csv')">
+              Export CSV
+            </button>
+            <button
+              type="button"
+              class="ghost"
+              [disabled]="isExporting('day-month-availability-grid', 'pdf')"
+              (click)="exportSection('day-month-availability-grid', 'pdf')">
+              Export PDF
+            </button>
+            <button type="button" class="ghost" (click)="openScheduleDialog('day-month-availability-grid')">Schedule</button>
+            @if (getActiveScheduleCount('day-month-availability-grid') > 0) {
+              <span class="schedule-badge">{{ getScheduleBadge('day-month-availability-grid') }}</span>
+            }
+          </div>
+        </header>
+
+        <div class="table-wrap heatmap-wrap">
+          <table class="heatmap-table">
+            <thead>
+              <tr>
+                <th>Month</th>
+                @for (day of dayOfWeekOrder; track day) {
+                  <th>{{ day.slice(0, 3) }}</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of dayMonthAvailabilityRows; track row.month) {
+                <tr>
+                  <th>{{ row.monthLabel }}</th>
+                  @for (cell of row.cells; track cell.dayOfWeek) {
+                    <td>
+                      <button
+                        type="button"
+                        class="heat-cell"
+                        [style.background]="dayMonthCellColor(cell.intensity)"
+                        [attr.aria-label]="row.monthLabel + ' ' + cell.dayOfWeek + ': ' + dayMonthCellLabel(cell)"
+                        (click)="openDayMonthCell(cell)">
+                        <strong>{{ cell.bookingCount }}</strong>
+                        <span>{{ cell.covers }}</span>
+                      </button>
+                    </td>
+                  }
+                </tr>
+              }
+              @if (dayMonthAvailabilityRows.length === 0) {
+                <tr>
+                  <td [attr.colspan]="dayOfWeekOrder.length + 1" class="empty">No availability grid data for this period.</td>
                 </tr>
               }
             </tbody>

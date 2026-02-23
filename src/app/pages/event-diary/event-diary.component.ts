@@ -3,7 +3,7 @@ import { DatePipe, NgClass } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { distinctUntilChanged, forkJoin, map } from 'rxjs';
+import { catchError, distinctUntilChanged, forkJoin, map, of } from 'rxjs';
 import { CdkDragDrop, DragDropModule } from '@angular/cdk/drag-drop';
 import { CdkOverlayOrigin, OverlayModule } from '@angular/cdk/overlay';
 import {
@@ -15,6 +15,7 @@ import {
   DiaryResponse,
   MoveDiaryEventRequest,
   OperationsDayColumnDto,
+  PaymentScheduleResponse,
   SpaceCombinationDto,
   SpaceSummaryDto,
   UserSummaryDto
@@ -24,10 +25,12 @@ import { AuthService } from '../../services/auth.service';
 import { QuickTaskCreatedEvent, TaskQuickCreateModalComponent } from '../../ui/task-quick-create-modal/task-quick-create-modal.component';
 import { DiaryEventPopoverComponent } from './components/diary-event-popover/diary-event-popover.component';
 
-type DiaryView = 'month' | 'timeline' | 'week' | 'day' | 'operations';
+type DiaryView = 'month' | 'timeline' | 'week' | 'day' | 'list' | 'operations';
 type WeekLayout = 'merged' | 'space';
 type ResizeEdge = 'start' | 'end';
 type ResizeView = 'week' | 'day';
+type DiaryListSortColumn = 'date' | 'time' | 'name' | 'client' | 'space' | 'covers' | 'status' | 'manager';
+type DiaryListSortDirection = 'asc' | 'desc';
 
 interface MonthCell {
   key: string;
@@ -59,6 +62,12 @@ interface SpaceFilterOption {
   label: string;
   type: SpaceFilterOptionType;
   spaceIds: string[];
+}
+
+interface DiaryEventFilterOption {
+  key: string;
+  label: string;
+  count: number;
 }
 
 interface RoomTimelineBar {
@@ -168,6 +177,24 @@ interface DiaryAppointmentEnquiryOption {
   label: string;
 }
 
+interface DiaryQuickEnquiryDraft {
+  contactFirstName: string;
+  contactLastName: string;
+  contactEmail: string;
+  contactPhoneNumberE164: string;
+  eventType: string;
+  eventName: string;
+  date: string;
+  startTime: string;
+  durationMinutes: number;
+  guestsExpected: number;
+  eventStyle: string;
+  setupStyle: string;
+  sourceType: string;
+  specialRequirements: string;
+  spaceId: string;
+}
+
 @Component({
   selector: 'app-event-diary',
   imports: [NgClass, DatePipe, FormsModule, TaskQuickCreateModalComponent, DragDropModule, OverlayModule, DiaryEventPopoverComponent],
@@ -200,8 +227,12 @@ export class EventDiaryComponent implements OnInit {
     { key: 'timeline', label: 'Timeline' },
     { key: 'week', label: 'Week' },
     { key: 'day', label: 'Day' },
+    { key: 'list', label: 'List' },
     { key: 'operations', label: 'Operations' }
   ];
+  readonly appointmentTypeOptions = ['Meeting', 'Menu Tasting', 'Site Visit', 'Rehearsal', 'Other'];
+  readonly quickEnquiryEventTypeOptions = ['Wedding', 'Corporate Meeting', 'Private Dining', 'Conference', 'Birthday Party', 'Other'];
+  readonly quickEnquirySourceTypeOptions = ['Phone', 'Email', 'Website Form', 'Walk-in', 'Referral', 'Social Media', 'Venue Event', 'Returning Client'];
 
   diary: DiaryResponse | null = null;
   cells: MonthCell[] = [];
@@ -211,6 +242,7 @@ export class EventDiaryComponent implements OnInit {
   weekSpaceRows: WeekSpaceRow[] = [];
   dayEvents: DiaryEventDto[] = [];
   daySpaceColumns: DaySpaceColumn[] = [];
+  listEvents: DiaryEventDto[] = [];
   operationsColumns: OperationsDayColumnDto[] = [];
   showDemandHeatmap = false;
   demandHeatmapLoading = false;
@@ -221,11 +253,21 @@ export class EventDiaryComponent implements OnInit {
   showSpaceFilterDropdown = false;
   spaceFilterOptions: SpaceFilterOption[] = [];
   selectedSpaceFilterKeys: string[] = [];
+  statusFilterOptions: DiaryEventFilterOption[] = [];
+  eventTypeFilterOptions: DiaryEventFilterOption[] = [];
+  eventStyleFilterOptions: DiaryEventFilterOption[] = [];
+  selectedStatusFilterKey = '';
+  selectedEventTypeFilterKey = '';
+  selectedEventStyleFilterKey = '';
+  hideEmptySpaces = false;
   loadingSpaceFilters = false;
   spaceFilterError = '';
   activePopoverOrigin: CdkOverlayOrigin | null = null;
   activePopoverEvent: DiaryEventDto | null = null;
   activePopoverHeadline: string | null = null;
+  popoverPaymentSchedule: PaymentScheduleResponse | null = null;
+  popoverPaymentScheduleLoading = false;
+  popoverPaymentScheduleError = '';
   popoverExpanded = false;
   popoverOpen = false;
   draggingEvent: DiaryEventDto | null = null;
@@ -233,14 +275,21 @@ export class EventDiaryComponent implements OnInit {
   exportState: 'xlsx' | 'pdf' | null = null;
   showAddTaskModal = false;
   showAppointmentModal = false;
+  showCreateEnquiryModal = false;
   appointmentDraft: DiaryAppointmentDraft = this.createDefaultAppointmentDraft();
+  quickEnquiryDraft: DiaryQuickEnquiryDraft = this.createDefaultQuickEnquiryDraft();
   appointmentError = '';
+  quickEnquiryError = '';
+  quickEnquirySaving = false;
   appointmentConflictWarning = '';
   appointmentSaving = false;
   appointmentUsers: UserSummaryDto[] = [];
   appointmentEnquiryOptions: DiaryAppointmentEnquiryOption[] = [];
+  appointmentEnquirySearchTerm = '';
   loadingAppointmentLookups = false;
   selectedView: DiaryView = 'month';
+  listSortColumn: DiaryListSortColumn = 'date';
+  listSortDirection: DiaryListSortDirection = 'asc';
   pendingMove: PendingMove | null = null;
   applyingMove = false;
   moveUndoState: MoveUndoState | null = null;
@@ -254,8 +303,10 @@ export class EventDiaryComponent implements OnInit {
   private pendingConflictCheckSequence = 0;
   private demandHeatmapRequestSequence = 0;
   private diaryLoadSequence = 0;
+  private popoverPaymentScheduleRequestSequence = 0;
   private popoverOpenTimerHandle: number | null = null;
   private popoverCloseTimerHandle: number | null = null;
+  private popoverPaymentScheduleCache = new Map<string, PaymentScheduleResponse>();
 
   get venueId(): string | null {
     return this.auth.selectedVenueId;
@@ -276,6 +327,10 @@ export class EventDiaryComponent implements OnInit {
 
     if (this.selectedView === 'day') {
       return this.dayLabel;
+    }
+
+    if (this.selectedView === 'list') {
+      return this.listRangeLabel;
     }
 
     return this.monthLabel;
@@ -397,6 +452,59 @@ export class EventDiaryComponent implements OnInit {
     return `${formatter.format(this.monthCursor)} - ${formatter.format(end)}`;
   }
 
+  get listRangeLabel(): string {
+    const start = this.getUtcDayStart(this.monthCursor);
+    const end = new Date(start);
+    end.setUTCDate(end.getUTCDate() + 13);
+
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC'
+    });
+
+    return `${formatter.format(start)} - ${formatter.format(end)}`;
+  }
+
+  get sortedListEvents(): DiaryEventDto[] {
+    const rows = [...this.listEvents];
+    const directionMultiplier = this.listSortDirection === 'asc' ? 1 : -1;
+    const statusLabel = (value: DiaryEventDto) => this.statusLabel(value).toLowerCase();
+    const textOrEmpty = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
+
+    const compareText = (left: string, right: string) => left.localeCompare(right, undefined, { sensitivity: 'base' });
+    const compareDate = (left: string, right: string) => new Date(left).getTime() - new Date(right).getTime();
+
+    rows.sort((left, right) => {
+      switch (this.listSortColumn) {
+        case 'date':
+          return compareDate(left.startUtc, right.startUtc) * directionMultiplier;
+        case 'time': {
+          const leftTime = this.utcMinutesOfDay(new Date(left.startUtc));
+          const rightTime = this.utcMinutesOfDay(new Date(right.startUtc));
+          return (leftTime - rightTime) * directionMultiplier;
+        }
+        case 'name':
+          return compareText(textOrEmpty(this.eventDisplayLabel(left)), textOrEmpty(this.eventDisplayLabel(right))) * directionMultiplier;
+        case 'client':
+          return compareText(textOrEmpty(left.contactName), textOrEmpty(right.contactName)) * directionMultiplier;
+        case 'space':
+          return compareText(textOrEmpty(left.spaceName), textOrEmpty(right.spaceName)) * directionMultiplier;
+        case 'covers':
+          return ((left.covers ?? 0) - (right.covers ?? 0)) * directionMultiplier;
+        case 'status':
+          return compareText(statusLabel(left), statusLabel(right)) * directionMultiplier;
+        case 'manager':
+          return compareText(textOrEmpty(left.eventManagerName), textOrEmpty(right.eventManagerName)) * directionMultiplier;
+        default:
+          return compareDate(left.startUtc, right.startUtc) * directionMultiplier;
+      }
+    });
+
+    return rows;
+  }
+
   get timeAxisHours(): number[] {
     return Array.from({ length: this.dayEndHour - this.dayStartHour + 1 }, (_, index) => this.dayStartHour + index);
   }
@@ -416,7 +524,33 @@ export class EventDiaryComponent implements OnInit {
       && !!this.appointmentDraft.type.trim()
       && !!this.appointmentDraft.date
       && !!this.appointmentDraft.startTime
-      && this.appointmentDraft.durationMinutes > 0;
+      && this.appointmentDraft.durationMinutes > 0
+      && this.appointmentDraft.relatedEnquiryIds.some((id) => !!id);
+  }
+
+  get filteredAppointmentEnquiryOptions(): DiaryAppointmentEnquiryOption[] {
+    const term = this.appointmentEnquirySearchTerm.trim().toLowerCase();
+    if (!term) {
+      return this.appointmentEnquiryOptions;
+    }
+
+    return this.appointmentEnquiryOptions.filter((option) =>
+      option.label.toLowerCase().includes(term) || option.id.toLowerCase().includes(term));
+  }
+
+  get canSaveQuickEnquiry(): boolean {
+    const draft = this.quickEnquiryDraft;
+    return !this.quickEnquirySaving
+      && !!this.venueId
+      && !!draft.contactFirstName.trim()
+      && !!draft.contactLastName.trim()
+      && !!draft.contactEmail.trim()
+      && !!draft.contactPhoneNumberE164.trim()
+      && !!draft.eventType.trim()
+      && !!draft.date
+      && !!draft.startTime
+      && draft.durationMinutes > 0
+      && draft.guestsExpected > 0;
   }
 
   ngOnInit(): void {
@@ -575,6 +709,10 @@ export class EventDiaryComponent implements OnInit {
       const next = new Date(this.monthCursor);
       next.setUTCDate(next.getUTCDate() + offset * 7);
       this.monthCursor = this.getWeekStart(next);
+    } else if (this.selectedView === 'list') {
+      const next = new Date(this.monthCursor);
+      next.setUTCDate(next.getUTCDate() + offset * 14);
+      this.monthCursor = this.getUtcDayStart(next);
     } else if (this.selectedView === 'day') {
       const next = new Date(this.monthCursor);
       next.setUTCDate(next.getUTCDate() + offset);
@@ -599,6 +737,8 @@ export class EventDiaryComponent implements OnInit {
 
     if (this.selectedView === 'week') {
       this.monthCursor = this.getWeekStart(today);
+    } else if (this.selectedView === 'list') {
+      this.monthCursor = this.getUtcDayStart(today);
     } else if (this.selectedView === 'day') {
       this.monthCursor = this.getUtcDayStart(today);
     } else {
@@ -610,13 +750,16 @@ export class EventDiaryComponent implements OnInit {
   }
 
   addEvent(): void {
-    this.router.navigate(['/enquiries'], {
-      queryParams: { statusTab: 'new-unanswered' }
-    });
+    const dayIso = (this.selectedView === 'day' || this.selectedView === 'list')
+      ? this.currentDayIso
+      : this.toIsoDateUtc(this.monthCursor);
+    this.openCreateEnquiryModal(dayIso, this.unassignedSpaceId, 3 * 60);
   }
 
   openAddAppointment(): void {
-    const dayIso = this.selectedView === 'day' ? this.currentDayIso : this.toIsoDateUtc(this.monthCursor);
+    const dayIso = (this.selectedView === 'day' || this.selectedView === 'list')
+      ? this.currentDayIso
+      : this.toIsoDateUtc(this.monthCursor);
     this.openAppointmentModal(dayIso, this.unassignedSpaceId, 3 * 60);
   }
 
@@ -637,7 +780,110 @@ export class EventDiaryComponent implements OnInit {
     this.appointmentSaving = false;
     this.appointmentError = '';
     this.appointmentConflictWarning = '';
+    this.appointmentEnquirySearchTerm = '';
     this.appointmentDraft = this.createDefaultAppointmentDraft();
+  }
+
+  closeCreateEnquiryModal(): void {
+    this.showCreateEnquiryModal = false;
+    this.quickEnquirySaving = false;
+    this.quickEnquiryError = '';
+    this.quickEnquiryDraft = this.createDefaultQuickEnquiryDraft();
+  }
+
+  submitCreateEnquiry(): void {
+    const venueId = this.venueId;
+    if (!venueId || !this.canSaveQuickEnquiry) {
+      return;
+    }
+
+    const draft = this.quickEnquiryDraft;
+    const start = this.combineDateAndTimeToDate(draft.date, draft.startTime);
+    if (Number.isNaN(start.getTime())) {
+      this.quickEnquiryError = 'Enter a valid event date and time.';
+      return;
+    }
+
+    const email = draft.contactEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      this.quickEnquiryError = 'Enter a valid contact email.';
+      return;
+    }
+
+    const normalizedPhone = this.normalizePhoneForApi(draft.contactPhoneNumberE164);
+    if (!normalizedPhone) {
+      this.quickEnquiryError = 'Enter a valid contact phone number.';
+      return;
+    }
+
+    const end = new Date(start.getTime() + Math.max(30, Math.round(draft.durationMinutes)) * 60000);
+    const shouldAssignSpace = !!draft.spaceId && draft.spaceId !== this.unassignedSpaceId;
+    this.quickEnquirySaving = true;
+    this.quickEnquiryError = '';
+
+    this.api
+      .createEnquiry({
+        venueId,
+        contactFirstName: draft.contactFirstName.trim(),
+        contactLastName: draft.contactLastName.trim(),
+        contactEmail: email,
+        contactPhoneNumberE164: normalizedPhone,
+        companyName: undefined,
+        marketingConsent: false,
+        eventType: draft.eventType.trim(),
+        eventName: draft.eventName.trim() || undefined,
+        eventStartUtc: start.toISOString(),
+        eventEndUtc: end.toISOString(),
+        hasFlexibleDates: false,
+        guestsExpected: Math.max(1, Math.round(draft.guestsExpected)),
+        eventStyle: draft.eventStyle.trim() || undefined,
+        setupStyle: draft.setupStyle.trim() || undefined,
+        budgetMinAmount: undefined,
+        budgetMaxAmount: undefined,
+        currencyCode: 'GBP',
+        sourceType: draft.sourceType.trim() || 'Phone',
+        sourceDetail: undefined,
+        leadQuality: 3,
+        specialRequirements: draft.specialRequirements.trim() || undefined,
+        internalNotes: undefined,
+        eventManagerUserId: undefined
+      })
+      .pipe(
+        catchError((error) => {
+          this.quickEnquirySaving = false;
+          this.quickEnquiryError = typeof error?.error?.message === 'string'
+            ? error.error.message
+            : 'Unable to create enquiry right now.';
+          return of(null);
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((created) => {
+        if (!created) {
+          return;
+        }
+
+        const complete = () => {
+          this.quickEnquirySaving = false;
+          this.closeCreateEnquiryModal();
+          this.router.navigate(['/enquiries', created.id], {
+            queryParams: { tab: 'overview' }
+          });
+        };
+
+        if (!shouldAssignSpace || !draft.spaceId) {
+          complete();
+          return;
+        }
+
+        this.api
+          .assignEnquirySpace(created.id, draft.spaceId)
+          .pipe(
+            catchError(() => of(void 0)),
+            takeUntilDestroyed(this.destroyRef)
+          )
+          .subscribe(() => complete());
+      });
   }
 
   submitAppointment(allowConflictOverride = false): void {
@@ -714,7 +960,8 @@ export class EventDiaryComponent implements OnInit {
     }
 
     this.exportState = format;
-    const exportView = this.selectedView as 'day' | 'week' | 'month' | 'timeline';
+    const exportView: 'day' | 'week' | 'month' | 'list' | 'timeline' =
+      this.selectedView as 'day' | 'week' | 'month' | 'list' | 'timeline';
     this.api
       .exportDiary({
         venueId,
@@ -763,6 +1010,8 @@ export class EventDiaryComponent implements OnInit {
 
     if (view === 'week') {
       this.monthCursor = this.getWeekStart(this.monthCursor);
+    } else if (view === 'list') {
+      this.monthCursor = this.getUtcDayStart(this.monthCursor);
     } else if (view === 'day') {
       this.monthCursor = this.getUtcDayStart(this.monthCursor);
     } else if (view === 'operations') {
@@ -786,6 +1035,24 @@ export class EventDiaryComponent implements OnInit {
     }
 
     this.loadDiary();
+  }
+
+  toggleListSort(column: DiaryListSortColumn): void {
+    if (this.listSortColumn === column) {
+      this.listSortDirection = this.listSortDirection === 'asc' ? 'desc' : 'asc';
+      return;
+    }
+
+    this.listSortColumn = column;
+    this.listSortDirection = 'asc';
+  }
+
+  listSortIndicator(column: DiaryListSortColumn): string {
+    if (this.listSortColumn !== column) {
+      return '';
+    }
+
+    return this.listSortDirection === 'asc' ? '↑' : '↓';
   }
 
   heatmapClassForDate(dateIso: string | null): string {
@@ -846,6 +1113,24 @@ export class EventDiaryComponent implements OnInit {
     this.loadDiary();
   }
 
+  onDiaryFilterChange(): void {
+    this.syncQueryParams();
+    this.loadDiary();
+  }
+
+  onHideEmptySpacesToggle(): void {
+    this.syncQueryParams();
+    this.loadDiary();
+  }
+
+  printBriefingSheet(): void {
+    if (this.selectedView !== 'day' && this.selectedView !== 'week') {
+      return;
+    }
+
+    window.print();
+  }
+
   setTimelineLayout(layout: 'standard' | 'room'): void {
     if (this.timelineLayout === layout) {
       return;
@@ -889,7 +1174,11 @@ export class EventDiaryComponent implements OnInit {
       this.weekSpaceRows = [];
       this.dayEvents = [];
       this.daySpaceColumns = [];
+      this.listEvents = [];
       this.operationsColumns = [];
+      this.statusFilterOptions = [];
+      this.eventTypeFilterOptions = [];
+      this.eventStyleFilterOptions = [];
       this.demandHeatmapByDate.clear();
       this.demandHeatmapMessage = '';
       this.demandHeatmapLoading = false;
@@ -925,6 +1214,8 @@ export class EventDiaryComponent implements OnInit {
             return;
           }
 
+          this.refreshDiaryEventFilterOptions(response.events);
+          const filteredEvents = this.applyDiaryEventFilters(response.events);
           this.diary = response;
           this.loadError = '';
           this.cells = [];
@@ -934,18 +1225,19 @@ export class EventDiaryComponent implements OnInit {
           this.weekSpaceRows = [];
           this.dayEvents = [];
           this.daySpaceColumns = [];
+          this.listEvents = [];
           this.operationsColumns = [];
 
           if (this.selectedView === 'month') {
             this.monthCursor = this.getUtcMonthStart(this.parseIsoDateUtc(response.windowStart));
-            this.cells = this.buildMonthCells(response.events);
+            this.cells = this.buildMonthCells(filteredEvents);
             this.loadDemandHeatmapForWindow(venueId, this.toIsoDateUtc(this.cells[0]?.date ?? this.monthCursor), this.toIsoDateUtc(this.cells[this.cells.length - 1]?.date ?? this.monthCursor));
             return;
           }
 
           if (this.selectedView === 'week') {
             this.monthCursor = this.getWeekStart(this.parseIsoDateUtc(response.windowStart));
-            this.weekColumns = this.buildWeekColumns(this.parseIsoDateUtc(response.windowStart), response.events);
+            this.weekColumns = this.buildWeekColumns(this.parseIsoDateUtc(response.windowStart), filteredEvents);
             this.weekSpaceRows = this.buildWeekSpaceRows(this.weekColumns, response.spaces);
             if (this.weekColumns.length > 0) {
               this.loadDemandHeatmapForWindow(venueId, this.weekColumns[0].isoDate, this.weekColumns[this.weekColumns.length - 1].isoDate);
@@ -955,17 +1247,26 @@ export class EventDiaryComponent implements OnInit {
             return;
           }
 
+          if (this.selectedView === 'list') {
+            this.monthCursor = this.getUtcDayStart(this.parseIsoDateUtc(response.windowStart));
+            this.listEvents = filteredEvents;
+            const rangeStart = this.toIsoDateUtc(this.parseIsoDateUtc(response.windowStart));
+            const rangeEnd = this.toIsoDateUtc(this.parseIsoDateUtc(response.windowEnd));
+            this.loadDemandHeatmapForWindow(venueId, rangeStart, rangeEnd);
+            return;
+          }
+
           this.monthCursor = this.getUtcDayStart(this.parseIsoDateUtc(response.windowStart));
-          this.dayEvents = this.buildDayEvents(response.events);
+          this.dayEvents = this.buildDayEvents(filteredEvents);
           this.daySpaceColumns = this.buildDaySpaceColumns(this.dayEvents, response.spaces);
           this.loadDemandHeatmapForWindow(venueId, this.currentDayIso, this.currentDayIso);
         },
-        error: () => {
+        error: (error) => {
           if (requestSequence !== this.diaryLoadSequence) {
             return;
           }
 
-          this.loadError = 'Unable to load diary data right now.';
+          this.loadError = this.getMoveErrorMessage(error, 'Unable to load diary data right now.');
         }
       });
   }
@@ -988,16 +1289,17 @@ export class EventDiaryComponent implements OnInit {
           this.weekSpaceRows = [];
           this.dayEvents = [];
           this.daySpaceColumns = [];
+          this.listEvents = [];
           this.operationsColumns = response.columns ?? [];
           this.loadError = '';
         },
-        error: () => {
+        error: (error) => {
           if (requestSequence !== this.diaryLoadSequence) {
             return;
           }
 
           this.operationsColumns = [];
-          this.loadError = 'Unable to load operations view right now.';
+          this.loadError = this.getMoveErrorMessage(error, 'Unable to load operations view right now.');
         }
       });
   }
@@ -1027,6 +1329,7 @@ export class EventDiaryComponent implements OnInit {
       this.activePopoverOrigin = origin;
       this.activePopoverHeadline = headline?.trim() || null;
       this.popoverExpanded = false;
+      this.loadPopoverPaymentSchedule(event);
       this.popoverOpen = true;
       this.popoverOpenTimerHandle = null;
     }, 250);
@@ -1061,6 +1364,9 @@ export class EventDiaryComponent implements OnInit {
 
   closePopover(): void {
     this.clearPopoverTimers();
+    this.popoverPaymentScheduleLoading = false;
+    this.popoverPaymentScheduleError = '';
+    this.popoverPaymentSchedule = null;
     this.popoverOpen = false;
     this.popoverExpanded = false;
     this.activePopoverEvent = null;
@@ -1111,7 +1417,7 @@ export class EventDiaryComponent implements OnInit {
       return;
     }
 
-    this.openAppointmentModal(cell.key, this.unassignedSpaceId, 3 * 60);
+    this.openCreateEnquiryModal(cell.key, this.unassignedSpaceId, 3 * 60);
   }
 
   onDropTimelineCell(cell: TimelineCell): void {
@@ -1127,7 +1433,7 @@ export class EventDiaryComponent implements OnInit {
       return;
     }
 
-    this.openAppointmentModal(cell.isoDate, this.unassignedSpaceId, 3 * 60);
+    this.openCreateEnquiryModal(cell.isoDate, this.unassignedSpaceId, 3 * 60);
   }
 
   onDropWeekColumn(dayIso: string, dragEvent: DragEvent, container: HTMLElement): void {
@@ -1146,7 +1452,7 @@ export class EventDiaryComponent implements OnInit {
     }
 
     const minuteOffset = this.resolveMinuteOffsetFromClick(event, container);
-    this.openAppointmentModal(dayIso, this.unassignedSpaceId, minuteOffset);
+    this.openCreateEnquiryModal(dayIso, this.unassignedSpaceId, minuteOffset);
   }
 
   onWeekCdkDrop(dayIso: string, dropEvent: CdkDragDrop<DiaryEventDto[], DiaryEventDto[], DiaryEventDto>, container: HTMLElement): void {
@@ -1182,7 +1488,7 @@ export class EventDiaryComponent implements OnInit {
     }
 
     const minuteOffset = this.resolveMinuteOffsetFromClick(event, container);
-    this.openAppointmentModal(dayIso, targetSpaceId, minuteOffset);
+    this.openCreateEnquiryModal(dayIso, targetSpaceId, minuteOffset);
   }
 
   onWeekSpaceCdkDrop(dayIso: string, targetSpaceId: string, dropEvent: CdkDragDrop<DiaryEventDto[], DiaryEventDto[], DiaryEventDto>, container: HTMLElement): void {
@@ -1218,7 +1524,7 @@ export class EventDiaryComponent implements OnInit {
     }
 
     const minuteOffset = this.resolveMinuteOffsetFromClick(event, container);
-    this.openAppointmentModal(dayIso, targetSpaceId, minuteOffset);
+    this.openCreateEnquiryModal(dayIso, targetSpaceId, minuteOffset);
   }
 
   onDaySpaceCdkDrop(dayIso: string, targetSpaceId: string, dropEvent: CdkDragDrop<DiaryEventDto[], DiaryEventDto[], DiaryEventDto>, container: HTMLElement): void {
@@ -1244,6 +1550,10 @@ export class EventDiaryComponent implements OnInit {
       return;
     }
 
+    this.showCreateEnquiryModal = false;
+    this.quickEnquirySaving = false;
+    this.quickEnquiryError = '';
+
     const startMinutes = this.dayStartHour * 60 + Math.max(0, Math.min(this.totalWindowMinutes - this.minuteStep, minuteOffset));
     const hours = Math.floor(startMinutes / 60);
     const minutes = startMinutes % 60;
@@ -1259,8 +1569,34 @@ export class EventDiaryComponent implements OnInit {
 
     this.appointmentError = '';
     this.appointmentConflictWarning = '';
+    this.appointmentEnquirySearchTerm = '';
     this.showAppointmentModal = true;
     this.ensureAppointmentLookupsLoaded(this.venueId);
+  }
+
+  private openCreateEnquiryModal(dayIso: string, targetSpaceId: string, minuteOffset: number): void {
+    const safeDayIso = dayIso?.slice(0, 10);
+    if (!safeDayIso || !this.venueId) {
+      return;
+    }
+
+    this.showAppointmentModal = false;
+    this.closePopover();
+
+    const startMinutes = this.dayStartHour * 60 + Math.max(0, Math.min(this.totalWindowMinutes - this.minuteStep, minuteOffset));
+    const hours = String(Math.floor(startMinutes / 60)).padStart(2, '0');
+    const minutes = String(startMinutes % 60).padStart(2, '0');
+
+    this.quickEnquiryDraft = {
+      ...this.createDefaultQuickEnquiryDraft(),
+      date: safeDayIso,
+      startTime: `${hours}:${minutes}`,
+      spaceId: targetSpaceId || this.unassignedSpaceId
+    };
+
+    this.quickEnquiryError = '';
+    this.quickEnquirySaving = false;
+    this.showCreateEnquiryModal = true;
   }
 
   private ensureAppointmentLookupsLoaded(venueId: string): void {
@@ -1392,7 +1728,7 @@ export class EventDiaryComponent implements OnInit {
     }
 
     const dayIso = this.toIsoDateUtc(new Date(Date.UTC(year, month, dayOfMonth)));
-    this.openAppointmentModal(dayIso, row.spaceId, 3 * 60);
+    this.openCreateEnquiryModal(dayIso, row.spaceId, 3 * 60);
   }
 
   onResizeHandleMouseDown(
@@ -1579,7 +1915,7 @@ export class EventDiaryComponent implements OnInit {
 
   openDetails(event: DiaryEventDto): void {
     if (event.enquiryId) {
-      this.router.navigate(['/enquiries'], { queryParams: { enquiry: event.enquiryId } });
+      this.router.navigate(['/enquiries', event.enquiryId]);
     }
   }
 
@@ -1594,8 +1930,19 @@ export class EventDiaryComponent implements OnInit {
     }
 
     const visualType = event.visualType || this.resolveLegacyVisualType(event);
+    if (visualType === 'appointment') {
+      const start = new Date(event.startUtc);
+      if (!Number.isNaN(start.getTime())) {
+        const timeLabel = `${String(start.getHours()).padStart(2, '0')}:${String(start.getMinutes()).padStart(2, '0')}`;
+        return `${timeLabel} ${event.label}`;
+      }
+    }
+
     if (visualType === 'provisional') {
-      return `${event.label} (P)`;
+      const holdSummary = this.holdCountdownShortLabel(event.holdExpiresAtUtc);
+      return holdSummary
+        ? `${event.label} (HOLD ${holdSummary})`
+        : `${event.label} (HOLD)`;
     }
 
     return event.label;
@@ -1603,6 +1950,46 @@ export class EventDiaryComponent implements OnInit {
 
   parentEventLabel(event: DiaryEventDto): string {
     return event.parentEventLabel || event.label;
+  }
+
+  statusLabel(event: DiaryEventDto): string {
+    const raw = this.resolveStatusFilterToken(event) || event.visualType || 'Unknown';
+    return this.formatFilterLabel(raw);
+  }
+
+  isProvisionalEvent(event: DiaryEventDto): boolean {
+    const visualType = event.visualType || this.resolveLegacyVisualType(event);
+    return visualType === 'provisional';
+  }
+
+  holdCountdownLabel(holdExpiresAtUtc?: string | null): string {
+    const parsed = holdExpiresAtUtc ? new Date(holdExpiresAtUtc) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) {
+      return 'No hold expiry';
+    }
+
+    const remainingMs = parsed.getTime() - Date.now();
+    if (remainingMs <= 0) {
+      return 'Expired';
+    }
+
+    const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+    return `${remainingDays} day${remainingDays === 1 ? '' : 's'} remaining`;
+  }
+
+  private holdCountdownShortLabel(holdExpiresAtUtc?: string | null): string {
+    const parsed = holdExpiresAtUtc ? new Date(holdExpiresAtUtc) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) {
+      return '';
+    }
+
+    const remainingMs = parsed.getTime() - Date.now();
+    if (remainingMs <= 0) {
+      return 'expired';
+    }
+
+    const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+    return `${remainingDays}d`;
   }
 
   formatHour(hour: number): string {
@@ -1620,8 +2007,10 @@ export class EventDiaryComponent implements OnInit {
 
   weekEventHeightPercent(event: DiaryEventDto): number {
     const range = this.getRenderMinutesRange(event);
+    const isAppointment = this.isAppointmentEvent(event);
     const value = (range.durationMinutes / this.totalWindowMinutes) * 100;
-    return Math.max(value, 2);
+    const scaled = isAppointment ? value * 0.65 : value;
+    return Math.max(scaled, isAppointment ? 1.2 : 2);
   }
 
   dayEventTopPercent(event: DiaryEventDto): number {
@@ -1631,8 +2020,15 @@ export class EventDiaryComponent implements OnInit {
 
   dayEventHeightPercent(event: DiaryEventDto): number {
     const range = this.getRenderMinutesRange(event);
+    const isAppointment = this.isAppointmentEvent(event);
     const value = (range.durationMinutes / this.totalWindowMinutes) * 100;
-    return Math.max(value, 2);
+    const scaled = isAppointment ? value * 0.65 : value;
+    return Math.max(scaled, isAppointment ? 1.2 : 2);
+  }
+
+  private isAppointmentEvent(event: DiaryEventDto): boolean {
+    const visualType = event.visualType || this.resolveLegacyVisualType(event);
+    return visualType === 'appointment';
   }
 
   private queueMove(
@@ -1841,6 +2237,196 @@ export class EventDiaryComponent implements OnInit {
     this.clearPopoverCloseTimer();
   }
 
+  private loadPopoverPaymentSchedule(event: DiaryEventDto): void {
+    if (event.eventType !== 'Enquiry' || !event.enquiryId) {
+      this.popoverPaymentSchedule = null;
+      this.popoverPaymentScheduleLoading = false;
+      this.popoverPaymentScheduleError = '';
+      return;
+    }
+
+    const enquiryId = event.enquiryId;
+    const cached = this.popoverPaymentScheduleCache.get(enquiryId);
+    if (cached) {
+      this.popoverPaymentSchedule = cached;
+      this.popoverPaymentScheduleLoading = false;
+      this.popoverPaymentScheduleError = '';
+      return;
+    }
+
+    const requestSequence = ++this.popoverPaymentScheduleRequestSequence;
+    this.popoverPaymentSchedule = null;
+    this.popoverPaymentScheduleLoading = true;
+    this.popoverPaymentScheduleError = '';
+
+    this.api
+      .getPaymentSchedule(enquiryId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          if (requestSequence !== this.popoverPaymentScheduleRequestSequence) {
+            return;
+          }
+
+          if (!this.activePopoverEvent || this.activePopoverEvent.enquiryId !== enquiryId) {
+            return;
+          }
+
+          this.popoverPaymentScheduleCache.set(enquiryId, response);
+          this.popoverPaymentSchedule = response;
+          this.popoverPaymentScheduleLoading = false;
+          this.popoverPaymentScheduleError = '';
+        },
+        error: () => {
+          if (requestSequence !== this.popoverPaymentScheduleRequestSequence) {
+            return;
+          }
+
+          if (!this.activePopoverEvent || this.activePopoverEvent.enquiryId !== enquiryId) {
+            return;
+          }
+
+          this.popoverPaymentSchedule = null;
+          this.popoverPaymentScheduleLoading = false;
+          this.popoverPaymentScheduleError = 'Progress unavailable';
+        }
+      });
+  }
+
+  private refreshDiaryEventFilterOptions(events: DiaryEventDto[]): void {
+    const statusCounts = new Map<string, DiaryEventFilterOption>();
+    const typeCounts = new Map<string, DiaryEventFilterOption>();
+    const styleCounts = new Map<string, DiaryEventFilterOption>();
+
+    for (const event of events) {
+      const statusToken = this.resolveStatusFilterToken(event);
+      if (statusToken) {
+        const key = this.normalizeFilterToken(statusToken);
+        const existing = statusCounts.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          statusCounts.set(key, {
+            key,
+            label: this.formatFilterLabel(statusToken),
+            count: 1
+          });
+        }
+      }
+
+      const typeToken = (event.eventType || '').trim();
+      if (typeToken) {
+        const existing = typeCounts.get(typeToken);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          typeCounts.set(typeToken, {
+            key: typeToken,
+            label: this.formatFilterLabel(typeToken),
+            count: 1
+          });
+        }
+      }
+
+      const styleToken = (event.eventStyle || '').trim();
+      if (styleToken) {
+        const key = this.normalizeFilterToken(styleToken);
+        const existing = styleCounts.get(key);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          styleCounts.set(key, {
+            key,
+            label: styleToken,
+            count: 1
+          });
+        }
+      }
+    }
+
+    const nextStatusOptions = Array.from(statusCounts.values()).sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }));
+    const nextTypeOptions = Array.from(typeCounts.values()).sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }));
+    const nextStyleOptions = Array.from(styleCounts.values()).sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }));
+
+    this.statusFilterOptions = nextStatusOptions;
+    this.eventTypeFilterOptions = nextTypeOptions;
+    this.eventStyleFilterOptions = nextStyleOptions;
+
+    let filtersUpdated = false;
+    if (this.selectedStatusFilterKey && !this.statusFilterOptions.some((option) => option.key === this.selectedStatusFilterKey)) {
+      this.selectedStatusFilterKey = '';
+      filtersUpdated = true;
+    }
+
+    if (this.selectedEventTypeFilterKey && !this.eventTypeFilterOptions.some((option) => option.key === this.selectedEventTypeFilterKey)) {
+      this.selectedEventTypeFilterKey = '';
+      filtersUpdated = true;
+    }
+
+    if (this.selectedEventStyleFilterKey && !this.eventStyleFilterOptions.some((option) => option.key === this.selectedEventStyleFilterKey)) {
+      this.selectedEventStyleFilterKey = '';
+      filtersUpdated = true;
+    }
+
+    if (filtersUpdated) {
+      this.syncQueryParams();
+    }
+  }
+
+  private applyDiaryEventFilters(events: DiaryEventDto[]): DiaryEventDto[] {
+    const statusFilter = this.selectedStatusFilterKey;
+    const typeFilter = this.selectedEventTypeFilterKey;
+    const styleFilter = this.selectedEventStyleFilterKey;
+
+    if (!statusFilter && !typeFilter && !styleFilter) {
+      return events;
+    }
+
+    return events.filter((event) => {
+      if (statusFilter) {
+        const eventStatus = this.resolveStatusFilterToken(event);
+        if (!eventStatus || this.normalizeFilterToken(eventStatus) !== statusFilter) {
+          return false;
+        }
+      }
+
+      if (typeFilter && (event.eventType || '') !== typeFilter) {
+        return false;
+      }
+
+      if (styleFilter) {
+        const style = (event.eventStyle || '').trim();
+        if (!style || this.normalizeFilterToken(style) !== styleFilter) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }
+
+  private resolveStatusFilterToken(event: DiaryEventDto): string | null {
+    const token = (event.statusKey || event.enquiryStatus || '').trim();
+    return token.length > 0 ? token : null;
+  }
+
+  private normalizeFilterToken(value: string): string {
+    return value.trim().toLowerCase();
+  }
+
+  private formatFilterLabel(value: string): string {
+    const withSpaces = value
+      .replace(/_/g, ' ')
+      .replace(/-/g, ' ')
+      .replace(/([a-z])([A-Z])/g, '$1 $2')
+      .trim();
+
+    return withSpaces
+      .split(/\s+/)
+      .map((segment) => (segment.length <= 2 ? segment.toUpperCase() : `${segment.charAt(0).toUpperCase()}${segment.slice(1).toLowerCase()}`))
+      .join(' ');
+  }
+
   private buildMonthCells(events: DiaryEventDto[]): MonthCell[] {
     const eventsByDate = this.groupEventsByDate(events);
 
@@ -1895,14 +2481,17 @@ export class EventDiaryComponent implements OnInit {
           }
 
           const allEvents = responses.flatMap((response) => response.events);
+          this.refreshDiaryEventFilterOptions(allEvents);
+          const filteredEvents = this.applyDiaryEventFilters(allEvents);
           this.diary = responses[0] ?? null;
           this.cells = [];
           this.weekColumns = [];
           this.weekSpaceRows = [];
           this.dayEvents = [];
           this.daySpaceColumns = [];
-          this.timelineRows = this.buildTimelineRows(monthStarts, allEvents);
-          this.roomTimelineRows = this.buildRoomTimelineRows(this.monthCursor, allEvents, this.diary?.spaces ?? []);
+          this.listEvents = [];
+          this.timelineRows = this.buildTimelineRows(monthStarts, filteredEvents);
+          this.roomTimelineRows = this.buildRoomTimelineRows(this.monthCursor, filteredEvents, this.diary?.spaces ?? []);
           this.loadError = '';
           const timelineFrom = this.toIsoDateUtc(monthStarts[0]);
           const lastTimelineMonth = monthStarts[monthStarts.length - 1];
@@ -1913,39 +2502,69 @@ export class EventDiaryComponent implements OnInit {
           )));
           this.loadDemandHeatmapForWindow(venueId, timelineFrom, timelineTo);
         },
-        error: () => {
+        error: (error) => {
           if (requestSequence !== this.diaryLoadSequence) {
             return;
           }
 
-          this.loadError = 'Unable to load diary data right now.';
+          this.loadError = this.getMoveErrorMessage(error, 'Unable to load diary data right now.');
         }
       });
   }
 
   private getMoveErrorMessage(error: unknown, fallback: string): string {
-    const payload = error as { error?: unknown; message?: string } | null | undefined;
+    const payload = error as {
+      status?: number;
+      error?: unknown;
+      message?: string;
+    } | null | undefined;
     const apiError = payload?.error;
+    const status = Number(payload?.status ?? 0);
+
+    if (status === 0) {
+      return 'Diary API is unreachable. Ensure backend is running on http://localhost:5080.';
+    }
+
+    let message = '';
+    let code = '';
+    let correlationId = '';
 
     if (typeof apiError === 'string' && apiError.trim().length > 0) {
-      return apiError;
+      message = apiError.trim();
+    } else if (apiError && typeof apiError === 'object') {
+      const typed = apiError as {
+        message?: string;
+        detail?: string;
+        title?: string;
+        code?: string;
+        correlationId?: string;
+      };
+
+      if (typeof typed.message === 'string' && typed.message.trim().length > 0) {
+        message = typed.message.trim();
+      } else if (typeof typed.detail === 'string' && typed.detail.trim().length > 0) {
+        message = typed.detail.trim();
+      } else if (typeof typed.title === 'string' && typed.title.trim().length > 0) {
+        message = typed.title.trim();
+      }
+
+      if (typeof typed.code === 'string' && typed.code.trim().length > 0) {
+        code = typed.code.trim();
+      }
+
+      if (typeof typed.correlationId === 'string' && typed.correlationId.trim().length > 0) {
+        correlationId = typed.correlationId.trim();
+      }
     }
 
-    if (
-      apiError &&
-      typeof apiError === 'object' &&
-      'message' in apiError &&
-      typeof (apiError as { message?: string }).message === 'string' &&
-      (apiError as { message?: string }).message!.trim().length > 0
-    ) {
-      return (apiError as { message: string }).message;
+    if (!message && typeof payload?.message === 'string' && payload.message.trim().length > 0) {
+      message = payload.message.trim();
     }
 
-    if (typeof payload?.message === 'string' && payload.message.trim().length > 0) {
-      return payload.message;
-    }
-
-    return fallback;
+    const resolved = message || fallback;
+    const codeSuffix = code ? ` [${code}]` : '';
+    const correlationSuffix = correlationId ? ` (Ref: ${correlationId})` : '';
+    return `${resolved}${codeSuffix}${correlationSuffix}`;
   }
 
   private loadSpaceFilterOptions(venueId: string): void {
@@ -2081,7 +2700,7 @@ export class EventDiaryComponent implements OnInit {
     const query = this.route.snapshot.queryParamMap;
 
     const viewParam = (query.get('view') || '').trim().toLowerCase();
-    if (viewParam === 'month' || viewParam === 'timeline' || viewParam === 'week' || viewParam === 'day' || viewParam === 'operations') {
+    if (viewParam === 'month' || viewParam === 'timeline' || viewParam === 'week' || viewParam === 'day' || viewParam === 'list' || viewParam === 'operations') {
       this.selectedView = viewParam;
     }
 
@@ -2091,6 +2710,8 @@ export class EventDiaryComponent implements OnInit {
       if (parsed) {
         if (this.selectedView === 'week') {
           this.monthCursor = this.getWeekStart(parsed);
+        } else if (this.selectedView === 'list') {
+          this.monthCursor = this.getUtcDayStart(parsed);
         } else if (this.selectedView === 'day') {
           this.monthCursor = this.getUtcDayStart(parsed);
         } else if (this.selectedView === 'operations') {
@@ -2103,6 +2724,10 @@ export class EventDiaryComponent implements OnInit {
 
     const spacesParam = query.get('spaces');
     this.selectedSpaceFilterKeys = this.parseSpaceFilterQuery(spacesParam);
+
+    this.selectedStatusFilterKey = this.normalizeFilterToken(query.get('statusFilter') || '');
+    this.selectedEventTypeFilterKey = (query.get('eventTypeFilter') || '').trim();
+    this.selectedEventStyleFilterKey = this.normalizeFilterToken(query.get('eventStyleFilter') || '');
 
     const timelineLayoutParam = (query.get('timelineLayout') || '').trim().toLowerCase();
     if (timelineLayoutParam === 'room') {
@@ -2117,6 +2742,11 @@ export class EventDiaryComponent implements OnInit {
     const heatmapParam = (query.get('heatmap') || '').trim();
     if (heatmapParam === '1' || heatmapParam.toLowerCase() === 'true') {
       this.showDemandHeatmap = true;
+    }
+
+    const hideEmptyParam = (query.get('hideEmptySpaces') || '').trim();
+    if (hideEmptyParam === '1' || hideEmptyParam.toLowerCase() === 'true') {
+      this.hideEmptySpaces = true;
     }
   }
 
@@ -2158,6 +2788,10 @@ export class EventDiaryComponent implements OnInit {
         view: this.selectedView,
         startDate: this.toIsoDateUtc(this.monthCursor),
         spaces: this.selectedSpaceFilterKeys.length > 0 ? this.selectedSpaceFilterKeys.join(',') : null,
+        statusFilter: this.selectedStatusFilterKey || null,
+        eventTypeFilter: this.selectedEventTypeFilterKey || null,
+        eventStyleFilter: this.selectedEventStyleFilterKey || null,
+        hideEmptySpaces: this.hideEmptySpaces ? '1' : null,
         timelineLayout: this.timelineLayout === 'room' ? 'room' : null,
         weekLayout: this.weekLayout === 'space' ? 'space' : null,
         heatmap: this.showDemandHeatmap ? '1' : null
@@ -2280,10 +2914,11 @@ export class EventDiaryComponent implements OnInit {
           laneCount: Math.max(laneEndColumns.length, 1),
           bars
         };
-      })
-      .sort((left, right) => left.spaceName.localeCompare(right.spaceName, undefined, { sensitivity: 'base' }));
+      });
 
-    return rows;
+    const visibleRows = this.hideEmptySpaces ? rows.filter((row) => row.bars.length > 0) : rows;
+    visibleRows.sort((left, right) => left.spaceName.localeCompare(right.spaceName, undefined, { sensitivity: 'base' }));
+    return visibleRows;
   }
 
   private buildWeekColumns(windowStart: Date, events: DiaryEventDto[]): WeekDayColumn[] {
@@ -2353,9 +2988,11 @@ export class EventDiaryComponent implements OnInit {
       });
     }
 
-    return mappedSpaces
+    const filtered = mappedSpaces
       .filter((space) => space.spaceId !== this.unassignedSpaceId || events.some((event) => event.spaceId === this.unassignedSpaceId))
-      .sort((left, right) => left.spaceName.localeCompare(right.spaceName, undefined, { sensitivity: 'base' }));
+      .filter((space) => !this.hideEmptySpaces || events.some((event) => event.spaceId === space.spaceId));
+
+    return filtered.sort((left, right) => left.spaceName.localeCompare(right.spaceName, undefined, { sensitivity: 'base' }));
   }
 
   private groupEventsForCell(events: DiaryEventDto[]): DiaryEventGroup[] {
@@ -2533,6 +3170,39 @@ export class EventDiaryComponent implements OnInit {
       status: 'Scheduled',
       relatedEnquiryIds: []
     };
+  }
+
+  private createDefaultQuickEnquiryDraft(): DiaryQuickEnquiryDraft {
+    const now = new Date();
+    return {
+      contactFirstName: '',
+      contactLastName: '',
+      contactEmail: '',
+      contactPhoneNumberE164: '',
+      eventType: this.quickEnquiryEventTypeOptions[0] ?? 'Wedding',
+      eventName: '',
+      date: this.toIsoDateUtc(now),
+      startTime: '09:00',
+      durationMinutes: 240,
+      guestsExpected: 40,
+      eventStyle: '',
+      setupStyle: '',
+      sourceType: this.quickEnquirySourceTypeOptions[0] ?? 'Phone',
+      specialRequirements: '',
+      spaceId: this.unassignedSpaceId
+    };
+  }
+
+  private normalizePhoneForApi(raw: string): string | null {
+    const trimmed = (raw || '').trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    const digitsOnly = trimmed.replace(/[^\d+]/g, '');
+    const normalized = digitsOnly.startsWith('+') ? digitsOnly : `+${digitsOnly}`;
+    const pattern = /^\+[1-9]\d{6,15}$/;
+    return pattern.test(normalized) ? normalized : null;
   }
 
   private combineDateAndTimeToDate(date: string, time: string): Date {

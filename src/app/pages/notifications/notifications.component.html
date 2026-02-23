@@ -1,0 +1,55 @@
+<section class="notifications-page">
+  <header class="page-header">
+    <div>
+      <h1>Notifications</h1>
+      <p>Latest in-app activity and alerts.</p>
+    </div>
+    <div class="header-actions">
+      <span class="badge">{{ unreadCount }} unread</span>
+      <button type="button" class="secondary" (click)="refresh()" [disabled]="loading">
+        {{ loading ? 'Refreshing...' : 'Refresh' }}
+      </button>
+      <button type="button" class="primary" (click)="markAllRead()" [disabled]="loading || unreadCount === 0">
+        Mark all as read
+      </button>
+    </div>
+  </header>
+
+  <section class="filter-row">
+    <button type="button" [class.active]="filter === 'all'" (click)="setFilter('all')">All</button>
+    <button type="button" [class.active]="filter === 'unread'" (click)="setFilter('unread')">Unread</button>
+    <button type="button" [class.active]="filter === 'read'" (click)="setFilter('read')">Read</button>
+  </section>
+
+  @if (errorMessage) {
+    <p class="state error">{{ errorMessage }}</p>
+  }
+
+  @if (!loading && groupedNotifications.length === 0) {
+    <p class="state">No notifications available.</p>
+  }
+
+  <section class="groups">
+    @for (group of groupedNotifications; track group.key) {
+      <article class="group">
+        <h2>{{ group.label }}</h2>
+        <div class="group-items">
+          @for (item of group.items; track item.id) {
+            <button
+              type="button"
+              class="item"
+              [class.unread]="!item.isRead"
+              (click)="openNotification(item)">
+              <div class="item-row">
+                <strong>{{ item.title }}</strong>
+                <time>{{ item.createdAtUtc | date: 'dd MMM yyyy, HH:mm' }}</time>
+              </div>
+              <p>{{ item.body }}</p>
+              <span class="trigger">{{ item.triggerKey }}</span>
+            </button>
+          }
+        </div>
+      </article>
+    }
+  </section>
+</section>

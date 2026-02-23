@@ -85,6 +85,16 @@
       <section>
         <h3>Internal Note</h3>
         <textarea [(ngModel)]="noteDraft" rows="4" placeholder="Add internal note and use @mentions."></textarea>
+        <div class="mention-row">
+          <small>@mention:</small>
+          <div class="mention-chips">
+            @for (user of activeUsers; track user.id) {
+              <button type="button" (click)="insertMentionIntoNote(user.id)">
+                @{{ userMentionToken(user) }}
+              </button>
+            }
+          </div>
+        </div>
         <button type="button" class="primary-action" (click)="addNote()" [disabled]="!canCompose || !noteDraft.trim()">Add Note</button>
       </section>
 
@@ -217,12 +227,64 @@
     <article class="panel chat-panel">
       <header>
         <h2>Team Chat</h2>
+        <div class="chat-header-actions">
+          <button type="button" class="chat-action-btn" (click)="toggleCreateChannelForm()">
+            {{ showCreateChannelForm ? 'Cancel Channel' : '+ Channel' }}
+          </button>
+          <button type="button" class="chat-action-btn" (click)="toggleCreateDirectMessageForm()">
+            {{ showCreateDirectMessageForm ? 'Cancel DM' : '+ DM' }}
+          </button>
+        </div>
       </header>
+
+      @if (showCreateChannelForm) {
+        <section class="chat-form">
+          <label>
+            <span>Channel name</span>
+            <input type="text" [(ngModel)]="newChannelName" placeholder="weddings-team" />
+          </label>
+          <label class="checkbox-field">
+            <input type="checkbox" [(ngModel)]="newChannelIsPrivate" />
+            <span>Private channel</span>
+          </label>
+          <div class="member-picker">
+            <small>Members</small>
+            <div class="member-options">
+              @for (user of activeUsers; track user.id) {
+                <label>
+                  <input
+                    type="checkbox"
+                    [checked]="isChannelMemberSelected(user.id)"
+                    (change)="toggleChannelMember(user.id)" />
+                  <span>{{ userDisplayName(user) }}</span>
+                </label>
+              }
+            </div>
+          </div>
+          <button type="button" class="primary-action" (click)="createChannel()" [disabled]="!newChannelName.trim()">Create Channel</button>
+        </section>
+      }
+
+      @if (showCreateDirectMessageForm) {
+        <section class="chat-form">
+          <label>
+            <span>Direct message user</span>
+            <select [(ngModel)]="newDirectMessageUserId">
+              <option value="">Select a user</option>
+              @for (user of availableDirectMessageUsers; track user.id) {
+                <option [value]="user.id">{{ userDisplayName(user) }} ({{ user.email }})</option>
+              }
+            </select>
+          </label>
+          <button type="button" class="primary-action" (click)="createDirectMessage()" [disabled]="!newDirectMessageUserId">Start Direct Message</button>
+        </section>
+      }
 
       <div class="chat-layout">
         <aside>
+          <h3 class="chat-section-title">Channels</h3>
           <ul>
-            @for (channel of channels; track channel.id) {
+            @for (channel of teamChannels; track channel.id) {
               <li [class.active]="selectedChannelId === channel.id" (click)="openChannel(channel)">
                 <strong>#{{ channel.slug }}</strong>
                 @if (channel.unreadCount > 0) {
@@ -231,8 +293,24 @@
                 <small>{{ channel.lastMessagePreview || 'No messages yet' }}</small>
               </li>
             }
-            @if (channels.length === 0) {
+            @if (teamChannels.length === 0) {
               <li class="empty">No channels.</li>
+            }
+          </ul>
+
+          <h3 class="chat-section-title">Direct Messages</h3>
+          <ul>
+            @for (channel of directMessageChannels; track channel.id) {
+              <li [class.active]="selectedChannelId === channel.id" (click)="openChannel(channel)">
+                <strong>{{ channel.name }}</strong>
+                @if (channel.unreadCount > 0) {
+                  <span>{{ channel.unreadCount }}</span>
+                }
+                <small>{{ channel.lastMessagePreview || 'No messages yet' }}</small>
+              </li>
+            }
+            @if (directMessageChannels.length === 0) {
+              <li class="empty">No direct messages.</li>
             }
           </ul>
         </aside>
@@ -258,6 +336,19 @@
 
           <div class="chat-compose">
             <textarea [(ngModel)]="chatDraft" rows="3" placeholder="Message channel"></textarea>
+            <div class="mention-row">
+              <small>@mention:</small>
+              <div class="mention-chips">
+                @for (user of activeUsers; track user.id) {
+                  <button type="button" (click)="insertMentionIntoChat(user.id)">
+                    @{{ userMentionToken(user) }}
+                  </button>
+                }
+              </div>
+            </div>
+            @if (chatError) {
+              <p class="compose-error">{{ chatError }}</p>
+            }
             <button type="button" (click)="sendChatMessage()" [disabled]="!selectedChannelId || !chatDraft.trim()">Send</button>
           </div>
         </section>

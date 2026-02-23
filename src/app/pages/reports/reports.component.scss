@@ -46,7 +46,7 @@
 .preset-row button.active {
   border-color: #bfdbfe;
   background: #eff6ff;
-  color: #1d4ed8;
+  color: #1c65b4;
 }
 
 .filter-row {
@@ -115,9 +115,9 @@
 }
 
 .apply-btn {
-  border: 1px solid #1d4ed8;
+  border: 1px solid #1c65b4;
   border-radius: 10px;
-  background: #2563eb;
+  background: #1c65b4;
   color: #fff;
   font-size: 0.76rem;
   font-weight: 700;
@@ -152,9 +152,9 @@
 
 .state-card button {
   justify-self: start;
-  border: 1px solid #1d4ed8;
+  border: 1px solid #1c65b4;
   border-radius: 9px;
-  background: #2563eb;
+  background: #1c65b4;
   color: #fff;
   font-size: 0.74rem;
   font-weight: 700;
@@ -225,9 +225,9 @@
 }
 
 .schedule-badge {
-  border: 1px solid #c7d2fe;
-  background: #eef2ff;
-  color: #3730a3;
+  border: 1px solid #9fc1e3;
+  background: #eaf3fb;
+  color: #1a4e95;
   border-radius: 999px;
   font-size: 0.67rem;
   font-weight: 700;
@@ -277,7 +277,7 @@
   height: 112px;
   border: 1px solid #dbe3f0;
   border-radius: 8px;
-  background: #eef2ff;
+  background: #eaf3fb;
   display: flex;
   align-items: flex-end;
   padding: 0.2rem;
@@ -287,7 +287,7 @@
   display: block;
   width: 100%;
   border-radius: 6px;
-  background: #3b82f6;
+  background: #1c65b4;
   min-height: 3px;
 }
 
@@ -324,7 +324,7 @@
 }
 
 .funnel-band {
-  border: 1px solid #c7d2fe;
+  border: 1px solid #9fc1e3;
   border-radius: 11px;
   background: #eff6ff;
   min-width: 140px;
@@ -410,7 +410,7 @@
 }
 
 .group-bars .bar.on-books {
-  background: #2563eb;
+  background: #1c65b4;
 }
 
 .group-bars .bar.ly {
@@ -459,7 +459,7 @@
 }
 
 .chart-key .chip.on-books {
-  background: #2563eb;
+  background: #1c65b4;
 }
 
 .chart-key .chip.ly {
@@ -543,7 +543,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #3b82f6;
+  background: #1c65b4;
 }
 
 .fill.warning {
@@ -642,6 +642,54 @@ table {
   border-collapse: collapse;
 }
 
+.heatmap-wrap {
+  overflow: auto;
+}
+
+.heatmap-table {
+  min-width: 760px;
+}
+
+.heatmap-table th {
+  text-align: center;
+}
+
+.heatmap-table tbody th {
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #334155;
+  background: #fff;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.heat-cell {
+  width: 100%;
+  min-width: 78px;
+  border: 1px solid #dbe3f0;
+  border-radius: 8px;
+  padding: 0.36rem 0.32rem;
+  display: grid;
+  gap: 0.04rem;
+  justify-items: center;
+  color: #0f172a;
+}
+
+.heat-cell:hover {
+  border-color: #1c65b4;
+}
+
+.heat-cell strong {
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.heat-cell span {
+  font-size: 0.63rem;
+  color: #334155;
+}
+
 th,
 td {
   border-bottom: 1px solid #f1f5f9;
@@ -654,7 +702,7 @@ td {
 .table-link {
   border: none;
   background: transparent;
-  color: #1d4ed8;
+  color: #1c65b4;
   font-size: inherit;
   font-weight: 700;
   padding: 0;
@@ -821,9 +869,9 @@ th {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  border: 1px solid #c7d2fe;
-  background: #eef2ff;
-  color: #3730a3;
+  border: 1px solid #9fc1e3;
+  background: #eaf3fb;
+  color: #1a4e95;
   border-radius: 999px;
   padding: 0.22rem 0.45rem;
   font-size: 0.7rem;
@@ -868,8 +916,8 @@ th {
 }
 
 .schedule-modal .primary {
-  border: 1px solid #1d4ed8;
-  background: #2563eb;
+  border: 1px solid #1c65b4;
+  background: #1c65b4;
   color: #fff;
 }
 

@@ -878,6 +878,56 @@
   }
 }
 
+.versions {
+  h4 {
+    margin: 0.55rem 0 0.4rem;
+    font-size: 0.8rem;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  tbody tr[data-change='added'] {
+    background: #f0fdf4;
+  }
+
+  tbody tr[data-change='removed'] {
+    background: #fff1f2;
+  }
+
+  tbody tr[data-change='modified'] {
+    background: #fffbeb;
+  }
+}
+
+.change-pill {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.change-pill[data-change='added'] {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.change-pill[data-change='removed'] {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.change-pill[data-change='modified'] {
+  background: #fef3c7;
+  color: #92400e;
+}
+
 .compare-controls {
   display: flex;
   gap: 0.5rem;

@@ -219,15 +219,32 @@
         </section>
       }
 
-      @if (sectionEnabled('eventDetails')) {
+      @if (sectionEnabled('introductionWelcome')) {
         <section class="builder-card">
           <header class="section-header collapsible">
-            <h3>Event Details</h3>
-            <button type="button" class="btn-link" (click)="toggleSectionCollapse('eventDetails')">
-              {{ isSectionCollapsed('eventDetails') ? 'Expand' : 'Collapse' }}
+            <h3>Introduction / Welcome Message</h3>
+            <button type="button" class="btn-link" (click)="toggleSectionCollapse('introductionWelcome')">
+              {{ isSectionCollapsed('introductionWelcome') ? 'Expand' : 'Collapse' }}
             </button>
           </header>
-          @if (!isSectionCollapsed('eventDetails')) {
+          @if (!isSectionCollapsed('introductionWelcome')) {
+            <label class="full-width">
+              <span>Message Content</span>
+              <textarea formControlName="introduction" rows="4" placeholder="Welcome message shown in the proposal"></textarea>
+            </label>
+          }
+        </section>
+      }
+
+      @if (sectionEnabledAny(['eventSummary', 'eventDetails'])) {
+        <section class="builder-card">
+          <header class="section-header collapsible">
+            <h3>Event Summary</h3>
+            <button type="button" class="btn-link" (click)="toggleSectionCollapse('eventSummary')">
+              {{ isSectionCollapsed('eventSummary') ? 'Expand' : 'Collapse' }}
+            </button>
+          </header>
+          @if (!isSectionCollapsed('eventSummary')) {
             <div class="event-grid">
               <label><span>Date</span><input type="text" formControlName="eventDate" /></label>
               <label><span>Time</span><input type="text" formControlName="eventTime" /></label>
@@ -239,10 +256,29 @@
         </section>
       }
 
+      @if (sectionEnabled('venueSpaceDetails')) {
+        <section class="builder-card">
+          <header class="section-header collapsible">
+            <h3>Venue / Space Details</h3>
+            <button type="button" class="btn-link" (click)="toggleSectionCollapse('venueSpaceDetails')">
+              {{ isSectionCollapsed('venueSpaceDetails') ? 'Expand' : 'Collapse' }}
+            </button>
+          </header>
+          @if (!isSectionCollapsed('venueSpaceDetails')) {
+            <div class="event-grid">
+              <p class="full-width"><strong>Venue:</strong> {{ venueProfile?.name || 'Venue Name' }}</p>
+              <p class="full-width"><strong>Description:</strong> {{ venueProfile?.description || 'Add venue description in Settings > Venue Profile.' }}</p>
+              <label><span>Assigned Space</span><input type="text" formControlName="assignedSpace" /></label>
+              <label><span>Event Style</span><input type="text" formControlName="eventStyle" /></label>
+            </div>
+          }
+        </section>
+      }
+
       @if (sectionEnabled('menuPackages')) {
         <section class="builder-card">
           <header class="section-header">
-            <h3>Menu / Package Selection</h3>
+            <h3>Menu / Catering</h3>
             <div class="section-header-actions">
               <button type="button" class="btn-secondary" (click)="addLineItemForSection('MenuPackage')">Add Line Item</button>
               <button type="button" class="btn-link" (click)="toggleSectionCollapse('menuPackages')">
@@ -278,11 +314,6 @@
       }
 
       @if (builderViewMode === 'edit') {
-        <label class="full-width">
-          <span>Introduction / Welcome Message</span>
-          <textarea formControlName="introduction" rows="3" placeholder="Welcome message shown in proposal section"></textarea>
-        </label>
-
         <section class="line-editor" formArrayName="lineItems">
           <header>
             <h3>Line Item Editor</h3>
@@ -429,6 +460,45 @@
             </p>
           } @else {
             <p class="ai-pricing-message">{{ aiPricingMessage || 'Gathering data...' }}</p>
+          }
+        </section>
+      }
+
+      @if (sectionEnabled('paymentSchedule')) {
+        <section class="builder-card">
+          <header class="section-header collapsible">
+            <h3>Payment Schedule</h3>
+            <button type="button" class="btn-link" (click)="toggleSectionCollapse('paymentSchedule')">
+              {{ isSectionCollapsed('paymentSchedule') ? 'Expand' : 'Collapse' }}
+            </button>
+          </header>
+          @if (!isSectionCollapsed('paymentSchedule')) {
+            @if (builderPaymentSchedule?.milestones?.length) {
+              <table>
+                <thead>
+                  <tr>
+                    <th>Milestone</th>
+                    <th>Due</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (milestone of builderPaymentSchedule?.milestones || []; track milestone.id) {
+                    <tr>
+                      <td>{{ milestone.label }}</td>
+                      <td>{{ milestone.dueDate | date: 'dd/MM/yyyy' }}</td>
+                      <td>{{ milestone.amount | number: '1.2-2' }} {{ milestone.currencyCode }}</td>
+                      <td>{{ milestone.status }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            } @else {
+              <p class="muted">
+                No payment milestones are configured yet for this enquiry. Milestones can be generated from venue payment schedule templates.
+              </p>
+            }
           }
         </section>
       }
@@ -797,20 +867,58 @@
                 <p><strong>Right total:</strong> {{ diff.rightTotal | number: '1.2-2' }}</p>
                 <p><strong>Delta:</strong> {{ diff.totalDelta | number: '1.2-2' }}</p>
               </div>
+
+              @if (diff.sectionDeltas.length > 0) {
+                <h4>Section Changes</h4>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Section</th>
+                      <th>Left</th>
+                      <th>Right</th>
+                      <th>Change Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (section of diff.sectionDeltas; track section.key) {
+                      <tr [attr.data-change]="comparisonChangeToken(section.changeType)">
+                        <td>{{ section.title }}</td>
+                        <td>{{ section.leftEnabled ? 'Enabled' : 'Disabled' }}</td>
+                        <td>{{ section.rightEnabled ? 'Enabled' : 'Disabled' }}</td>
+                        <td>
+                          <span class="change-pill" [attr.data-change]="comparisonChangeToken(section.changeType)">
+                            {{ section.changeType }}
+                          </span>
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+
+              <h4>Line Item Price Changes</h4>
               <table>
                 <thead>
                   <tr>
                     <th>Description</th>
-                    <th>Change Type</th>
+                    <th>Left Total</th>
+                    <th>Right Total</th>
                     <th>Delta</th>
+                    <th>Change Type</th>
                   </tr>
                 </thead>
                 <tbody>
                   @for (line of diff.lineDeltas; track line) {
-                    <tr>
+                    <tr [attr.data-change]="comparisonChangeToken(line.changeType)">
                       <td>{{ line.description }}</td>
-                      <td>{{ line.changeType }}</td>
+                      <td>{{ line.leftTotal | number: '1.2-2' }}</td>
+                      <td>{{ line.rightTotal | number: '1.2-2' }}</td>
                       <td>{{ line.delta | number: '1.2-2' }}</td>
+                      <td>
+                        <span class="change-pill" [attr.data-change]="comparisonChangeToken(line.changeType)">
+                          {{ line.changeType }}
+                        </span>
+                      </td>
                     </tr>
                   }
                 </tbody>

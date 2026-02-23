@@ -79,6 +79,10 @@ export interface UpdateVenueProfileRequest {
   maxHoldsPerDateAndSpace: number;
 }
 
+export interface HoldManagementSettingsDto {
+  notifyClientOnHoldExpiry: boolean;
+}
+
 export interface SpaceCapacityDto {
   setupStyle: string;
   capacity: number;
@@ -556,6 +560,21 @@ export interface AutomationSettingsDto {
   followUpInactiveDays: number;
   autoArchiveEnabled: boolean;
   autoArchiveDays: number;
+  autoAssignmentStrategy: string;
+  autoAssignmentRoutes: AutomationAssignmentRouteDto[];
+  autoCompleteAfterEventEnabled: boolean;
+  autoCompleteAfterEventDays: number;
+  autoSendPostEventThankYou: boolean;
+  postEventThankYouTemplateKey?: string | null;
+  paymentReminderLeadDays: number;
+  paymentReminderOverdueCadenceDays: number;
+  webFormAutoAcknowledgementEnabled: boolean;
+  webFormAutoAcknowledgementTemplateKey?: string | null;
+}
+
+export interface AutomationAssignmentRouteDto {
+  matchValue: string;
+  assigneeUserId: string;
 }
 
 export interface AutomationTriggerDto {
@@ -789,6 +808,7 @@ export interface EnquiryListItemDto {
   currencyCode: string;
   eventManagerName?: string | null;
   lastActivityAtUtc: string;
+  holdExpiresAtUtc?: string | null;
   daysSinceContact: number;
   sourceType: string;
   venueId: string;
@@ -809,6 +829,55 @@ export interface EnquiryListResponse {
   stats: EnquiryStatsDto;
   statusTabCounts: Record<string, number>;
   page: PagedResult<EnquiryListItemDto>;
+}
+
+export interface EnquirySavedFilterViewDto {
+  id: string;
+  venueId: string;
+  name: string;
+  statusTab: string;
+  search: string;
+  quickFilter: string;
+  eventManagerUserId: string;
+  eventType: string;
+  eventStyle: string;
+  dateFrom: string;
+  dateTo: string;
+  spaceId: string;
+  valueMin: string;
+  valueMax: string;
+  source: string;
+  conversionScoreMin: string;
+  conversionScoreMax: string;
+  sort: string;
+  pageSize: number;
+  createdAtUtc: string;
+  updatedAtUtc: string;
+}
+
+export interface EnquirySavedFilterViewsResponse {
+  views: EnquirySavedFilterViewDto[];
+}
+
+export interface UpsertEnquirySavedFilterViewRequest {
+  venueId: string;
+  name: string;
+  statusTab?: string | null;
+  search?: string | null;
+  quickFilter?: string | null;
+  eventManagerUserId?: string | null;
+  eventType?: string | null;
+  eventStyle?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  spaceId?: string | null;
+  valueMin?: string | null;
+  valueMax?: string | null;
+  source?: string | null;
+  conversionScoreMin?: string | null;
+  conversionScoreMax?: string | null;
+  sort?: string | null;
+  pageSize?: number | null;
 }
 
 export interface BulkActionFailureDto {
@@ -1460,6 +1529,9 @@ export interface CreateEnquiryRequest {
 export interface GenerateTestEnquiriesRequest {
   venueId: string;
   count?: number;
+  startDate?: string;
+  endDate?: string;
+  onePerDay?: boolean;
 }
 
 export interface GenerateTestEnquiriesResponse {
@@ -1576,6 +1648,7 @@ export interface DiaryEventDto {
   eventStyle?: string | null;
   startUtc: string;
   endUtc: string;
+  holdExpiresAtUtc?: string | null;
   eventManagerName?: string | null;
   contactName?: string | null;
   contactPhoneNumberE164?: string | null;
@@ -1834,12 +1907,21 @@ export interface ProposalComparisonLineDto {
   changeType: string;
 }
 
+export interface ProposalComparisonSectionDto {
+  key: string;
+  title: string;
+  leftEnabled: boolean;
+  rightEnabled: boolean;
+  changeType: string;
+}
+
 export interface ProposalComparisonResponse {
   leftProposalId: string;
   rightProposalId: string;
   leftTotal: number;
   rightTotal: number;
   totalDelta: number;
+  sectionDeltas: ProposalComparisonSectionDto[];
   lineDeltas: ProposalComparisonLineDto[];
 }
 
@@ -2332,6 +2414,17 @@ export interface UpcomingPaymentsWidgetDto {
   currencyCode: string;
 }
 
+export interface UpcomingPaymentMilestoneDto {
+  milestoneId: string;
+  enquiryId: string;
+  enquiryReference: string;
+  milestoneName: string;
+  dueDate: string;
+  balanceAmount: number;
+  currencyCode: string;
+  status: 'Overdue' | 'DueSoon' | 'Upcoming' | string;
+}
+
 export interface ActivityFeedItemDto {
   id: string;
   actionType: string;
@@ -2353,6 +2446,8 @@ export interface UpcomingEventDto {
   spaceName?: string | null;
   guests: number;
   status: string;
+  eventStyle?: string | null;
+  eventManagerName?: string | null;
 }
 
 export interface TaskDueDto {
@@ -2398,6 +2493,7 @@ export interface DashboardResponse {
   kpis: DashboardKpiCardDto[];
   pipeline: PipelineWidgetDto;
   upcomingPayments: UpcomingPaymentsWidgetDto;
+  upcomingPaymentMilestones: UpcomingPaymentMilestoneDto[];
   recentActivity: ActivityFeedItemDto[];
   upcomingEvents: UpcomingEventDto[];
   taskSummary: TaskSummaryWidgetDto;
@@ -2912,6 +3008,8 @@ export interface NotificationPreferenceMatrixRowDto {
   emailOperatorEnabled: boolean;
   emailClientEnabled: boolean;
   channel: 'InApp' | 'Email' | 'Both' | 'None' | string;
+  operatorEmailTemplateKey?: string | null;
+  clientEmailTemplateKey?: string | null;
 }
 
 export interface NotificationPreferenceMatrixResponse {
@@ -3079,6 +3177,7 @@ export interface ReportFilterParams {
   compareTo?: string;
   eventType?: string;
   status?: string;
+  spaceId?: string;
 }
 
 export interface TicketDashboardVenueDto {
@@ -3345,6 +3444,14 @@ export class ApiService {
 
   updateVenueProfile(venueId: string, payload: UpdateVenueProfileRequest): Observable<VenueProfileDto> {
     return this.http.put<VenueProfileDto>(`/api/venues/${venueId}`, payload);
+  }
+
+  getHoldManagementSettings(venueId: string): Observable<HoldManagementSettingsDto> {
+    return this.http.get<HoldManagementSettingsDto>(`/api/venues/${venueId}/settings/hold-management`);
+  }
+
+  upsertHoldManagementSettings(venueId: string, payload: HoldManagementSettingsDto): Observable<HoldManagementSettingsDto> {
+    return this.http.put<HoldManagementSettingsDto>(`/api/venues/${venueId}/settings/hold-management`, payload);
   }
 
   getVenueSpaces(venueId: string): Observable<SpaceSummaryDto[]> {
@@ -3990,14 +4097,58 @@ export class ApiService {
     return this.http.get<RecentlyViewedBookingDto[]>('/api/users/me/recently-viewed');
   }
 
+  getEnquirySavedFilterViews(venueId: string): Observable<EnquirySavedFilterViewsResponse> {
+    const params = new HttpParams().set('venueId', venueId);
+    return this.getWithApiPathFallback<EnquirySavedFilterViewsResponse>(
+      '/api/enquiries/saved-views',
+      '/api/v1/enquiries/saved-views',
+      { params }
+    );
+  }
+
+  createEnquirySavedFilterView(payload: UpsertEnquirySavedFilterViewRequest): Observable<EnquirySavedFilterViewDto> {
+    return this.postWithApiPathFallback<EnquirySavedFilterViewDto>(
+      '/api/enquiries/saved-views',
+      '/api/v1/enquiries/saved-views',
+      payload
+    );
+  }
+
+  updateEnquirySavedFilterView(
+    viewId: string,
+    payload: UpsertEnquirySavedFilterViewRequest
+  ): Observable<EnquirySavedFilterViewDto> {
+    return this.putWithApiPathFallback<EnquirySavedFilterViewDto>(
+      `/api/enquiries/saved-views/${viewId}`,
+      `/api/v1/enquiries/saved-views/${viewId}`,
+      payload
+    );
+  }
+
+  deleteEnquirySavedFilterView(viewId: string, venueId: string): Observable<void> {
+    const params = new HttpParams().set('venueId', venueId);
+    return this.deleteWithApiPathFallback(
+      `/api/enquiries/saved-views/${viewId}`,
+      `/api/v1/enquiries/saved-views/${viewId}`,
+      { params }
+    );
+  }
+
   getEnquiries(params: {
     venueId: string;
     statusTab?: string;
     period?: string;
+    customStart?: string;
+    customEnd?: string;
     eventManagerUserId?: string;
     eventType?: string;
     eventStyle?: string;
+    dateFrom?: string;
+    dateTo?: string;
     source?: string;
+    spaceId?: string;
+    valueMin?: number;
+    valueMax?: number;
     conversionScoreMin?: number;
     conversionScoreMax?: number;
     quickFilter?: string;
@@ -4015,6 +4166,12 @@ export class ApiService {
     if (params.period) {
       queryParams = queryParams.set('period', params.period);
     }
+    if (params.customStart) {
+      queryParams = queryParams.set('customStart', params.customStart);
+    }
+    if (params.customEnd) {
+      queryParams = queryParams.set('customEnd', params.customEnd);
+    }
     if (params.eventManagerUserId) {
       queryParams = queryParams.set('eventManagerUserId', params.eventManagerUserId);
     }
@@ -4024,8 +4181,23 @@ export class ApiService {
     if (params.eventStyle) {
       queryParams = queryParams.set('eventStyle', params.eventStyle);
     }
+    if (params.dateFrom) {
+      queryParams = queryParams.set('dateFrom', params.dateFrom);
+    }
+    if (params.dateTo) {
+      queryParams = queryParams.set('dateTo', params.dateTo);
+    }
     if (params.source) {
       queryParams = queryParams.set('source', params.source);
+    }
+    if (params.spaceId) {
+      queryParams = queryParams.set('spaceId', params.spaceId);
+    }
+    if (typeof params.valueMin === 'number' && Number.isFinite(params.valueMin)) {
+      queryParams = queryParams.set('valueMin', params.valueMin);
+    }
+    if (typeof params.valueMax === 'number' && Number.isFinite(params.valueMax)) {
+      queryParams = queryParams.set('valueMax', params.valueMax);
     }
     if (typeof params.conversionScoreMin === 'number' && Number.isFinite(params.conversionScoreMin)) {
       queryParams = queryParams.set('conversionScoreMin', params.conversionScoreMin);
@@ -4117,7 +4289,11 @@ export class ApiService {
   }
 
   generateTestEnquiries(payload: GenerateTestEnquiriesRequest): Observable<GenerateTestEnquiriesResponse> {
-    return this.http.post<GenerateTestEnquiriesResponse>('/api/enquiries/generate-test-enquiries', payload);
+    return this.postWithApiPathFallback<GenerateTestEnquiriesResponse>(
+      '/api/enquiries/generate-test-enquiries',
+      '/api/v1/enquiries/generate-test-enquiries',
+      payload
+    );
   }
 
   getEnquiry(enquiryId: string): Observable<EnquiryDetailResponse> {
@@ -4556,7 +4732,7 @@ export class ApiService {
 
   exportDiary(params: {
     venueId: string;
-    view: 'day' | 'week' | 'month' | 'timeline' | 'operations';
+    view: 'day' | 'week' | 'month' | 'list' | 'timeline' | 'operations';
     format: 'xlsx' | 'pdf';
     startDate?: string;
     spaceIds?: string[];
@@ -5185,12 +5361,28 @@ export class ApiService {
     venueId: string;
     query: string;
     types?: string[];
+    sort?: 'relevance' | 'date';
+    status?: string;
+    from?: string;
+    to?: string;
     page?: number;
     pageSize?: number;
   }): Observable<GlobalSearchResultsResponse> {
     let queryParams = new HttpParams().set('venueId', params.venueId).set('q', params.query);
     if (params.types && params.types.length > 0) {
       queryParams = queryParams.set('types', params.types.join(','));
+    }
+    if (params.sort) {
+      queryParams = queryParams.set('sort', params.sort);
+    }
+    if (params.status) {
+      queryParams = queryParams.set('status', params.status);
+    }
+    if (params.from) {
+      queryParams = queryParams.set('from', params.from);
+    }
+    if (params.to) {
+      queryParams = queryParams.set('to', params.to);
     }
     if (params.page) {
       queryParams = queryParams.set('page', params.page);
@@ -5199,6 +5391,11 @@ export class ApiService {
       queryParams = queryParams.set('pageSize', params.pageSize);
     }
     return this.http.get<GlobalSearchResultsResponse>('/api/search/results', { params: queryParams });
+  }
+
+  removeRecentSearch(query: string): Observable<void> {
+    const params = new HttpParams().set('q', query);
+    return this.http.delete<void>('/api/search/recent', { params });
   }
 
   getTasks(params: {
@@ -5433,6 +5630,8 @@ export class ApiService {
       inAppEnabled: boolean;
       emailOperatorEnabled: boolean;
       emailClientEnabled: boolean;
+      operatorEmailTemplateKey?: string | null;
+      clientEmailTemplateKey?: string | null;
     }>,
     venueId?: string
   ): Observable<NotificationPreferenceMatrixResponse> {
@@ -5488,6 +5687,9 @@ export class ApiService {
     if (params.status) {
       queryParams = queryParams.set('status', params.status);
     }
+    if (params.spaceId) {
+      queryParams = queryParams.set('spaceId', params.spaceId);
+    }
     return this.http.get<ReportResponse>(`/api/reports/${reportKey}`, { params: queryParams });
   }
 
@@ -5537,7 +5739,17 @@ export class ApiService {
 
   exportReport(
     reportKey: string,
-    params: { venueId: string; format: 'csv' | 'xlsx' | 'pdf'; from?: string; to?: string; compareFrom?: string; compareTo?: string; eventType?: string }
+    params: {
+      venueId: string;
+      format: 'csv' | 'xlsx' | 'pdf';
+      from?: string;
+      to?: string;
+      compareFrom?: string;
+      compareTo?: string;
+      eventType?: string;
+      status?: string;
+      spaceId?: string;
+    }
   ): Observable<Blob> {
     let queryParams = new HttpParams().set('venueId', params.venueId).set('format', params.format);
     if (params.from) {
@@ -5554,6 +5766,12 @@ export class ApiService {
     }
     if (params.eventType) {
       queryParams = queryParams.set('eventType', params.eventType);
+    }
+    if (params.status) {
+      queryParams = queryParams.set('status', params.status);
+    }
+    if (params.spaceId) {
+      queryParams = queryParams.set('spaceId', params.spaceId);
     }
     return this.http.get(`/api/reports/${reportKey}/export`, { params: queryParams, responseType: 'blob' });
   }

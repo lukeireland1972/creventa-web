@@ -3,6 +3,7 @@ import { Component, DestroyRef, OnInit, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import { distinctUntilChanged, map } from 'rxjs';
 import {
   ApiService,
@@ -18,10 +19,22 @@ import {
 } from '../../services/api.service';
 import { AuthService } from '../../services/auth.service';
 
+interface AttendeeImportPreviewRow {
+  rowNumber: number;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumberE164: string;
+  eventInterest: string;
+  notes: string;
+  followUpStatus: string;
+  issues: string[];
+}
+
 @Component({
   selector: 'app-events-hub',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, FormsModule],
+  imports: [CommonModule, ReactiveFormsModule, FormsModule, RouterLink],
   templateUrl: './events-hub.component.html',
   styleUrl: './events-hub.component.scss'
 })
@@ -63,8 +76,16 @@ export class EventsHubComponent implements OnInit {
   syncResponse: EventsHubSyncResponse | null = null;
   attendeeImportFile: File | null = null;
   attendeeImportFileName = '';
+  attendeeImportHeaders: string[] = [];
+  attendeeImportPreviewRows: AttendeeImportPreviewRow[] = [];
+  attendeeImportWarnings: string[] = [];
+  attendeeImportTotalRows = 0;
+  attendeeImportValidRows = 0;
+  attendeeImportInvalidRows = 0;
+  attendeeImportReady = false;
   registrationLinkCopied = false;
   bulkFollowUpStatus: 'Pending' | 'Contacted' | 'Converted' | 'NotInterested' | 'NoResponse' = 'Contacted';
+  private attendeeImportPreviewToken = 0;
 
   eventForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
@@ -136,6 +157,12 @@ export class EventsHubComponent implements OnInit {
         if (!hasEarlyBird) {
           this.eventForm.patchValue({ earlyBirdPrice: null, earlyBirdEndsOn: null }, { emitEvent: false });
         }
+      });
+
+    this.attendeeImportMappingForm.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        this.refreshAttendeeImportPreview();
       });
   }
 
@@ -508,6 +535,27 @@ export class EventsHubComponent implements OnInit {
       });
   }
 
+  updateAttendeeFollowUpStatus(
+    attendee: EventsHubAttendeeDto,
+    followUpStatus: 'Pending' | 'Contacted' | 'Converted' | 'NotInterested' | 'NoResponse'
+  ): void {
+    if (!this.venueId || !this.selectedEvent || attendee.followUpStatus === followUpStatus) {
+      return;
+    }
+
+    this.api.setEventsHubAttendeeFollowUpStatus(this.venueId, this.selectedEvent.id, attendee.id, followUpStatus)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.loadAttendees(this.selectedEvent!.id);
+          this.loadEvents();
+        },
+        error: () => {
+          this.errorMessage = 'Unable to update attendee follow-up status.';
+        }
+      });
+  }
+
   toggleSelectAllAttendees(checked: boolean): void {
     if (checked) {
       this.selectedAttendeeIds = new Set(this.attendees.map((x) => x.id));
@@ -615,11 +663,17 @@ export class EventsHubComponent implements OnInit {
     const file = input.files?.[0] ?? null;
     this.attendeeImportFile = file;
     this.attendeeImportFileName = file?.name ?? '';
+    this.refreshAttendeeImportPreview();
   }
 
   importAttendeesCsv(): void {
     if (!this.venueId || !this.selectedEvent || !this.attendeeImportFile) {
       this.errorMessage = 'Select a CSV file to import attendees.';
+      return;
+    }
+
+    if (!this.attendeeImportReady) {
+      this.errorMessage = 'Resolve CSV preview errors before importing.';
       return;
     }
 
@@ -642,6 +696,7 @@ export class EventsHubComponent implements OnInit {
           }
           this.attendeeImportFile = null;
           this.attendeeImportFileName = '';
+          this.resetAttendeeImportPreview();
           this.loadAttendees(this.selectedEvent!.id);
           this.loadEvents();
           this.loadAnalytics(this.selectedEvent!.id);
@@ -651,6 +706,28 @@ export class EventsHubComponent implements OnInit {
           this.errorMessage = 'Unable to import attendee CSV.';
         }
       });
+  }
+
+  downloadAttendeeTemplateCsv(): void {
+    const rows = [
+      ['FirstName', 'LastName', 'Email', 'Phone', 'EventInterest', 'Notes', 'FollowUpStatus'],
+      ['Emma', 'Wright', 'emma@example.com', '+447700900001', 'Wedding', 'Interested in ceremony and reception package', 'Pending'],
+      ['Daniel', 'Chen', 'daniel@example.com', '+447700900002', 'Corporate Conference', 'Needs breakout room options', 'Contacted']
+    ];
+
+    const csv = rows
+      .map((row) => row.map((value) => this.csvEscape(value)).join(','))
+      .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.setAttribute('download', 'venue-event-attendees-template.csv');
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    window.URL.revokeObjectURL(url);
   }
 
   copyPublicRegistrationLink(): void {
@@ -929,6 +1006,9 @@ export class EventsHubComponent implements OnInit {
     this.lastActionMessage = '';
     this.errorMessage = '';
     this.loading = true;
+    this.attendeeImportFile = null;
+    this.attendeeImportFileName = '';
+    this.resetAttendeeImportPreview();
     this.startNewEvent();
   }
 
@@ -947,6 +1027,231 @@ export class EventsHubComponent implements OnInit {
     }
 
     return 'Other';
+  }
+
+  followUpStatusLabel(status: string): string {
+    if (status === 'NotInterested') {
+      return 'Not Interested';
+    }
+
+    if (status === 'NoResponse') {
+      return 'No Response';
+    }
+
+    return status;
+  }
+
+  private refreshAttendeeImportPreview(): void {
+    const file = this.attendeeImportFile;
+    if (!file) {
+      this.resetAttendeeImportPreview();
+      return;
+    }
+
+    const token = ++this.attendeeImportPreviewToken;
+    file.text()
+      .then((rawText) => {
+        if (token !== this.attendeeImportPreviewToken) {
+          return;
+        }
+
+        this.buildAttendeeImportPreview(rawText);
+      })
+      .catch(() => {
+        if (token !== this.attendeeImportPreviewToken) {
+          return;
+        }
+
+        this.resetAttendeeImportPreview();
+        this.attendeeImportWarnings = ['Unable to read CSV file.'];
+        this.attendeeImportReady = false;
+      });
+  }
+
+  private buildAttendeeImportPreview(rawText: string): void {
+    const lines = rawText
+      .split(/\r?\n/g)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    this.resetAttendeeImportPreview();
+    if (lines.length <= 1) {
+      this.attendeeImportWarnings = ['CSV must include a header row and at least one data row.'];
+      return;
+    }
+
+    const headers = this.parseCsvRow(lines[0]).map((value) => value.trim());
+    const headerLookup = new Map<string, number>();
+    headers.forEach((header, index) => {
+      if (header.length > 0 && !headerLookup.has(header.toLowerCase())) {
+        headerLookup.set(header.toLowerCase(), index);
+      }
+    });
+
+    const mapping = this.attendeeImportMappingForm.getRawValue();
+    const firstNameIndex = this.resolveImportColumnIndex(headerLookup, mapping.firstNameColumn, ['FirstName', 'First Name', 'first_name']);
+    const lastNameIndex = this.resolveImportColumnIndex(headerLookup, mapping.lastNameColumn, ['LastName', 'Last Name', 'last_name']);
+    const emailIndex = this.resolveImportColumnIndex(headerLookup, mapping.emailColumn, ['Email', 'Email Address', 'email_address']);
+    const phoneIndex = this.resolveImportColumnIndex(headerLookup, mapping.phoneColumn, ['Phone', 'PhoneNumber', 'Phone Number', 'phone_number']);
+    const interestIndex = this.resolveImportColumnIndex(headerLookup, mapping.eventInterestColumn, ['EventInterest', 'Event Interest', 'Interest']);
+    const notesIndex = this.resolveImportColumnIndex(headerLookup, mapping.notesColumn, ['Notes', 'Comments']);
+    const followUpIndex = this.resolveImportColumnIndex(headerLookup, mapping.followUpStatusColumn, ['FollowUpStatus', 'Follow Up Status', 'Status']);
+
+    this.attendeeImportHeaders = headers;
+    const missingRequired: string[] = [];
+    if (firstNameIndex < 0) {
+      missingRequired.push('First Name');
+    }
+    if (lastNameIndex < 0) {
+      missingRequired.push('Last Name');
+    }
+    if (emailIndex < 0) {
+      missingRequired.push('Email');
+    }
+    if (missingRequired.length > 0) {
+      this.attendeeImportWarnings = [`Missing required column mapping: ${missingRequired.join(', ')}.`];
+      return;
+    }
+
+    const validStatus = new Set(this.followUpStatusOptions);
+    const emailSeen = new Set<string>();
+    const previewRows: AttendeeImportPreviewRow[] = [];
+    let validRows = 0;
+    let invalidRows = 0;
+
+    for (let lineIndex = 1; lineIndex < lines.length; lineIndex += 1) {
+      const row = this.parseCsvRow(lines[lineIndex]);
+      const getCell = (index: number): string => (index >= 0 && index < row.length ? row[index].trim() : '');
+
+      const firstName = getCell(firstNameIndex);
+      const lastName = getCell(lastNameIndex);
+      const email = getCell(emailIndex).toLowerCase();
+      const phone = phoneIndex >= 0 ? getCell(phoneIndex) : '';
+      const interest = interestIndex >= 0 ? getCell(interestIndex) : '';
+      const notes = notesIndex >= 0 ? getCell(notesIndex) : '';
+      const followUpRaw = followUpIndex >= 0 ? getCell(followUpIndex) : '';
+      const followUpStatus = followUpRaw || 'Pending';
+
+      const issues: string[] = [];
+      if (!firstName) {
+        issues.push('Missing first name');
+      }
+      if (!lastName) {
+        issues.push('Missing last name');
+      }
+      if (!email) {
+        issues.push('Missing email');
+      } else {
+        if (!this.isLikelyEmail(email)) {
+          issues.push('Invalid email format');
+        }
+
+        if (emailSeen.has(email)) {
+          issues.push('Duplicate email in file');
+        }
+      }
+
+      if (followUpRaw && !validStatus.has(followUpRaw as typeof this.followUpStatusOptions[number])) {
+        issues.push('Unknown follow-up status');
+      }
+
+      if (issues.length === 0) {
+        validRows += 1;
+      } else {
+        invalidRows += 1;
+      }
+
+      emailSeen.add(email);
+
+      if (previewRows.length < 12) {
+        previewRows.push({
+          rowNumber: lineIndex + 1,
+          firstName,
+          lastName,
+          email,
+          phoneNumberE164: phone,
+          eventInterest: interest,
+          notes,
+          followUpStatus,
+          issues
+        });
+      }
+    }
+
+    this.attendeeImportPreviewRows = previewRows;
+    this.attendeeImportTotalRows = Math.max(0, lines.length - 1);
+    this.attendeeImportValidRows = validRows;
+    this.attendeeImportInvalidRows = invalidRows;
+    this.attendeeImportWarnings = [];
+    this.attendeeImportReady = validRows > 0 && missingRequired.length === 0;
+  }
+
+  private resolveImportColumnIndex(headerLookup: Map<string, number>, explicitName: string, fallbacks: string[]): number {
+    const explicit = explicitName?.trim().toLowerCase();
+    if (explicit && headerLookup.has(explicit)) {
+      return headerLookup.get(explicit) ?? -1;
+    }
+
+    for (const fallback of fallbacks) {
+      const index = headerLookup.get(fallback.toLowerCase());
+      if (index !== undefined) {
+        return index;
+      }
+    }
+
+    return -1;
+  }
+
+  private resetAttendeeImportPreview(): void {
+    this.attendeeImportHeaders = [];
+    this.attendeeImportPreviewRows = [];
+    this.attendeeImportWarnings = [];
+    this.attendeeImportTotalRows = 0;
+    this.attendeeImportValidRows = 0;
+    this.attendeeImportInvalidRows = 0;
+    this.attendeeImportReady = false;
+  }
+
+  private parseCsvRow(line: string): string[] {
+    const values: string[] = [];
+    let current = '';
+    let insideQuotes = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      const next = index + 1 < line.length ? line[index + 1] : '';
+
+      if (char === '"' && insideQuotes && next === '"') {
+        current += '"';
+        index += 1;
+        continue;
+      }
+
+      if (char === '"') {
+        insideQuotes = !insideQuotes;
+        continue;
+      }
+
+      if (char === ',' && !insideQuotes) {
+        values.push(current);
+        current = '';
+        continue;
+      }
+
+      current += char;
+    }
+
+    values.push(current);
+    return values;
+  }
+
+  private isLikelyEmail(value: string): boolean {
+    const normalized = value.trim();
+    const atIndex = normalized.indexOf('@');
+    return atIndex > 0
+      && atIndex < normalized.length - 1
+      && normalized.indexOf(' ', 0) === -1
+      && normalized.indexOf('.', atIndex) > atIndex + 1;
   }
 
   private trimOrNull(value: string | null | undefined): string | null {

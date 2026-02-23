@@ -1,0 +1,127 @@
+<section class="search-results-page">
+  <header class="page-header">
+    <h1>Search Results</h1>
+    <p>Search across enquiries, contacts, events, and proposals.</p>
+  </header>
+
+  <form class="filters-card" (submit)="submitSearch($event)">
+    <label class="query-field">
+      Search
+      <input
+        type="text"
+        [ngModel]="query"
+        (ngModelChange)="query = $event"
+        name="query"
+        placeholder="Type at least 3 characters..." />
+    </label>
+
+    <div class="tab-row" role="tablist" aria-label="Search result tabs">
+      <button type="button" class="tab-btn" [class.active]="activeTab === 'all'" (click)="selectTab('all')">
+        All <span>{{ tabCounts.all }}</span>
+      </button>
+      <button type="button" class="tab-btn" [class.active]="activeTab === 'enquiries'" (click)="selectTab('enquiries')">
+        Enquiries <span>{{ tabCounts.enquiries }}</span>
+      </button>
+      <button type="button" class="tab-btn" [class.active]="activeTab === 'contacts'" (click)="selectTab('contacts')">
+        Contacts <span>{{ tabCounts.contacts }}</span>
+      </button>
+      <button type="button" class="tab-btn" [class.active]="activeTab === 'proposals'" (click)="selectTab('proposals')">
+        Proposals <span>{{ tabCounts.proposals }}</span>
+      </button>
+      <button type="button" class="tab-btn" [class.active]="activeTab === 'events'" (click)="selectTab('events')">
+        Events <span>{{ tabCounts.events }}</span>
+      </button>
+    </div>
+
+    <div class="filters-row">
+      <label class="page-size">
+        Sort
+        <select [ngModel]="sortMode" (ngModelChange)="sortMode = $event; applySearchFilters()" name="sortMode">
+          <option value="relevance">Relevance</option>
+          <option value="date">Date</option>
+        </select>
+      </label>
+
+      <label class="page-size">
+        Status
+        <select [ngModel]="statusFilter" (ngModelChange)="statusFilter = $event; applySearchFilters()" name="statusFilter">
+          @for (status of statusOptions; track status) {
+            <option [value]="status">{{ status }}</option>
+          }
+        </select>
+      </label>
+
+      <label class="page-size">
+        From
+        <input type="date" [ngModel]="dateFrom" (ngModelChange)="dateFrom = $event; applySearchFilters()" name="dateFrom" />
+      </label>
+
+      <label class="page-size">
+        To
+        <input type="date" [ngModel]="dateTo" (ngModelChange)="dateTo = $event; applySearchFilters()" name="dateTo" />
+      </label>
+
+      <label class="page-size">
+        Page size
+        <select [ngModel]="pageSize" (ngModelChange)="updatePageSize($event)" name="pageSize">
+          @for (size of pageSizeOptions; track size) {
+            <option [ngValue]="size">{{ size }}</option>
+          }
+        </select>
+      </label>
+
+      <button type="submit" class="apply-btn">Search</button>
+    </div>
+  </form>
+
+  @if (loading) {
+    <article class="state-card">
+      <h2>Searching...</h2>
+      <p>Fetching results for "{{ query }}".</p>
+    </article>
+  } @else if (errorMessage) {
+    <article class="state-card error">
+      <h2>Search unavailable</h2>
+      <p>{{ errorMessage }}</p>
+    </article>
+  } @else if (query.trim().length < 3) {
+    <article class="state-card">
+      <h2>Start typing</h2>
+      <p>Enter at least 3 characters to search.</p>
+    </article>
+  } @else {
+    <section class="results-card">
+      <header class="results-header">
+        <div>
+          <h2>{{ resultCountLabel }}</h2>
+          @if (intentLabel) {
+            <p>Intent: {{ intentLabel }}</p>
+          }
+        </div>
+        <div class="pager">
+          <button type="button" (click)="previousPage()" [disabled]="page <= 1">Previous</button>
+          <span>Page {{ page }} / {{ totalPages }}</span>
+          <button type="button" (click)="nextPage()" [disabled]="page >= totalPages">Next</button>
+        </div>
+      </header>
+
+      @for (group of groupedResults; track group.type) {
+        <section class="result-group">
+          <h3>{{ group.type }}</h3>
+          @for (result of group.results; track result.entityId + '-' + result.route) {
+            <button type="button" class="result-item" (click)="openResult(result)">
+              <strong [innerHTML]="highlightText(result.primaryText)"></strong>
+              @if (result.secondaryText) {
+                <span [innerHTML]="highlightText(result.secondaryText)"></span>
+              }
+            </button>
+          }
+        </section>
+      }
+
+      @if (groupedResults.length === 0) {
+        <p class="empty">No results found for "{{ query }}".</p>
+      }
+    </section>
+  }
+</section>

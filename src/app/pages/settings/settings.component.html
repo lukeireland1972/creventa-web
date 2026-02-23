@@ -147,7 +147,7 @@
               </label>
 
               <label>
-                Hold Warning (days)
+                First Hold Warning (days before expiry)
                 <input type="number" min="0" formControlName="holdWarningDays" />
               </label>
 
@@ -163,6 +163,11 @@
               <label>
                 Max Holds per Date/Space
                 <input type="number" min="1" formControlName="maxHoldsPerDateAndSpace" />
+              </label>
+
+              <label class="full-width checkbox-field">
+                <input type="checkbox" formControlName="notifyClientOnHoldExpiry" />
+                <span>Notify client by email when a provisional hold expires</span>
               </label>
 
               <label class="full-width">
@@ -1430,6 +1435,8 @@
                       <th>In-App</th>
                       <th>Email Operator</th>
                       <th>Email Client</th>
+                      <th>Operator Template</th>
+                      <th>Client Template</th>
                       <th>Channel</th>
                     </tr>
                   </thead>
@@ -1460,6 +1467,22 @@
                           </label>
                         </td>
                         <td>
+                          <select [(ngModel)]="row.operatorEmailTemplateKey" [ngModelOptions]="{ standalone: true }">
+                            <option [ngValue]="null">Default</option>
+                            @for (template of notificationEmailTemplateOptions; track template.key) {
+                              <option [ngValue]="template.key">{{ template.name }}</option>
+                            }
+                          </select>
+                        </td>
+                        <td>
+                          <select [(ngModel)]="row.clientEmailTemplateKey" [ngModelOptions]="{ standalone: true }">
+                            <option [ngValue]="null">Default</option>
+                            @for (template of notificationEmailTemplateOptions; track template.key) {
+                              <option [ngValue]="template.key">{{ template.name }}</option>
+                            }
+                          </select>
+                        </td>
+                        <td>
                           {{
                             row.inAppEnabled && row.emailOperatorEnabled
                               ? 'Both'
@@ -1470,7 +1493,7 @@
                     }
                     @if (notificationMatrixRows.length === 0) {
                       <tr>
-                        <td colspan="6" class="empty-row">No notification triggers are configured yet.</td>
+                        <td colspan="8" class="empty-row">No notification triggers are configured yet.</td>
                       </tr>
                     }
                   </tbody>
@@ -1508,6 +1531,69 @@
                 <label class="checkbox">
                   <input type="checkbox" formControlName="autoArchiveEnabled" />
                   <span>Enable Auto-Archive</span>
+                </label>
+
+                <label>
+                  Auto Assignment Strategy
+                  <select formControlName="autoAssignmentStrategy">
+                    @for (option of autoAssignmentStrategyOptions; track option.value) {
+                      <option [value]="option.value">{{ option.label }}</option>
+                    }
+                  </select>
+                </label>
+
+                @if (
+                  automationSettingsForm.get('autoAssignmentStrategy')?.value === 'ByEventType' ||
+                  automationSettingsForm.get('autoAssignmentStrategy')?.value === 'BySource'
+                ) {
+                  <label class="full-width">
+                    Assignment Routes
+                    <textarea
+                      rows="4"
+                      formControlName="autoAssignmentRoutesText"
+                      placeholder="One route per line: MatchValue=Assignee (GUID or role e.g. SalesManager)"></textarea>
+                    <small class="helper-text">Example: Wedding=SalesManager</small>
+                  </label>
+                }
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="autoCompleteAfterEventEnabled" />
+                  <span>Enable post-event auto-complete</span>
+                </label>
+
+                <label>
+                  Auto-Complete Days After Event
+                  <input type="number" min="0" max="30" formControlName="autoCompleteAfterEventDays" />
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="autoSendPostEventThankYou" />
+                  <span>Send post-event thank you email</span>
+                </label>
+
+                <label>
+                  Thank You Template Key
+                  <input type="text" formControlName="postEventThankYouTemplateKey" placeholder="post_event_thank_you" />
+                </label>
+
+                <label>
+                  Payment Reminder Lead Days
+                  <input type="number" min="1" max="30" formControlName="paymentReminderLeadDays" />
+                </label>
+
+                <label>
+                  Payment Overdue Reminder Cadence (days)
+                  <input type="number" min="1" max="30" formControlName="paymentReminderOverdueCadenceDays" />
+                </label>
+
+                <label class="checkbox">
+                  <input type="checkbox" formControlName="webFormAutoAcknowledgementEnabled" />
+                  <span>Send auto-acknowledgement on website form submission</span>
+                </label>
+
+                <label>
+                  Web Form Acknowledgement Template Key
+                  <input type="text" formControlName="webFormAutoAcknowledgementTemplateKey" placeholder="enquiry_ack" />
                 </label>
 
                 <div class="actions full-width">

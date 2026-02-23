@@ -1,0 +1,286 @@
+.search-results-page {
+  display: grid;
+  gap: 0.95rem;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 1.45rem;
+  line-height: 1.1;
+  color: #0f172a;
+  font-weight: 800;
+}
+
+.page-header p {
+  margin: 0.2rem 0 0;
+  color: #64748b;
+  font-size: 0.86rem;
+}
+
+.filters-card,
+.results-card,
+.state-card {
+  border: 1px solid var(--cf-border);
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: var(--cf-shadow-sm);
+  padding: 0.85rem;
+}
+
+.filters-card {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.tab-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tab-btn {
+  border: 1px solid #dbe3f0;
+  background: #f8fafc;
+  color: #475569;
+  border-radius: 999px;
+  padding: 0.28rem 0.58rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tab-btn span {
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #334155;
+  font-size: 0.66rem;
+  font-weight: 800;
+  padding: 0.08rem 0.35rem;
+}
+
+.tab-btn.active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.tab-btn.active span {
+  background: #bfdbfe;
+  color: #1e3a8a;
+}
+
+.query-field {
+  display: grid;
+  gap: 0.2rem;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.query-field input {
+  border: 1px solid #d9e0ee;
+  border-radius: 10px;
+  padding: 0.48rem 0.6rem;
+  background: #fff;
+  color: #0f172a;
+  font-size: 0.82rem;
+}
+
+.filters-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.type-filters {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.type-filter,
+.clear-filters {
+  border: 1px solid #dbe3f0;
+  background: #f8fafc;
+  color: #475569;
+  border-radius: 10px;
+  padding: 0.36rem 0.58rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.type-filter.active {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.page-size {
+  margin-left: auto;
+  display: grid;
+  gap: 0.2rem;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.page-size select {
+  border: 1px solid #d9e0ee;
+  border-radius: 10px;
+  padding: 0.38rem 0.52rem;
+  background: #fff;
+  color: #0f172a;
+  min-width: 120px;
+  font-size: 0.78rem;
+}
+
+.page-size input {
+  border: 1px solid #d9e0ee;
+  border-radius: 10px;
+  padding: 0.38rem 0.52rem;
+  background: #fff;
+  color: #0f172a;
+  min-width: 120px;
+  font-size: 0.78rem;
+}
+
+.apply-btn {
+  border: 1px solid #1d4ed8;
+  border-radius: 10px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 0.42rem 0.72rem;
+}
+
+.results-card {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.results-header h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 0.98rem;
+}
+
+.results-header p {
+  margin: 0.2rem 0 0;
+  color: #64748b;
+  font-size: 0.72rem;
+}
+
+.pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.pager button {
+  border: 1px solid #dbe3f0;
+  background: #fff;
+  color: #334155;
+  border-radius: 9px;
+  padding: 0.28rem 0.52rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.pager span {
+  color: #64748b;
+  font-size: 0.71rem;
+  font-weight: 700;
+}
+
+.result-group {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.result-group h3 {
+  margin: 0;
+  color: #334155;
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+}
+
+.result-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  padding: 0.48rem 0.55rem;
+  display: grid;
+  gap: 0.16rem;
+}
+
+.result-item:hover {
+  border-color: #9fc1e3;
+  background: #f8fafc;
+}
+
+.result-item strong {
+  color: #0f172a;
+  font-size: 0.77rem;
+}
+
+.result-item span {
+  color: #64748b;
+  font-size: 0.71rem;
+}
+
+.state-card {
+  display: grid;
+  gap: 0.42rem;
+}
+
+.state-card h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+}
+
+.state-card p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.state-card.error {
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.empty {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.74rem;
+}
+
+@media (max-width: 900px) {
+  .filters-row {
+    align-items: stretch;
+  }
+
+  .page-size {
+    margin-left: 0;
+  }
+
+  .results-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

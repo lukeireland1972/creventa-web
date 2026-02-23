@@ -1,0 +1,1101 @@
+<section class="detail-page">
+  <button type="button" class="back-link" (click)="backToList()">Back to Enquiries</button>
+
+  @if (loading) {
+    <p class="state-message">Loading enquiry details...</p>
+  }
+
+  @if (!loading && errorMessage) {
+    <p class="state-message error">{{ errorMessage }}</p>
+  }
+
+  @if (!loading && enquiry; as detail) {
+    <article class="header-card">
+      <div class="header-main">
+        <h1>{{ detail.reference }}</h1>
+        <p>{{ primaryContactName }}</p>
+      </div>
+      <div class="header-badges">
+        <span [class]="'event-type-badge ' + eventTypeClass(detail.eventType)">
+          {{ detail.eventType }}
+        </span>
+        <span [class]="'status-badge ' + statusBadgeClass(detail.status)">
+          {{ displayStatus(detail.status) }}
+        </span>
+      </div>
+      <dl class="header-meta">
+        <div>
+          <dt>Event Date(s)</dt>
+          <dd>
+            {{ detail.eventStartUtc | date: 'EEE d MMM y, HH:mm' }}
+            @if (detail.eventEndUtc) {
+              <span> to {{ detail.eventEndUtc | date: 'EEE d MMM y, HH:mm' }}</span>
+            }
+          </dd>
+        </div>
+        <div>
+          <dt>Guests</dt>
+          <dd>{{ guestCountLabel }}</dd>
+        </div>
+        <div>
+          <dt>Event Manager</dt>
+          <dd>{{ detail.eventManagerName || 'Unassigned' }}</dd>
+        </div>
+        <div>
+          <dt>Sub-Events</dt>
+          <dd>{{ detail.subEvents.length }}</dd>
+        </div>
+        <div>
+          <dt>Total Sub-Event Guests</dt>
+          <dd>{{ totalSubEventGuests }}</dd>
+        </div>
+        <div>
+          <dt>Total Sub-Event Value</dt>
+          <dd>{{ totalSubEventValue | number: '1.2-2' }} {{ detail.currencyCode }}</dd>
+        </div>
+      </dl>
+      @if (displayStatus(detail.status) === 'Provisional') {
+        <p class="hold-row">
+          Hold countdown:
+          <span [class]="'status-badge ' + holdCountdownClass(detail.holdExpiresAtUtc)">
+            {{ holdCountdownLabel(detail.holdExpiresAtUtc) }}
+          </span>
+        </p>
+      }
+    </article>
+
+    <nav class="tab-bar" aria-label="Enquiry detail tabs">
+      @for (tab of tabs; track tab.key) {
+        <button
+          type="button"
+          [class.active]="activeTab === tab.key"
+          (click)="setTab(tab.key)">
+          {{ tab.label }}
+        </button>
+      }
+    </nav>
+
+    <section class="tab-content">
+      @if (activeTab === 'overview') {
+        <article class="overview-grid">
+          <section class="summary-card">
+            <h2>Summary</h2>
+            <div class="summary-columns">
+              <div>
+                <h3>Contact Details</h3>
+                <dl>
+                  <div>
+                    <dt>Name</dt>
+                    <dd>{{ primaryContactName }}</dd>
+                  </div>
+                  <div>
+                    <dt>Email</dt>
+                    <dd>{{ detail.contactEmail || 'Not provided' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Phone</dt>
+                    <dd>{{ detail.contactPhoneNumberE164 || 'Not provided' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Company</dt>
+                    <dd>{{ detail.companyName || 'Not provided' }}</dd>
+                  </div>
+                </dl>
+
+                <h3>Event Details</h3>
+                <dl>
+                  <div>
+                    <dt>Type</dt>
+                    <dd>{{ detail.eventType }}</dd>
+                  </div>
+                  <div>
+                    <dt>Style</dt>
+                    <dd>{{ detail.eventStyle || 'Not set' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Date(s)</dt>
+                    <dd>
+                      {{ detail.eventStartUtc | date: 'EEE d MMM y, HH:mm' }}
+                      @if (detail.eventEndUtc) {
+                        <span> to {{ detail.eventEndUtc | date: 'EEE d MMM y, HH:mm' }}</span>
+                      }
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Guests</dt>
+                    <dd>{{ guestCountLabel }}</dd>
+                  </div>
+                  <div>
+                    <dt>Source</dt>
+                    <dd>{{ detail.sourceType }}{{ detail.sourceDetail ? (' - ' + detail.sourceDetail) : '' }}</dd>
+                  </div>
+                </dl>
+              </div>
+              <div class="quick-actions">
+                <h3>Quick Actions</h3>
+                <button type="button" (click)="openOverviewEditor()">Edit Enquiry</button>
+                <button type="button" (click)="scrollToStatusPanel()">Change Status</button>
+                <button type="button" (click)="openProposalBuilder()">Create Proposal</button>
+                <button type="button" (click)="openEmailComposer()">Send Email</button>
+                <button type="button" (click)="openNoteComposer()">Add Note</button>
+                <button type="button" (click)="openCommunicationTab()">Log Communication</button>
+                <button type="button" (click)="openTasksTab()">Add Task</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel" id="status-panel">
+            <h3>Change Status</h3>
+            <p class="hint">Allowed transitions from {{ displayStatus(detail.status) }}.</p>
+            <div class="form-grid compact">
+              <label>
+                <span>Target Status</span>
+                <select
+                  [value]="statusChangeTarget"
+                  (change)="onStatusTargetChanged($any($event.target).value)">
+                  <option value="">Select status</option>
+                  @for (status of statusAllowedTransitions; track status) {
+                    <option [value]="status">{{ statusOptionLabel(status) }}</option>
+                  }
+                </select>
+              </label>
+
+              @if (selectedStatusTargetIsProvisional) {
+                <label>
+                  <span>Hold Override (days, optional)</span>
+                  <input
+                    type="number"
+                    min="1"
+                    [value]="statusHoldDaysOverride"
+                    (input)="statusHoldDaysOverride = $any($event.target).value" />
+                </label>
+              }
+            </div>
+
+            @if (selectedStatusTargetIsLost) {
+              <div class="form-grid compact">
+                <label>
+                  <span>Lost Reason</span>
+                  <select [value]="statusLostReason" (change)="statusLostReason = $any($event.target).value">
+                    <option value="">Select reason</option>
+                    @for (reason of lostReasonOptions; track reason) {
+                      <option [value]="reason">{{ reason }}</option>
+                    }
+                  </select>
+                </label>
+                <label>
+                  <span>Lost Date</span>
+                  <input
+                    type="date"
+                    [value]="statusLostDate"
+                    (input)="statusLostDate = $any($event.target).value" />
+                </label>
+                <label class="full-width">
+                  <span>Lost Detail (optional)</span>
+                  <textarea
+                    rows="3"
+                    [value]="statusLostReasonDetail"
+                    (input)="statusLostReasonDetail = $any($event.target).value"></textarea>
+                </label>
+              </div>
+            }
+
+            <div class="inline-actions">
+              <button type="button" (click)="applyStatusChange()" [disabled]="statusChangeBusy || !statusChangeTarget">
+                {{ statusChangeBusy ? 'Saving...' : 'Apply Status' }}
+              </button>
+            </div>
+            @if (statusChangeError) {
+              <p class="inline-error">{{ statusChangeError }}</p>
+            }
+            @if (statusChangeSuccess) {
+              <p class="inline-success">{{ statusChangeSuccess }}</p>
+            }
+          </section>
+
+          <section class="panel">
+            <header class="panel-header">
+              <h3>Same-Date Availability</h3>
+              <div class="panel-header-actions">
+                <button type="button" class="ghost" (click)="toggleSameDateAvailability()">
+                  {{ sameDateAvailabilityExpanded ? 'Collapse' : 'Expand' }}
+                </button>
+                <button type="button" class="ghost" (click)="refreshSameDateAvailability()" [disabled]="sameDateAvailabilityLoading">
+                  {{ sameDateAvailabilityLoading ? 'Refreshing...' : 'Refresh' }}
+                </button>
+              </div>
+            </header>
+            @if (sameDateAvailabilityError) {
+              <p class="inline-error">{{ sameDateAvailabilityError }}</p>
+            }
+
+            @if (sameDateAvailabilityExpanded) {
+              @if (!detail.sameDateAvailability || detail.sameDateAvailability.spaces.length === 0) {
+                <p class="state-message">No same-date availability data available.</p>
+              } @else {
+                <div class="availability-grid">
+                  @for (space of detail.sameDateAvailability.spaces; track space.spaceId) {
+                    <article class="availability-space">
+                      <header>
+                        <strong>{{ space.spaceName }}</strong>
+                        <span [class]="'status-badge ' + (space.isAvailable ? 'status-confirmed' : 'status-provisional')">
+                          {{ space.isAvailable ? 'Available' : 'Booked' }}
+                        </span>
+                      </header>
+                      @if (space.events.length === 0) {
+                        <p class="availability-empty">Available</p>
+                      } @else {
+                        <div class="availability-events">
+                          @for (event of space.events; track event.recordId) {
+                            <article class="availability-event">
+                              <p><strong>{{ event.label }}</strong></p>
+                              <p>
+                                <span [class]="'status-badge ' + statusBadgeClass(event.enquiryStatus || 'New')">
+                                  {{ displayStatus(event.enquiryStatus || event.recordType) }}
+                                </span>
+                                <span>{{ event.startUtc | date: 'HH:mm' }} - {{ event.endUtc | date: 'HH:mm' }}</span>
+                              </p>
+                              <small>
+                                {{ event.clientName || 'No client name' }}
+                                @if (event.covers) { · {{ event.covers }} covers }
+                                @if (event.eventType) { · {{ event.eventType }} }
+                              </small>
+                            </article>
+                          }
+                        </div>
+                      }
+                    </article>
+                  }
+                </div>
+              }
+            }
+          </section>
+        </article>
+      }
+
+      @if (activeTab === 'events') {
+        <div class="inline-actions">
+          <button type="button" (click)="openCreateSubEventForm()">Add Sub-Event</button>
+        </div>
+
+        @if (subEventFormVisible) {
+          <article class="panel">
+            <h3>{{ subEventFormMode === 'edit' ? 'Edit Sub-Event' : 'New Sub-Event' }}</h3>
+            <div class="form-grid">
+              <label>
+                <span>Title</span>
+                <input type="text" [value]="subEventDraft.name" (input)="updateSubEventDraftField({ name: $any($event.target).value })" />
+              </label>
+              <label>
+                <span>Type</span>
+                <select [value]="subEventDraft.type" (change)="updateSubEventDraftField({ type: $any($event.target).value })">
+                  @for (type of subEventTypeOptions; track type) {
+                    <option [value]="type">{{ type }}</option>
+                  }
+                </select>
+              </label>
+              <label>
+                <span>Status</span>
+                <select [value]="subEventDraft.status" (change)="updateSubEventDraftField({ status: $any($event.target).value })">
+                  <option value="New">New</option>
+                  <option value="Tentative">Tentative</option>
+                  <option value="OpenProposal">Open Proposal</option>
+                  <option value="Provisional">Provisional</option>
+                  <option value="Confirmed">Confirmed</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Lost">Lost</option>
+                  <option value="Archived">Archived</option>
+                </select>
+              </label>
+              <label>
+                <span>Date</span>
+                <input type="date" [value]="subEventDraft.date" (input)="updateSubEventDraftField({ date: $any($event.target).value })" />
+              </label>
+              <label>
+                <span>Start</span>
+                <input type="time" [value]="subEventDraft.startTime" (input)="updateSubEventDraftField({ startTime: $any($event.target).value })" />
+              </label>
+              <label>
+                <span>End</span>
+                <input type="time" [value]="subEventDraft.endTime" (input)="updateSubEventDraftField({ endTime: $any($event.target).value })" />
+              </label>
+              <label>
+                <span>Guest Count</span>
+                <input type="number" min="1" [value]="subEventDraft.guestCount" (input)="updateSubEventDraftField({ guestCount: +$any($event.target).value })" />
+              </label>
+              <label>
+                <span>Space</span>
+                <select [value]="subEventDraft.spaceId" (change)="updateSubEventDraftField({ spaceId: $any($event.target).value })">
+                  <option value="">Select a space</option>
+                  @for (space of spaces; track space.id) {
+                    <option [value]="space.id">{{ space.name }}</option>
+                  }
+                </select>
+              </label>
+              <label>
+                <span>Setup Style</span>
+                <input type="text" [value]="subEventDraft.setupStyle" (input)="updateSubEventDraftField({ setupStyle: $any($event.target).value })" />
+              </label>
+              <label>
+                <span>Price Subtotal</span>
+                <input type="number" min="0" step="0.01" [value]="subEventDraft.priceAmount" (input)="updateSubEventDraftField({ priceAmount: $any($event.target).value })" />
+              </label>
+              <label class="full-width">
+                <span>Special Requirements</span>
+                <textarea
+                  rows="3"
+                  [value]="subEventDraft.specialRequirements"
+                  (input)="updateSubEventDraftField({ specialRequirements: $any($event.target).value })"></textarea>
+              </label>
+            </div>
+            @if (subEventError) {
+              <p class="inline-error">{{ subEventError }}</p>
+            }
+            @if (subEventConflictWarning) {
+              <p class="inline-warning">{{ subEventConflictWarning }}</p>
+            }
+            <div class="inline-actions">
+              <button type="button" class="ghost" (click)="cancelSubEventForm()" [disabled]="subEventSaving">Cancel</button>
+              @if (subEventCanOverrideConflict) {
+                <button type="button" class="ghost" (click)="saveSubEvent(true)" [disabled]="subEventSaving">
+                  {{ subEventSaving ? 'Saving...' : 'Save Anyway' }}
+                </button>
+              }
+              <button type="button" (click)="saveSubEvent()" [disabled]="subEventSaving">
+                {{ subEventSaving ? 'Saving...' : (subEventFormMode === 'edit' ? 'Update Sub-Event' : 'Create Sub-Event') }}
+              </button>
+            </div>
+          </article>
+        }
+
+        @if (detail.subEvents.length === 0) {
+          <p class="state-message">No sub-events linked to this enquiry.</p>
+        } @else {
+          <div class="stack">
+            @for (subEvent of detail.subEvents; track subEvent.id) {
+              <article class="panel">
+                <header class="panel-header">
+                  <h3>{{ subEvent.name }}</h3>
+                  <div class="panel-header-actions">
+                    <button type="button" class="ghost" (click)="openEditSubEventForm(subEvent.id)">Edit</button>
+                    <button type="button" class="danger" (click)="deleteSubEvent(subEvent.id, subEvent.name)">Delete</button>
+                  </div>
+                </header>
+                <p>{{ subEvent.startUtc | date: 'EEE d MMM y, HH:mm' }} to {{ subEvent.endUtc | date: 'EEE d MMM y, HH:mm' }}</p>
+                <p>Assigned Space(s): {{ spaceNameList(subEvent.spaceIds) }}</p>
+                <p>Guests: {{ subEvent.guestCount }}</p>
+                <p>Setup Style: {{ subEvent.setupStyle || 'Not set' }}</p>
+                <p>Special Requirements: {{ subEvent.specialRequirements || 'None' }}</p>
+                <p>Pricing Subtotal: {{ subEvent.priceAmount || 0 | number: '1.2-2' }} {{ subEvent.currencyCode }}</p>
+              </article>
+            }
+          </div>
+        }
+      }
+
+      @if (activeTab === 'appointments') {
+        <div class="inline-actions">
+          <button type="button" (click)="openCreateAppointmentForm()">New Appointment</button>
+        </div>
+
+        @if (appointmentFormVisible) {
+          <article class="panel">
+            <h3>{{ appointmentFormMode === 'edit' ? 'Edit Appointment' : 'New Appointment' }}</h3>
+            <div class="form-grid">
+              <label>
+                <span>Title</span>
+                <input type="text" maxlength="200" [value]="appointmentDraft.title" (input)="updateAppointmentDraftField({ title: $any($event.target).value })" />
+              </label>
+              <label>
+                <span>Type</span>
+                <select [value]="appointmentDraft.type" (change)="updateAppointmentDraftField({ type: $any($event.target).value })">
+                  @for (type of appointmentTypeOptions; track type) {
+                    <option [value]="type">{{ type }}</option>
+                  }
+                </select>
+              </label>
+              <label>
+                <span>Date</span>
+                <input type="date" [value]="appointmentDraft.date" (input)="updateAppointmentDraftField({ date: $any($event.target).value })" />
+              </label>
+              <label>
+                <span>Start Time</span>
+                <input type="time" [value]="appointmentDraft.startTime" (input)="updateAppointmentDraftField({ startTime: $any($event.target).value })" />
+              </label>
+              <label>
+                <span>Duration (mins)</span>
+                <input type="number" min="15" step="15" [value]="appointmentDraft.durationMinutes" (input)="updateAppointmentDraftField({ durationMinutes: +$any($event.target).value })" />
+              </label>
+              <label>
+                <span>Status</span>
+                <select [value]="appointmentDraft.status" (change)="updateAppointmentDraftField({ status: $any($event.target).value })">
+                  @for (status of appointmentStatusOptions; track status) {
+                    <option [value]="status">{{ appointmentStatusLabel(status) }}</option>
+                  }
+                </select>
+              </label>
+              <label>
+                <span>Space (optional)</span>
+                <select [value]="appointmentDraft.spaceId" (change)="updateAppointmentDraftField({ spaceId: $any($event.target).value })">
+                  <option value="">No space</option>
+                  @for (space of spaces; track space.id) {
+                    <option [value]="space.id">{{ space.name }}</option>
+                  }
+                </select>
+              </label>
+              <label>
+                <span>Assigned To</span>
+                <select [value]="appointmentDraft.assignedToUserId" (change)="updateAppointmentDraftField({ assignedToUserId: $any($event.target).value })">
+                  <option value="">Unassigned</option>
+                  @for (user of users; track user.id) {
+                    <option [value]="user.id">{{ userDisplayName(user) }}</option>
+                  }
+                </select>
+              </label>
+              <label>
+                <span>Attendees</span>
+                <input type="text" maxlength="500" [value]="appointmentDraft.attendees" (input)="updateAppointmentDraftField({ attendees: $any($event.target).value })" />
+              </label>
+              <label class="full-width">
+                <span>Notes</span>
+                <textarea rows="3" [value]="appointmentDraft.notes" (input)="updateAppointmentDraftField({ notes: $any($event.target).value })"></textarea>
+              </label>
+            </div>
+
+            <div class="related-enquiries">
+              <h4>Related Enquiries</h4>
+              <input
+                type="search"
+                [value]="appointmentSearchTerm"
+                (input)="appointmentSearchTerm = $any($event.target).value"
+                placeholder="Search by ref, contact, or event type..." />
+              <div class="related-enquiry-list">
+                @for (option of filteredRelatedEnquiryOptions; track option.id) {
+                  <label>
+                    <input
+                      type="checkbox"
+                      [checked]="isRelatedEnquirySelected(option.id)"
+                      (change)="toggleRelatedEnquiry(option.id)" />
+                    <span>{{ option.reference }} · {{ option.contactName }} · {{ option.eventDate | date: 'dd/MM/yyyy' }}</span>
+                  </label>
+                }
+              </div>
+            </div>
+
+            @if (appointmentError) {
+              <p class="inline-error">{{ appointmentError }}</p>
+            }
+            @if (appointmentConflictWarning) {
+              <p class="inline-warning">{{ appointmentConflictWarning }}</p>
+            }
+            <div class="inline-actions">
+              <button type="button" class="ghost" (click)="cancelAppointmentForm()" [disabled]="appointmentSaving">Cancel</button>
+              @if (appointmentCanOverrideConflict) {
+                <button type="button" class="ghost" (click)="saveAppointment(true)" [disabled]="appointmentSaving">
+                  {{ appointmentSaving ? 'Saving...' : 'Save Anyway' }}
+                </button>
+              }
+              <button type="button" (click)="saveAppointment()" [disabled]="appointmentSaving">
+                {{ appointmentSaving ? 'Saving...' : (appointmentFormMode === 'edit' ? 'Update Appointment' : 'Create Appointment') }}
+              </button>
+            </div>
+          </article>
+        }
+
+        @if (detail.appointments.length === 0) {
+          <p class="state-message">No appointments linked to this enquiry.</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Type</th>
+                  <th>Date/Time</th>
+                  <th>Duration</th>
+                  <th>Space</th>
+                  <th>Attendees</th>
+                  <th>Assigned To</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (appointment of detail.appointments; track appointment.id) {
+                  <tr>
+                    <td>{{ appointment.title }}</td>
+                    <td>{{ appointment.type }}</td>
+                    <td>{{ appointment.startUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+                    <td>{{ appointment.durationMinutes }} min</td>
+                    <td>{{ appointment.spaceName || 'Unassigned' }}</td>
+                    <td>{{ appointment.attendees || 'None listed' }}</td>
+                    <td>{{ appointment.assignedToName || 'Unassigned' }}</td>
+                    <td><span [class]="'status-badge ' + statusBadgeClass(appointment.status)">{{ appointmentStatusLabel(appointment.status) }}</span></td>
+                    <td class="action-cell">
+                      <button type="button" class="ghost" (click)="openEditAppointmentForm(appointment.id)">Edit</button>
+                      <button type="button" class="ghost" (click)="updateAppointmentStatus(appointment.id, 'Completed')">Complete</button>
+                      <button type="button" class="ghost" (click)="updateAppointmentStatus(appointment.id, 'NoShow')">No-Show</button>
+                      <button type="button" class="ghost" (click)="updateAppointmentStatus(appointment.id, 'Cancelled')">Cancel</button>
+                      <button type="button" class="danger" (click)="deleteAppointment(appointment.id)">Delete</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+
+      @if (activeTab === 'proposals') {
+        <div class="inline-actions">
+          <button type="button" (click)="openProposalBuilder()">Create New Proposal</button>
+          @if (proposals.length > 1) {
+            <button type="button" class="ghost" (click)="compareProposalVersions(proposals[0].id, proposals[1].id)">
+              Compare Latest Versions
+            </button>
+          }
+        </div>
+
+        @if (proposalsLoading) {
+          <p class="state-message">Loading proposals...</p>
+        } @else if (proposalsError) {
+          <p class="state-message error">{{ proposalsError }}</p>
+        } @else if (proposals.length === 0) {
+          <p class="state-message">No proposals found for this enquiry.</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Version</th>
+                  <th>Status</th>
+                  <th>Value</th>
+                  <th>Sent</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (proposal of proposals; track proposal.id; let index = $index) {
+                  <tr>
+                    <td>{{ proposal.version }}</td>
+                    <td><span [class]="'status-badge ' + proposalStatusClass(proposal.status)">{{ proposal.status }}</span></td>
+                    <td>{{ proposal.totalAmount | number: '1.2-2' }} {{ proposal.currencyCode }}</td>
+                    <td>{{ proposal.sentAtUtc ? (proposal.sentAtUtc | date: 'dd/MM/yyyy HH:mm') : 'Not sent' }}</td>
+                    <td class="action-cell">
+                      <button type="button" class="ghost" (click)="openProposalVersion(proposal.id)">
+                        {{ (proposal.status || '').toLowerCase() === 'draft' ? 'Edit Draft' : 'View' }}
+                      </button>
+                      @if (index + 1 < proposals.length) {
+                        <button
+                          type="button"
+                          class="ghost"
+                          (click)="compareProposalVersions(proposal.id, proposals[index + 1].id)">
+                          Compare
+                        </button>
+                      }
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+
+      @if (activeTab === 'communications') {
+        <section class="panel">
+          <header class="panel-header">
+            <h3>Communication Filters</h3>
+          </header>
+          <div class="inline-actions">
+            <button type="button" [class.ghost]="communicationsFilter !== 'all'" (click)="setCommunicationsFilter('all')">All</button>
+            <button type="button" [class.ghost]="communicationsFilter !== 'emails'" (click)="setCommunicationsFilter('emails')">Emails</button>
+            <button type="button" [class.ghost]="communicationsFilter !== 'notes'" (click)="setCommunicationsFilter('notes')">Notes</button>
+            <button type="button" [class.ghost]="communicationsFilter !== 'system'" (click)="setCommunicationsFilter('system')">System</button>
+          </div>
+        </section>
+
+        @if (communicationsLoading) {
+          <p class="state-message">Loading communications...</p>
+        } @else if (communicationsError) {
+          <p class="state-message error">{{ communicationsError }}</p>
+        } @else if (communicationThreadGroups.length === 0) {
+          <p class="state-message">No communication records found.</p>
+        } @else {
+          <div class="stack">
+            @for (thread of communicationThreadGroups; track thread.key) {
+              <article class="panel">
+                <h3>Thread: {{ thread.items[0].subject || thread.key }}</h3>
+                @for (entry of thread.items; track entry.id) {
+                  <div class="thread-item">
+                    <p>{{ entry.createdByName || entry.fromAddress || 'System' }} to {{ entry.toAddresses || 'N/A' }}</p>
+                    <p>{{ entry.preview }}</p>
+                    <small>{{ entry.occurredAtUtc | date: 'dd/MM/yyyy HH:mm' }} · {{ entry.attachmentCount }} attachment(s)</small>
+                  </div>
+                }
+              </article>
+            }
+          </div>
+        }
+
+        <section class="panel">
+          <header class="panel-header">
+            <h3>Compose</h3>
+          </header>
+          <div class="inline-actions">
+            <button type="button" [class.ghost]="composeMode !== 'note'" (click)="setComposeMode('note')">Internal Note</button>
+            <button type="button" [class.ghost]="composeMode !== 'email'" (click)="setComposeMode('email')">Email</button>
+          </div>
+
+          @if (composeMode === 'note') {
+            <div class="form-grid compact">
+              <label class="full-width">
+                <span>Note</span>
+                <textarea
+                  rows="4"
+                  [value]="noteDraft"
+                  (input)="noteDraft = $any($event.target).value"
+                  placeholder="Add an internal note for this enquiry"></textarea>
+              </label>
+            </div>
+            <div class="inline-actions">
+              <button type="button" (click)="sendInternalNote()" [disabled]="communicationsSubmitting">
+                {{ communicationsSubmitting ? 'Saving...' : 'Add Note' }}
+              </button>
+            </div>
+          } @else {
+            <div class="form-grid compact">
+              <label>
+                <span>To</span>
+                <input
+                  type="email"
+                  [value]="emailDraft.to"
+                  (input)="emailDraft = { ...emailDraft, to: $any($event.target).value }" />
+              </label>
+              <label>
+                <span>CC</span>
+                <input
+                  type="text"
+                  [value]="emailDraft.cc"
+                  (input)="emailDraft = { ...emailDraft, cc: $any($event.target).value }" />
+              </label>
+              <label>
+                <span>BCC</span>
+                <input
+                  type="text"
+                  [value]="emailDraft.bcc"
+                  (input)="emailDraft = { ...emailDraft, bcc: $any($event.target).value }" />
+              </label>
+              <label class="full-width">
+                <span>Subject</span>
+                <input
+                  type="text"
+                  [value]="emailDraft.subject"
+                  (input)="emailDraft = { ...emailDraft, subject: $any($event.target).value }" />
+              </label>
+              <label class="full-width">
+                <span>Message</span>
+                <textarea
+                  rows="5"
+                  [value]="emailDraft.body"
+                  (input)="emailDraft = { ...emailDraft, body: $any($event.target).value }"
+                  placeholder="Write your email message"></textarea>
+              </label>
+            </div>
+            <div class="inline-actions">
+              <button type="button" (click)="sendEmailMessage()" [disabled]="communicationsSubmitting">
+                {{ communicationsSubmitting ? 'Sending...' : 'Send Email' }}
+              </button>
+            </div>
+          }
+
+          @if (communicationsActionError) {
+            <p class="inline-error">{{ communicationsActionError }}</p>
+          }
+          @if (communicationsActionSuccess) {
+            <p class="inline-success">{{ communicationsActionSuccess }}</p>
+          }
+        </section>
+      }
+
+      @if (activeTab === 'payments') {
+        @if (paymentsLoading) {
+          <p class="state-message">Loading payment schedule...</p>
+        } @else if (paymentsError) {
+          <p class="state-message error">{{ paymentsError }}</p>
+        } @else if (!paymentSchedule || paymentSchedule.milestones.length === 0) {
+          <p class="state-message">No payment schedule configured for this enquiry.</p>
+        } @else {
+          <section class="panel progress-panel">
+            <h3>Progress</h3>
+            <div class="progress-grid">
+              <article class="progress-card">
+                <header>
+                  <strong>Planning</strong>
+                  <small>{{ paymentSchedule.planningProgress.completed }} / {{ paymentSchedule.planningProgress.total }}</small>
+                </header>
+                <div class="progress-track">
+                  <span class="progress-fill planning" [style.width.%]="planningProgressPercent()"></span>
+                </div>
+                <p>{{ planningProgressPercent() | number: '1.0-0' }}% complete</p>
+              </article>
+              <article class="progress-card">
+                <header>
+                  <strong>Payment</strong>
+                  <small>{{ paymentSchedule.paymentProgress.paidAmount | number: '1.2-2' }} / {{ paymentSchedule.paymentProgress.totalAmount | number: '1.2-2' }} {{ paymentSchedule.currencyCode }}</small>
+                </header>
+                <div class="progress-track">
+                  <span
+                    class="progress-fill"
+                    [class.status-confirmed]="paymentProgressClass() === 'status-confirmed'"
+                    [class.status-provisional]="paymentProgressClass() === 'status-provisional'"
+                    [class.status-lost]="paymentProgressClass() === 'status-lost'"
+                    [class.status-archived]="paymentProgressClass() === 'status-archived'"
+                    [style.width.%]="paymentProgressPercent()"></span>
+                </div>
+                <p>{{ paymentProgressPercent() | number: '1.0-0' }}% paid</p>
+              </article>
+            </div>
+          </section>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Milestone</th>
+                  <th>Due Date</th>
+                  <th>Amount Due</th>
+                  <th>Amount Paid</th>
+                  <th>Balance</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (milestone of paymentSchedule.milestones; track milestone.id) {
+                  <tr>
+                    <td>{{ milestone.label }}</td>
+                    <td>{{ milestone.dueDate | date: 'dd/MM/yyyy' }}</td>
+                    <td>{{ milestone.amount | number: '1.2-2' }} {{ milestone.currencyCode }}</td>
+                    <td>{{ milestone.amountPaid | number: '1.2-2' }} {{ milestone.currencyCode }}</td>
+                    <td>{{ milestone.balanceRemaining | number: '1.2-2' }} {{ milestone.currencyCode }}</td>
+                    <td><span [class]="'status-badge ' + milestoneStatusClass(milestone)">{{ milestoneStatus(milestone) }}</span></td>
+                    <td class="action-cell">
+                      <button
+                        type="button"
+                        class="ghost"
+                        (click)="recordPaymentForMilestone(milestone)"
+                        [disabled]="paymentActionMilestoneId === milestone.id || milestone.balanceRemaining <= 0">
+                        {{ paymentActionMilestoneId === milestone.id ? 'Saving...' : 'Record Payment' }}
+                      </button>
+                      <button
+                        type="button"
+                        class="ghost"
+                        (click)="createPaymentLinkForMilestone(milestone.id)"
+                        [disabled]="paymentActionMilestoneId === milestone.id || milestone.balanceRemaining <= 0">
+                        {{ paymentActionMilestoneId === milestone.id ? 'Creating...' : 'Create Link' }}
+                      </button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+          @if (paymentActionError) {
+            <p class="inline-error">{{ paymentActionError }}</p>
+          }
+          @if (paymentActionSuccess) {
+            <p class="inline-success">{{ paymentActionSuccess }}</p>
+          }
+
+          @if (paymentSchedule.transactions.length > 0) {
+            <section class="panel">
+              <h3>Transaction History</h3>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Paid At</th>
+                      <th>Amount</th>
+                      <th>Method</th>
+                      <th>Reference</th>
+                      <th>Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (transaction of paymentSchedule.transactions; track transaction.id) {
+                      <tr>
+                        <td>{{ transaction.paidAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+                        <td>{{ transaction.amount | number: '1.2-2' }} {{ transaction.currencyCode }}</td>
+                        <td>{{ transaction.provider }}</td>
+                        <td>{{ transaction.providerReference || '-' }}</td>
+                        <td>{{ transaction.notes || '-' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          }
+        }
+      }
+
+      @if (activeTab === 'documents') {
+        <section
+          class="document-drop-zone"
+          [class.active]="documentsDropActive"
+          (dragover)="onDocumentDragOver($event)"
+          (dragleave)="onDocumentDragLeave($event)"
+          (drop)="onDocumentDrop($event)">
+          <p>Drag and drop a file here (max 25MB), or select a file to upload.</p>
+          <label class="upload-button">
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.csv,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,image/jpeg,image/png,text/csv"
+              (change)="onDocumentFileSelected($event)" />
+            {{ documentsUploading ? 'Uploading...' : 'Choose File' }}
+          </label>
+          @if (documentsUploadError) {
+            <p class="upload-error">{{ documentsUploadError }}</p>
+          }
+        </section>
+
+        @if (documentsLoading) {
+          <p class="state-message">Loading documents...</p>
+        } @else if (documentsError) {
+          <p class="state-message error">{{ documentsError }}</p>
+        } @else if (documents.length === 0) {
+          <p class="state-message">No documents uploaded for this enquiry.</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Filename</th>
+                  <th>Type</th>
+                  <th>Size</th>
+                  <th>Uploaded By</th>
+                  <th>Upload Date</th>
+                  <th>Category</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (document of documents; track document.id) {
+                  <tr>
+                    <td>
+                      <span class="doc-type-badge">{{ documentTypeToken(document) }}</span>
+                      {{ document.fileName }}
+                    </td>
+                    <td>{{ document.mimeType }}</td>
+                    <td>{{ formatFileSize(document.fileSizeBytes) }}</td>
+                    <td>{{ document.uploadedByName || 'System' }}</td>
+                    <td>{{ document.uploadedAtUtc | date: 'dd/MM/yyyy HH:mm' }}</td>
+                    <td>{{ document.category }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+
+      @if (activeTab === 'activity') {
+        <section class="panel">
+          <h3>Filters</h3>
+          <div class="form-grid compact">
+            <label>
+              <span>Category</span>
+              <select
+                [value]="activityActionCategory"
+                (change)="activityActionCategory = $any($event.target).value; applyActivityFilters()">
+                <option value="all">All</option>
+                <option value="status">Status</option>
+                <option value="communication">Communication</option>
+                <option value="document">Document</option>
+                <option value="payment">Payment</option>
+              </select>
+            </label>
+            <label>
+              <span>From</span>
+              <input
+                type="date"
+                [value]="activityFromDate"
+                (input)="activityFromDate = $any($event.target).value; applyActivityFilters()" />
+            </label>
+            <label>
+              <span>To</span>
+              <input
+                type="date"
+                [value]="activityToDate"
+                (input)="activityToDate = $any($event.target).value; applyActivityFilters()" />
+            </label>
+          </div>
+        </section>
+
+        @if (activityLoading) {
+          <p class="state-message">Loading activity...</p>
+        } @else if (activityError) {
+          <p class="state-message error">{{ activityError }}</p>
+        } @else if (activityEntries.length === 0) {
+          <p class="state-message">No activity has been logged for this enquiry.</p>
+        } @else {
+          <div class="timeline">
+            @for (entry of activityEntries; track entry.id) {
+              <article class="timeline-item">
+                <div class="timeline-avatar">{{ activityUserInitials(entry.userName) }}</div>
+                <div class="timeline-content">
+                  <header>
+                    <strong>{{ entry.userName || 'System' }}</strong>
+                    <span>{{ entry.createdAtUtc | date: 'dd/MM/yyyy HH:mm' }}</span>
+                  </header>
+                  <p>{{ activityActionLabel(entry.actionType) }}</p>
+                  @if (entry.details) {
+                    <small>{{ entry.details }}</small>
+                  }
+                  @if (activityChangesFor(entry.id).length > 0) {
+                    <dl class="activity-changes">
+                      @for (change of activityChangesFor(entry.id); track $index) {
+                        <div class="activity-change-row">
+                          <dt>{{ change.label }}</dt>
+                          @if (change.before !== null || change.after !== null) {
+                            <dd>
+                              <span class="change-before">{{ change.before ?? 'null' }}</span>
+                              <span class="change-arrow">-></span>
+                              <span class="change-after">{{ change.after ?? 'null' }}</span>
+                            </dd>
+                          } @else {
+                            <dd>{{ change.value ?? '' }}</dd>
+                          }
+                        </div>
+                      }
+                    </dl>
+                  }
+                </div>
+              </article>
+            }
+          </div>
+
+          @if (activityHasMore) {
+            <div class="inline-actions">
+              <button type="button" (click)="loadMoreActivity()" [disabled]="activityLoadingMore">
+                {{ activityLoadingMore ? 'Loading...' : 'Load More' }}
+              </button>
+            </div>
+          }
+        }
+      }
+
+      @if (activeTab === 'tasks') {
+        <section class="panel">
+          <h3>Quick Add Task</h3>
+          <div class="form-grid compact">
+            <label>
+              <span>Title</span>
+              <input
+                type="text"
+                [value]="taskDraft.title"
+                (input)="taskDraft = { ...taskDraft, title: $any($event.target).value }" />
+            </label>
+            <label>
+              <span>Due Date</span>
+              <input
+                type="date"
+                [value]="taskDraft.dueDate"
+                (input)="taskDraft = { ...taskDraft, dueDate: $any($event.target).value }" />
+            </label>
+            <label>
+              <span>Priority</span>
+              <select
+                [value]="taskDraft.priority"
+                (change)="taskDraft = { ...taskDraft, priority: $any($event.target).value }">
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="urgent">Urgent</option>
+              </select>
+            </label>
+            <label>
+              <span>Status</span>
+              <select
+                [value]="taskDraft.status"
+                (change)="taskDraft = { ...taskDraft, status: $any($event.target).value }">
+                <option value="todo">To Do</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </label>
+            <label>
+              <span>Category</span>
+              <input
+                type="text"
+                [value]="taskDraft.category"
+                (input)="taskDraft = { ...taskDraft, category: $any($event.target).value }" />
+            </label>
+            <label>
+              <span>Assignee</span>
+              <select
+                [value]="taskDraft.assigneeId"
+                (change)="taskDraft = { ...taskDraft, assigneeId: $any($event.target).value }">
+                <option value="">Unassigned</option>
+                @for (user of users; track user.id) {
+                  <option [value]="user.id">{{ userDisplayName(user) }}</option>
+                }
+              </select>
+            </label>
+          </div>
+          <div class="inline-actions">
+            <button type="button" (click)="createTask()" [disabled]="taskSaving">
+              {{ taskSaving ? 'Saving...' : 'Add Task' }}
+            </button>
+          </div>
+          @if (taskActionError) {
+            <p class="inline-error">{{ taskActionError }}</p>
+          }
+          @if (taskActionSuccess) {
+            <p class="inline-success">{{ taskActionSuccess }}</p>
+          }
+        </section>
+
+        @if (tasksLoading) {
+          <p class="state-message">Loading tasks...</p>
+        } @else if (tasksError) {
+          <p class="state-message error">{{ tasksError }}</p>
+        } @else if (tasks.length === 0) {
+          <p class="state-message">No tasks linked to this enquiry.</p>
+        } @else {
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>Title</th>
+                  <th>Assigned To</th>
+                  <th>Due Date</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (task of tasks; track task.id) {
+                  <tr>
+                    <td><input type="checkbox" [checked]="taskIsCompleted(task)" (change)="toggleTaskComplete(task)" /></td>
+                    <td>{{ task.title }}</td>
+                    <td>{{ task.assigneeName || 'Unassigned' }}</td>
+                    <td>{{ task.dueDate ? (task.dueDate | date: 'dd/MM/yyyy') : 'Not set' }}</td>
+                    <td>{{ taskPriorityLabel(task.priority) }}</td>
+                    <td><span [class]="'status-badge ' + statusBadgeClass(task.status)">{{ taskStatusLabel(task.status) }}</span></td>
+                    <td class="action-cell">
+                      <button type="button" class="danger" (click)="deleteTask(task)">Delete</button>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+    </section>
+  }
+</section>

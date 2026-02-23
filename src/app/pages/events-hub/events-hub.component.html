@@ -312,7 +312,7 @@
             <button type="button" class="ghost" (click)="exportAttendeesCsv()" [disabled]="attendees.length === 0">Export CSV</button>
             <select [(ngModel)]="bulkFollowUpStatus" [ngModelOptions]="{ standalone: true }">
               @for (status of followUpStatusOptions; track status) {
-                <option [value]="status">{{ status }}</option>
+                <option [value]="status">{{ followUpStatusLabel(status) }}</option>
               }
             </select>
             <button type="button" class="primary" (click)="bulkUpdateFollowUpStatus()" [disabled]="selectedAttendeeCount === 0">
@@ -351,7 +351,7 @@
                 <span>Follow-up</span>
                 <select formControlName="followUpStatus">
                   @for (status of followUpStatusOptions; track status) {
-                    <option [value]="status">{{ status }}</option>
+                    <option [value]="status">{{ followUpStatusLabel(status) }}</option>
                   }
                 </select>
               </label>
@@ -367,6 +367,11 @@
 
           <div class="attendee-import">
             <h3>CSV Import (with column mapping)</h3>
+            <div class="form-actions compact">
+              <button type="button" class="ghost" (click)="downloadAttendeeTemplateCsv()">
+                Download Template CSV
+              </button>
+            </div>
             <div class="grid two">
               <label>
                 <span>CSV File</span>
@@ -387,10 +392,64 @@
               <label><span>Follow-up Column</span><input type="text" formControlName="followUpStatusColumn" /></label>
             </div>
             <div class="form-actions compact">
-              <button type="button" class="ghost" (click)="importAttendeesCsv()" [disabled]="importingAttendees || !attendeeImportFile">
+              <button
+                type="button"
+                class="ghost"
+                (click)="importAttendeesCsv()"
+                [disabled]="importingAttendees || !attendeeImportFile || !attendeeImportReady">
                 {{ importingAttendees ? 'Importing…' : 'Import CSV' }}
               </button>
             </div>
+
+            @if (attendeeImportFile) {
+              <div class="attendee-import-preview">
+                <h4>Import Preview</h4>
+                <p>
+                  {{ attendeeImportTotalRows }} row{{ attendeeImportTotalRows === 1 ? '' : 's' }} detected ·
+                  {{ attendeeImportValidRows }} valid ·
+                  {{ attendeeImportInvalidRows }} invalid
+                </p>
+                @if (attendeeImportWarnings.length > 0) {
+                  <ul class="attendee-import-warnings">
+                    @for (warning of attendeeImportWarnings; track warning) {
+                      <li>{{ warning }}</li>
+                    }
+                  </ul>
+                }
+                @if (attendeeImportPreviewRows.length > 0) {
+                  <div class="attendee-import-preview-table">
+                    <article class="attendee-preview-row attendee-preview-header">
+                      <span>Row</span>
+                      <span>First</span>
+                      <span>Last</span>
+                      <span>Email</span>
+                      <span>Phone</span>
+                      <span>Interest</span>
+                      <span>Follow-up</span>
+                      <span>Issues</span>
+                    </article>
+                    @for (preview of attendeeImportPreviewRows; track preview.rowNumber) {
+                      <article class="attendee-preview-row">
+                        <span>{{ preview.rowNumber }}</span>
+                        <span>{{ preview.firstName || '—' }}</span>
+                        <span>{{ preview.lastName || '—' }}</span>
+                        <span>{{ preview.email || '—' }}</span>
+                        <span>{{ preview.phoneNumberE164 || '—' }}</span>
+                        <span>{{ preview.eventInterest || '—' }}</span>
+                        <span>{{ preview.followUpStatus || 'Pending' }}</span>
+                        <span>
+                          @if (preview.issues.length === 0) {
+                            <em class="ok">OK</em>
+                          } @else {
+                            {{ preview.issues.join('; ') }}
+                          }
+                        </span>
+                      </article>
+                    }
+                  </div>
+                }
+              </div>
+            }
           </div>
 
           @if (loadingAttendees) {
@@ -405,11 +464,15 @@
                       [checked]="allAttendeesSelected"
                       (change)="toggleSelectAllAttendees($any($event.target).checked)" />
                   </div>
-                  <div>
-                    <strong>Attendee</strong>
-                    <p>Email · Interest</p>
-                    <small>Follow-up status</small>
-                  </div>
+                  <span>First Name</span>
+                  <span>Last Name</span>
+                  <span>Email</span>
+                  <span>Phone</span>
+                  <span>Interest</span>
+                  <span>Notes</span>
+                  <span>Converted to Enquiry</span>
+                  <span>Follow-up Status</span>
+                  <span>Registered</span>
                   <div class="attendee-actions">
                     <span>Actions</span>
                   </div>
@@ -423,11 +486,30 @@
                       [checked]="isAttendeeSelected(attendee.id)"
                       (change)="toggleAttendeeSelection(attendee.id, $any($event.target).checked)" />
                   </div>
-                  <div>
-                    <strong>{{ attendee.firstName }} {{ attendee.lastName }}</strong>
-                    <p>{{ attendee.email }} · {{ attendee.eventInterest || 'General interest' }}</p>
-                    <small>{{ attendee.followUpStatus }} · Registered {{ attendee.registeredAtUtc | date: 'dd/MM/yyyy HH:mm' }}</small>
-                  </div>
+                  <span>{{ attendee.firstName }}</span>
+                  <span>{{ attendee.lastName }}</span>
+                  <span>{{ attendee.email }}</span>
+                  <span>{{ attendee.phoneNumberE164 || '—' }}</span>
+                  <span>{{ attendee.eventInterest || '—' }}</span>
+                  <span>{{ attendee.notes || '—' }}</span>
+                  <span>
+                    @if (attendee.convertedEnquiryId) {
+                      <a [routerLink]="['/enquiries', attendee.convertedEnquiryId]">Yes · Open</a>
+                    } @else {
+                      No
+                    }
+                  </span>
+                  <span>
+                    <select
+                      [value]="attendee.followUpStatus"
+                      [disabled]="attendee.followUpStatus === 'Converted' && !!attendee.convertedEnquiryId"
+                      (change)="updateAttendeeFollowUpStatus(attendee, $any($event.target).value)">
+                      @for (status of followUpStatusOptions; track status) {
+                        <option [value]="status">{{ followUpStatusLabel(status) }}</option>
+                      }
+                    </select>
+                  </span>
+                  <span>{{ attendee.registeredAtUtc | date: 'dd/MM/yyyy HH:mm' }}</span>
                   <div class="attendee-actions">
                     <button type="button" class="ghost" (click)="toggleCheckIn(attendee)">
                       {{ attendee.checkedIn ? 'Undo Check-In' : 'Check-In' }}

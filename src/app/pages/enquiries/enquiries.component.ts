@@ -4,7 +4,7 @@ import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormBuilder, FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { catchError, concatMap, distinctUntilChanged, forkJoin, from, map, of, tap, throwError } from 'rxjs';
+import { catchError, combineLatest, concatMap, distinctUntilChanged, forkJoin, from, map, of, tap, throwError } from 'rxjs';
 import { DocumentsComponent } from './components/documents/documents.component';
 import { TasksTabComponent } from './components/tasks-tab/tasks-tab.component';
 import { QuickTaskCreatedEvent, TaskQuickCreateModalComponent } from '../../ui/task-quick-create-modal/task-quick-create-modal.component';
@@ -22,6 +22,8 @@ import {
   EnquirySustainabilityResponse,
   EnquiryListItemDto,
   EnquiryListResponse,
+  EnquirySavedFilterViewDto,
+  GenerateTestEnquiriesRequest,
   GenerateBeoResponse,
   LostReasonSettingDto,
   PortfolioRoutingOptionsResponse,
@@ -39,6 +41,7 @@ import {
   UpsertSubEventRequest,
   UpsertPaymentMilestoneRequest,
   TransitionEnquiryStatusResponse,
+  UpsertEnquirySavedFilterViewRequest,
   UpdateEnquiryRequest,
   UserSummaryDto
 } from '../../services/api.service';
@@ -84,6 +87,7 @@ interface SubEventDraft {
   guestCount: number;
   spaceId: string;
   setupStyle: string;
+  priceAmount: number | null;
   notes: string;
 }
 
@@ -205,10 +209,12 @@ export class EnquiriesComponent implements OnInit {
 
   statusTabs: StatusTab[] = [
     { key: 'new-unanswered', label: 'New / Unanswered' },
+    { key: 'tentative', label: 'Tentative' },
     { key: 'proposals', label: 'Proposals' },
     { key: 'provisional', label: 'Provisional' },
     { key: 'confirmed', label: 'Confirmed' },
     { key: 'lost', label: 'Lost' },
+    { key: 'archived', label: 'Archived' },
     { key: 'all', label: 'All' }
   ];
 
@@ -219,22 +225,63 @@ export class EnquiriesComponent implements OnInit {
     { value: 'overdue-follow-up', label: 'Overdue Follow-up' },
     { value: 'expiring-holds', label: 'Expiring Holds' }
   ];
+  readonly periodOptions: Array<{ value: string; label: string }> = [
+    { value: 'this-month', label: 'This Month' },
+    { value: 'this-week', label: 'This Week' },
+    { value: 'this-quarter', label: 'This Quarter' },
+    { value: 'this-year', label: 'This Year' },
+    { value: 'custom', label: 'Custom' }
+  ];
+  readonly statsEventTypeOptions: string[] = [
+    'Wedding',
+    'Corporate Conference',
+    'Private Dining',
+    'Christmas Party',
+    'Charity',
+    'Product Launch',
+    'Meeting'
+  ];
   conversionSortOptions: Array<{ value: string; label: string }> = [
     { value: '', label: 'Sort: Last Activity' },
     { value: 'conversionScore:desc', label: 'Sort: Conversion Score (High to Low)' },
     { value: 'conversionScore:asc', label: 'Sort: Conversion Score (Low to High)' },
+    { value: 'reference:asc', label: 'Sort: Ref (A-Z)' },
+    { value: 'contact:asc', label: 'Sort: Contact (A-Z)' },
+    { value: 'source:asc', label: 'Sort: Source (A-Z)' },
+    { value: 'eventType:asc', label: 'Sort: Event Type (A-Z)' },
     { value: 'eventDate:asc', label: 'Sort: Event Date (Earliest)' },
     { value: 'eventDate:desc', label: 'Sort: Event Date (Latest)' },
+    { value: 'guests:desc', label: 'Sort: Guests (High to Low)' },
+    { value: 'status:asc', label: 'Sort: Status (A-Z)' },
+    { value: 'holdExpiry:asc', label: 'Sort: Hold Expiry (Soonest)' },
     { value: 'value:desc', label: 'Sort: Value (High to Low)' },
-    { value: 'value:asc', label: 'Sort: Value (Low to High)' }
+    { value: 'value:asc', label: 'Sort: Value (Low to High)' },
+    { value: 'owner:asc', label: 'Sort: Owner (A-Z)' },
+    { value: 'lastActivity:desc', label: 'Sort: Last Activity (Latest)' },
+    { value: 'daysSinceContact:desc', label: 'Sort: Days Since Contact (Oldest First)' },
+    { value: 'daysSinceContact:asc', label: 'Sort: Days Since Contact (Newest First)' }
   ];
 
   activeTab = 'new-unanswered';
+  listPage = 1;
+  statsPeriod = 'this-month';
+  statsEventManagerUserId = '';
+  statsEventType = '';
+  statsCustomStart = '';
+  statsCustomEnd = '';
   listResponse: EnquiryListResponse | null = null;
   enquiries: EnquiryListItemDto[] = [];
   loading = false;
   enquiryLoadError = '';
   sourceFilter = '';
+  savedViews: EnquirySavedFilterViewDto[] = [];
+  savedViewsLoading = false;
+  savedViewsError = '';
+  selectedSavedViewId = '';
+  savingSavedView = false;
+  renamingSavedView = false;
+  deletingSavedView = false;
+  private readonly savedViewsStoragePrefix = 'cf.enquiries.savedViews';
   creatingTestEnquiries = false;
   testDataFeedbackMessage = '';
   testDataFeedbackType: 'info' | 'success' | 'error' = 'info';
@@ -242,6 +289,7 @@ export class EnquiriesComponent implements OnInit {
 
   selectedEnquiryId: string | null = null;
   selectedEnquiry: EnquiryDetailResponse | null = null;
+  isDedicatedDetailRoute = false;
   sameDateAvailabilityExpanded = true;
   aiFollowUpRecommendations: AiFollowUpRecommendationDto[] = [];
   aiFollowUpRecommendationsLoading = false;
@@ -249,7 +297,7 @@ export class EnquiriesComponent implements OnInit {
   aiFollowUpExecutionInProgressKey: string | null = null;
   aiFollowUpExecutionMessage = '';
   aiFollowUpExecutionError = '';
-  detailTab: 'overview' | 'events' | 'appointments' | 'tasks' | 'proposals' | 'payments' | 'sustainability' | 'documents' | 'activity' = 'overview';
+  detailTab: 'overview' | 'events' | 'appointments' | 'proposals' | 'communications' | 'payments' | 'documents' | 'activity' | 'tasks' | 'sustainability' = 'overview';
   activityEntries: ActivityFeedEntryDto[] = [];
   activityLoading = false;
   activityLoadingMore = false;
@@ -350,11 +398,14 @@ export class EnquiriesComponent implements OnInit {
     'Phone',
     'Email',
     'Website Form',
+    'Walk-in',
     'Social Media',
     'Referral',
     'Venue Event',
+    'Third-Party',
     'Returning Client'
   ];
+  readonly appointmentTypeOptions = ['Meeting', 'Menu Tasting', 'Site Visit', 'Rehearsal', 'Other'];
   readonly sustainabilityCateringTypes = ['standard', 'vegetarian', 'vegan', 'buffet'];
   readonly sustainabilityEnergyRatings = ['A', 'B', 'C', 'D', 'E', 'F', 'G'];
   showAddSubEventForm = false;
@@ -383,6 +434,7 @@ export class EnquiriesComponent implements OnInit {
   appointmentError = '';
   appointmentConflictWarning = '';
   appointmentDraft: AppointmentDraft = this.createDefaultAppointmentDraft();
+  appointmentEnquirySearchTerm = '';
   selectedEnquiryIds = new Set<string>();
   selectingAllMatching = false;
   assignableUsers: UserSummaryDto[] = [];
@@ -471,6 +523,12 @@ export class EnquiriesComponent implements OnInit {
   filtersForm = this.formBuilder.group({
     search: [''],
     quickFilter: [''],
+    eventStyle: [''],
+    dateFrom: [''],
+    dateTo: [''],
+    spaceId: [''],
+    valueMin: [''],
+    valueMax: [''],
     conversionScoreMin: [''],
     conversionScoreMax: [''],
     sort: [''],
@@ -495,10 +553,45 @@ export class EnquiriesComponent implements OnInit {
     return Boolean(
       (filters.search ?? '').trim()
       || (filters.quickFilter ?? '').trim()
+      || (filters.eventStyle ?? '').trim()
+      || (filters.dateFrom ?? '').trim()
+      || (filters.dateTo ?? '').trim()
+      || (filters.spaceId ?? '').trim()
+      || this.normalizeNumericQuery(filters.valueMin)
+      || this.normalizeNumericQuery(filters.valueMax)
       || (this.sourceFilter ?? '').trim()
       || this.normalizeNumericQuery(filters.conversionScoreMin)
       || this.normalizeNumericQuery(filters.conversionScoreMax)
     );
+  }
+
+  get selectedSavedView(): EnquirySavedFilterViewDto | null {
+    if (!this.selectedSavedViewId) {
+      return null;
+    }
+
+    return this.savedViews.find((view) => view.id === this.selectedSavedViewId) ?? null;
+  }
+
+  get totalListPages(): number {
+    const page = this.listResponse?.page;
+    if (!page) {
+      return 1;
+    }
+
+    return Math.max(1, Math.ceil(page.totalCount / Math.max(1, page.pageSize)));
+  }
+
+  get canGoToPreviousPage(): boolean {
+    return this.listPage > 1;
+  }
+
+  get canGoToNextPage(): boolean {
+    return this.listPage < this.totalListPages;
+  }
+
+  get isCustomPeriodSelected(): boolean {
+    return this.statsPeriod === 'custom';
   }
 
   get selectedCount(): number {
@@ -631,6 +724,18 @@ export class EnquiriesComponent implements OnInit {
     return (this.paymentSchedule?.paymentProgress.statusColor ?? 'Green').toLowerCase();
   }
 
+  get planningProgressPercent(): number {
+    return this.paymentSchedule?.planningProgress.percent ?? 0;
+  }
+
+  get planningProgressCompleted(): number {
+    return this.paymentSchedule?.planningProgress.completed ?? 0;
+  }
+
+  get planningProgressTotal(): number {
+    return this.paymentSchedule?.planningProgress.total ?? 0;
+  }
+
   get recordingPaymentMilestone(): PaymentMilestoneDto | null {
     return this.getScheduleMilestone(this.recordingPaymentMilestoneId ?? undefined);
   }
@@ -669,6 +774,16 @@ export class EnquiriesComponent implements OnInit {
       .slice(0, 80);
   }
 
+  get filteredAppointmentEnquiryOptions(): AppointmentEnquiryOption[] {
+    const term = this.appointmentEnquirySearchTerm.trim().toLowerCase();
+    if (!term) {
+      return this.appointmentEnquiryOptions;
+    }
+
+    return this.appointmentEnquiryOptions.filter((option) =>
+      option.label.toLowerCase().includes(term) || option.id.toLowerCase().includes(term));
+  }
+
   get canSaveAppointment(): boolean {
     return !this.appointmentSaving
       && !!this.selectedEnquiry
@@ -676,7 +791,8 @@ export class EnquiriesComponent implements OnInit {
       && !!this.appointmentDraft.type.trim()
       && !!this.appointmentDraft.date
       && !!this.appointmentDraft.startTime
-      && this.appointmentDraft.durationMinutes > 0;
+      && this.appointmentDraft.durationMinutes > 0
+      && this.appointmentDraft.relatedEnquiryIds.some((id) => !!id);
   }
 
   get filteredEnquiryDocuments(): EnquiryDocumentDto[] {
@@ -686,6 +802,37 @@ export class EnquiriesComponent implements OnInit {
     }
 
     return this.enquiryDocuments.filter((document) => document.category === category);
+  }
+
+  get communicationActivityEntries(): ActivityFeedEntryDto[] {
+    if (!this.selectedEnquiry) {
+      return [];
+    }
+
+    const communicationSignals = ['communication', 'email', 'message', 'sms', 'portal'];
+    return this.selectedEnquiry.activityLog
+      .filter((entry) => {
+        const actionType = (entry.actionType ?? '').toLowerCase();
+        return communicationSignals.some((signal) => actionType.includes(signal));
+      })
+      .map((entry) => ({
+        id: entry.id,
+        createdAtUtc: entry.createdAtUtc,
+        actionType: entry.actionType,
+        actionLabel: entry.actionType.replace(/[._-]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase()),
+        actionCategory: 'communication',
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        enquiryId: this.selectedEnquiry?.id ?? null,
+        enquiryReference: this.selectedEnquiry?.reference ?? null,
+        changeSummaryJson: entry.changeSummaryJson ?? null,
+        details: entry.changeSummaryJson ?? null,
+        userId: entry.userId ?? null,
+        userName: entry.userName ?? null,
+        userAvatarUrl: null,
+        ipAddress: null
+      }))
+      .sort((left, right) => new Date(right.createdAtUtc).getTime() - new Date(left.createdAtUtc).getTime());
   }
 
   get canGenerateBeo(): boolean {
@@ -867,13 +1014,28 @@ export class EnquiriesComponent implements OnInit {
   ngOnInit(): void {
     this.ensureActivityRealtimeSubscription();
 
-    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+    combineLatest([this.route.paramMap, this.route.queryParamMap])
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(([pathParams, params]) => {
       const previousSelectedEnquiryId = this.selectedEnquiryId;
-      const enquiryId = params.get('enquiry');
+      const routeEnquiryId = pathParams.get('id');
+      const legacyQueryEnquiryId = params.get('enquiry');
+      const enquiryId = routeEnquiryId ?? legacyQueryEnquiryId;
       const requestedStatusTab = params.get('statusTab');
       const requestedDetailTab = params.get('tab');
       const requestedSearch = params.get('search') ?? '';
       const requestedQuickFilter = params.get('quickFilter') ?? '';
+      const requestedEventStyle = params.get('eventStyle') ?? '';
+      const requestedDateFrom = params.get('dateFrom') ?? '';
+      const requestedDateTo = params.get('dateTo') ?? '';
+      const requestedSpaceId = params.get('spaceId') ?? '';
+      const requestedValueMin = this.normalizeNumericQuery(params.get('valueMin'));
+      const requestedValueMax = this.normalizeNumericQuery(params.get('valueMax'));
+      const requestedPeriod = this.normalizePeriod(params.get('period'));
+      const requestedEventManagerUserId = params.get('eventManagerUserId') ?? '';
+      const requestedEventType = params.get('eventType') ?? '';
+      const requestedCustomStart = params.get('customStart') ?? '';
+      const requestedCustomEnd = params.get('customEnd') ?? '';
       const requestedSource = params.get('source') ?? '';
       const requestedConversionScoreMin = this.normalizeNumericQuery(params.get('conversionScoreMin'));
       const requestedConversionScoreMax = this.normalizeNumericQuery(params.get('conversionScoreMax'));
@@ -886,8 +1048,19 @@ export class EnquiriesComponent implements OnInit {
       const requestedMergeA = params.get('mergeA');
       const requestedMergeB = params.get('mergeB');
       const requestedPageSize = this.parsePageSize(params.get('pageSize'));
+      const requestedPage = this.parseListPage(params.get('page'));
       let shouldReloadList = false;
       const previousTab = this.activeTab;
+      this.isDedicatedDetailRoute = !!routeEnquiryId;
+
+      if (!routeEnquiryId && legacyQueryEnquiryId) {
+        this.router.navigate(['/enquiries', legacyQueryEnquiryId], {
+          queryParams: { enquiry: null },
+          queryParamsHandling: 'merge',
+          replaceUrl: true
+        });
+        return;
+      }
 
       if (requestedStatusTab && this.isValidStatusTab(requestedStatusTab) && requestedStatusTab !== this.activeTab) {
         this.activeTab = requestedStatusTab;
@@ -906,6 +1079,12 @@ export class EnquiriesComponent implements OnInit {
       if (
         (currentFilters.search ?? '') !== requestedSearch ||
         (currentFilters.quickFilter ?? '') !== requestedQuickFilter ||
+        (currentFilters.eventStyle ?? '') !== requestedEventStyle ||
+        (currentFilters.dateFrom ?? '') !== requestedDateFrom ||
+        (currentFilters.dateTo ?? '') !== requestedDateTo ||
+        (currentFilters.spaceId ?? '') !== requestedSpaceId ||
+        this.normalizeNumericQuery(currentFilters.valueMin) !== requestedValueMin ||
+        this.normalizeNumericQuery(currentFilters.valueMax) !== requestedValueMax ||
         (currentFilters.conversionScoreMin ?? '') !== requestedConversionScoreMin ||
         (currentFilters.conversionScoreMax ?? '') !== requestedConversionScoreMax ||
         (currentFilters.sort ?? '') !== requestedSort ||
@@ -915,6 +1094,12 @@ export class EnquiriesComponent implements OnInit {
           {
             search: requestedSearch,
             quickFilter: requestedQuickFilter,
+            eventStyle: requestedEventStyle,
+            dateFrom: requestedDateFrom,
+            dateTo: requestedDateTo,
+            spaceId: requestedSpaceId,
+            valueMin: requestedValueMin,
+            valueMax: requestedValueMax,
             conversionScoreMin: requestedConversionScoreMin,
             conversionScoreMax: requestedConversionScoreMax,
             sort: requestedSort,
@@ -927,6 +1112,26 @@ export class EnquiriesComponent implements OnInit {
 
       if (this.sourceFilter !== requestedSource) {
         this.sourceFilter = requestedSource;
+        shouldReloadList = true;
+      }
+
+      if (
+        this.statsPeriod !== requestedPeriod
+        || this.statsEventManagerUserId !== requestedEventManagerUserId
+        || this.statsEventType !== requestedEventType
+        || this.statsCustomStart !== requestedCustomStart
+        || this.statsCustomEnd !== requestedCustomEnd
+      ) {
+        this.statsPeriod = requestedPeriod;
+        this.statsEventManagerUserId = requestedEventManagerUserId;
+        this.statsEventType = requestedEventType;
+        this.statsCustomStart = requestedCustomStart;
+        this.statsCustomEnd = requestedCustomEnd;
+        shouldReloadList = true;
+      }
+
+      if (requestedPage !== this.listPage) {
+        this.listPage = requestedPage;
         shouldReloadList = true;
       }
 
@@ -946,8 +1151,18 @@ export class EnquiriesComponent implements OnInit {
         this.bulkActionFeedback = '';
       }
 
+      if (this.isDedicatedDetailRoute) {
+        if (enquiryId && enquiryId !== previousSelectedEnquiryId) {
+          this.selectedEnquiry = null;
+        }
+        if (enquiryId && (enquiryId !== previousSelectedEnquiryId || !this.selectedEnquiry)) {
+          this.loadEnquiryDetail(enquiryId);
+        }
+        return;
+      }
+
       if (shouldReloadList || !this.listResponse) {
-        this.loadEnquiries(1);
+        this.loadEnquiries(this.listPage);
         return;
       }
 
@@ -962,6 +1177,12 @@ export class EnquiriesComponent implements OnInit {
       const filters = this.filtersForm.getRawValue();
       const trimmedSearch = (filters.search ?? '').trim();
       const quickFilter = filters.quickFilter ?? '';
+      const eventStyle = (filters.eventStyle ?? '').trim();
+      const dateFrom = (filters.dateFrom ?? '').trim();
+      const dateTo = (filters.dateTo ?? '').trim();
+      const spaceId = (filters.spaceId ?? '').trim();
+      const valueMin = this.normalizeNumericQuery(filters.valueMin);
+      const valueMax = this.normalizeNumericQuery(filters.valueMax);
       const conversionScoreMin = this.normalizeNumericQuery(filters.conversionScoreMin);
       const conversionScoreMax = this.normalizeNumericQuery(filters.conversionScoreMax);
       const sort = this.composeSortValue(filters.sort);
@@ -972,15 +1193,23 @@ export class EnquiriesComponent implements OnInit {
         queryParams: {
           search: trimmedSearch || null,
           quickFilter: quickFilter || null,
+          eventStyle: eventStyle || null,
+          dateFrom: dateFrom || null,
+          dateTo: dateTo || null,
+          spaceId: spaceId || null,
+          valueMin: valueMin || null,
+          valueMax: valueMax || null,
           source: this.sourceFilter || null,
           conversionScoreMin: conversionScoreMin || null,
           conversionScoreMax: conversionScoreMax || null,
           sort: sort || null,
-          pageSize: pageSize === 25 ? null : pageSize
+          pageSize: pageSize === 25 ? null : pageSize,
+          page: null
         },
         queryParamsHandling: 'merge',
         replaceUrl: true
       });
+      this.listPage = 1;
       this.loadEnquiries(1);
     });
 
@@ -1001,11 +1230,23 @@ export class EnquiriesComponent implements OnInit {
           return;
         }
 
-        const requestedEnquiryId = this.route.snapshot.queryParamMap.get('enquiry');
+        this.loadSavedViews(venueId);
+        this.ensureVenueSpacesLoaded(venueId);
+
+        const requestedEnquiryId = this.route.snapshot.paramMap.get('id') ?? this.route.snapshot.queryParamMap.get('enquiry');
         if (requestedEnquiryId) {
           this.selectedEnquiryId = requestedEnquiryId;
         }
 
+        if (this.route.snapshot.paramMap.get('id')) {
+          this.isDedicatedDetailRoute = true;
+          if (requestedEnquiryId) {
+            this.loadEnquiryDetail(requestedEnquiryId);
+          }
+          return;
+        }
+
+        this.isDedicatedDetailRoute = false;
         this.loadEnquiries(1);
       });
   }
@@ -1017,10 +1258,100 @@ export class EnquiriesComponent implements OnInit {
 
     this.clearBulkSelection();
     this.bulkActionFeedback = '';
+    this.listPage = 1;
 
     this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { statusTab: tabKey },
+      queryParams: { statusTab: tabKey, page: null },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  onSourceFilterChanged(source: string): void {
+    const requestedSource = String(source ?? '').trim();
+    if (requestedSource === this.sourceFilter) {
+      return;
+    }
+
+    this.sourceFilter = requestedSource;
+    this.listPage = 1;
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        source: this.sourceFilter || null,
+        page: null
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+  }
+
+  toggleTableSort(sortBy: string): void {
+    const normalizedSortBy = String(sortBy ?? '').trim();
+    if (!normalizedSortBy) {
+      return;
+    }
+
+    const current = this.parseSort(this.filtersForm.controls.sort.value);
+    const sameColumn = (current.sortBy ?? '').trim().toLowerCase() === normalizedSortBy.toLowerCase();
+
+    let nextSort = `${normalizedSortBy}:asc`;
+    if (sameColumn && current.sortDirection === 'asc') {
+      nextSort = `${normalizedSortBy}:desc`;
+    } else if (sameColumn && current.sortDirection === 'desc') {
+      nextSort = '';
+    }
+
+    this.filtersForm.patchValue(
+      {
+        sort: nextSort
+      },
+      { emitEvent: true }
+    );
+  }
+
+  tableSortDirection(sortBy: string): '' | 'asc' | 'desc' {
+    const normalizedSortBy = String(sortBy ?? '').trim().toLowerCase();
+    if (!normalizedSortBy) {
+      return '';
+    }
+
+    const current = this.parseSort(this.filtersForm.controls.sort.value);
+    if ((current.sortBy ?? '').trim().toLowerCase() !== normalizedSortBy) {
+      return '';
+    }
+
+    return current.sortDirection ?? '';
+  }
+
+  onStatsFiltersChanged(): void {
+    this.listPage = 1;
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        period: this.statsPeriod === 'this-month' ? null : this.statsPeriod,
+        eventManagerUserId: this.statsEventManagerUserId || null,
+        eventType: this.statsEventType || null,
+        customStart: this.statsPeriod === 'custom' ? (this.statsCustomStart || null) : null,
+        customEnd: this.statsPeriod === 'custom' ? (this.statsCustomEnd || null) : null,
+        page: null
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+  }
+
+  goToListPage(page: number): void {
+    const normalized = Math.min(this.totalListPages, Math.max(1, this.parseListPage(String(page))));
+    if (normalized === this.listPage) {
+      return;
+    }
+
+    this.listPage = normalized;
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { page: normalized === 1 ? null : normalized },
       queryParamsHandling: 'merge'
     });
   }
@@ -1061,11 +1392,13 @@ export class EnquiriesComponent implements OnInit {
     this.setTestDataFeedback('Creating 10 test enquiries...', 'info');
     this.bulkActionFeedback = '';
 
+    const request: GenerateTestEnquiriesRequest = {
+      venueId,
+      count: 10
+    };
+
     this.api
-      .generateTestEnquiries({
-        venueId,
-        count: 10
-      })
+      .generateTestEnquiries(request)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
@@ -1085,17 +1418,91 @@ export class EnquiriesComponent implements OnInit {
       });
   }
 
+  createFebruaryMarchEvents(): void {
+    const venueId = this.venueId;
+    if (!venueId) {
+      this.setTestDataFeedback('Select a venue before creating daily February and March events.', 'error');
+      return;
+    }
+
+    if (this.creatingTestEnquiries) {
+      return;
+    }
+
+    const now = new Date();
+    const year = now.getUTCMonth() > 2
+      ? now.getUTCFullYear() + 1
+      : now.getUTCFullYear();
+    const startDate = `${year}-02-01`;
+    const endDate = `${year}-03-31`;
+    const totalDays = this.countInclusiveDays(startDate, endDate);
+    if (totalDays <= 0) {
+      this.setTestDataFeedback('Unable to calculate February/March date range.', 'error');
+      return;
+    }
+
+    this.creatingTestEnquiries = true;
+    this.setTestDataFeedback(`Creating one enquiry per day from ${startDate} to ${endDate}...`, 'info');
+    this.bulkActionFeedback = '';
+
+    const request: GenerateTestEnquiriesRequest = {
+      venueId,
+      startDate,
+      endDate,
+      onePerDay: true
+    };
+
+    this.api
+      .generateTestEnquiries(request)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.finishTestEnquiryCreation(response.created, totalDays - response.created);
+        },
+        error: (error) => {
+          if (error?.status === 404 || error?.status === 405) {
+            this.createFallbackFebruaryMarchEvents(venueId, startDate, endDate);
+            return;
+          }
+
+          this.creatingTestEnquiries = false;
+          const message = this.extractCreateTestEnquiriesError(error);
+          this.bulkActionFeedback = message;
+          this.setTestDataFeedback(message, 'error');
+        }
+      });
+  }
+
   openWebsiteEnquiryPreview(): void {
     this.router.navigateByUrl('/website-enquiry');
   }
 
   private createFallbackTestEnquiries(venueId: string): void {
     const payloads = this.buildFallbackTestEnquiryPayloads(venueId, 10);
+    this.createFallbackEnquiriesFromPayloads(payloads, 'Using fallback generator to create 10 test enquiries...');
+  }
+
+  private createFallbackFebruaryMarchEvents(venueId: string, startDate: string, endDate: string): void {
+    const payloads = this.buildFallbackDailyRangeEnquiryPayloads(venueId, startDate, endDate);
+    this.createFallbackEnquiriesFromPayloads(
+      payloads,
+      `Using fallback generator to create daily events from ${startDate} to ${endDate}...`
+    );
+  }
+
+  private createFallbackEnquiriesFromPayloads(payloads: CreateEnquiryRequest[], startMessage: string): void {
+    const requestedCount = payloads.length;
+    if (requestedCount === 0) {
+      this.creatingTestEnquiries = false;
+      this.setTestDataFeedback('No fallback enquiry payloads were generated.', 'error');
+      return;
+    }
+
     let created = 0;
     let attempted = 0;
     let firstFailureMessage = '';
 
-    this.setTestDataFeedback('Using fallback generator to create 10 test enquiries...', 'info');
+    this.setTestDataFeedback(startMessage, 'info');
 
     from(payloads)
       .pipe(
@@ -1121,7 +1528,7 @@ export class EnquiriesComponent implements OnInit {
             created += 1;
           }
 
-          this.setTestDataFeedback(`Creating test enquiries... ${attempted}/10`, 'info');
+          this.setTestDataFeedback(`Creating test enquiries... ${attempted}/${requestedCount}`, 'info');
         }),
         takeUntilDestroyed(this.destroyRef)
       )
@@ -1133,7 +1540,7 @@ export class EnquiriesComponent implements OnInit {
           this.setTestDataFeedback(message, 'error');
         },
         complete: () => {
-          this.finishTestEnquiryCreation(created, 10 - created, firstFailureMessage);
+          this.finishTestEnquiryCreation(created, requestedCount - created, firstFailureMessage);
         }
       });
   }
@@ -1277,7 +1684,100 @@ export class EnquiriesComponent implements OnInit {
     });
   }
 
+  private buildFallbackDailyRangeEnquiryPayloads(venueId: string, startDate: string, endDate: string): CreateEnquiryRequest[] {
+    const eventStyles = ['Meeting', '3-Course Dinner', 'Buffet', 'Reception/Standing', 'Drinks Reception'];
+    const sourceTypes = ['Phone', 'Email', 'Website Form', 'Referral', 'Venue Event'];
+    const firstNames = ['Emma', 'Oliver', 'Sophie', 'James', 'Charlotte', 'Liam', 'Amelia', 'Noah', 'Isla', 'George'];
+    const lastNames = ['Taylor', 'Wilson', 'Hughes', 'Patel', 'Edwards', 'Thompson', 'Davies', 'Roberts', 'Carter', 'Morgan'];
+    const start = new Date(`${startDate}T00:00:00Z`);
+    const end = new Date(`${endDate}T00:00:00Z`);
+
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end.getTime() < start.getTime()) {
+      return [];
+    }
+
+    const payloads: CreateEnquiryRequest[] = [];
+    let cursor = new Date(start.getTime());
+    let index = 0;
+
+    while (cursor.getTime() <= end.getTime()) {
+      const dayToken = cursor.toISOString().slice(0, 10);
+      const eventStart = new Date(Date.UTC(
+        cursor.getUTCFullYear(),
+        cursor.getUTCMonth(),
+        cursor.getUTCDate(),
+        13 + (index % 4),
+        0,
+        0,
+        0
+      ));
+      const eventEnd = new Date(eventStart.getTime() + 5 * 60 * 60 * 1000);
+      const uniqueToken = `${Date.now()}${index}`;
+      const firstName = firstNames[index % firstNames.length];
+      const lastName = lastNames[(index + 3) % lastNames.length];
+      const guestsExpected = 60 + (index % 8) * 12;
+      const budgetMin = Math.round(guestsExpected * 45);
+      const budgetMax = Math.round(guestsExpected * 105);
+      const eventType = cursor.getUTCMonth() === 1 ? 'Wedding' : 'Corporate Meeting';
+
+      payloads.push({
+        venueId,
+        contactFirstName: firstName,
+        contactLastName: lastName,
+        contactEmail: `daily.${dayToken}.${uniqueToken}@creventaflow.local`,
+        contactPhoneNumberE164: `+4477009${(15000 + index).toString().padStart(5, '0')}`,
+        secondaryContactName: undefined,
+        secondaryEmail: undefined,
+        secondaryPhoneNumberE164: undefined,
+        companyName: `Daily Events ${cursor.getUTCFullYear()}`,
+        marketingConsent: index % 2 === 0,
+        eventType,
+        eventName: `Daily Diary Seed ${dayToken}`,
+        eventStartUtc: eventStart.toISOString(),
+        eventEndUtc: eventEnd.toISOString(),
+        hasFlexibleDates: false,
+        flexibleDateNotes: undefined,
+        guestsExpected,
+        eventStyle: eventStyles[index % eventStyles.length],
+        setupStyle: 'Banquet',
+        budgetMinAmount: budgetMin,
+        budgetMaxAmount: budgetMax,
+        currencyCode: 'GBP',
+        sourceType: sourceTypes[index % sourceTypes.length],
+        sourceDetail: undefined,
+        leadQuality: (index % 5) + 1,
+        specialRequirements: index % 3 === 0 ? 'Generated daily diary coverage event.' : undefined,
+        internalNotes: 'Generated via fallback daily February/March events action.',
+        eventManagerUserId: undefined
+      });
+
+      cursor = new Date(Date.UTC(
+        cursor.getUTCFullYear(),
+        cursor.getUTCMonth(),
+        cursor.getUTCDate() + 1,
+        0,
+        0,
+        0,
+        0
+      ));
+      index += 1;
+    }
+
+    return payloads;
+  }
+
+  private countInclusiveDays(startDate: string, endDate: string): number {
+    const start = new Date(`${startDate}T00:00:00Z`);
+    const end = new Date(`${endDate}T00:00:00Z`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end.getTime() < start.getTime()) {
+      return 0;
+    }
+
+    return Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1;
+  }
+
   loadEnquiries(page: number): void {
+    this.listPage = this.parseListPage(String(page));
     const venueId = this.venueId;
     if (!venueId) {
       const fallbackVenueId = this.auth.session?.venueRoles[0]?.venueId ?? null;
@@ -1310,7 +1810,17 @@ export class EnquiriesComponent implements OnInit {
       .getEnquiries({
         venueId,
         statusTab: this.activeTab,
-        period: 'this-month',
+        period: this.statsPeriod,
+        customStart: this.statsPeriod === 'custom' ? (this.statsCustomStart || undefined) : undefined,
+        customEnd: this.statsPeriod === 'custom' ? (this.statsCustomEnd || undefined) : undefined,
+        eventManagerUserId: this.statsEventManagerUserId || undefined,
+        eventType: this.statsEventType || undefined,
+        eventStyle: filters.eventStyle || undefined,
+        dateFrom: filters.dateFrom || undefined,
+        dateTo: filters.dateTo || undefined,
+        spaceId: filters.spaceId || undefined,
+        valueMin: this.parseOptionalNumber(filters.valueMin),
+        valueMax: this.parseOptionalNumber(filters.valueMax),
         quickFilter: filters.quickFilter || undefined,
         search: filters.search || undefined,
         source: this.sourceFilter || undefined,
@@ -1328,14 +1838,15 @@ export class EnquiriesComponent implements OnInit {
           this.recoveringVenueContext = false;
           this.enquiryLoadError = '';
           this.listResponse = response;
+          this.listPage = this.parseListPage(String(response.page.page));
           this.enquiries = response.page.items;
           this.syncBulkSelectionToVisibleRows();
 
-          if (!this.selectedEnquiryId && this.enquiries.length > 0) {
+          if (!this.selectedEnquiryId && this.enquiries.length > 0 && this.isDedicatedDetailRoute) {
             this.selectEnquiry(this.enquiries[0].id);
           }
 
-          if (this.selectedEnquiryId) {
+          if (this.selectedEnquiryId && this.isDedicatedDetailRoute) {
             this.loadEnquiryDetail(this.selectedEnquiryId);
           }
 
@@ -1400,6 +1911,12 @@ export class EnquiriesComponent implements OnInit {
       {
         search: '',
         quickFilter: '',
+        eventStyle: '',
+        dateFrom: '',
+        dateTo: '',
+        spaceId: '',
+        valueMin: '',
+        valueMax: '',
         conversionScoreMin: '',
         conversionScoreMax: '',
         sort: '',
@@ -1408,23 +1925,475 @@ export class EnquiriesComponent implements OnInit {
       { emitEvent: false }
     );
     this.sourceFilter = '';
+    this.statsEventManagerUserId = '';
+    this.statsEventType = '';
 
     this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {
         search: null,
         quickFilter: null,
+        eventManagerUserId: null,
+        eventType: null,
+        eventStyle: null,
+        dateFrom: null,
+        dateTo: null,
+        spaceId: null,
+        valueMin: null,
+        valueMax: null,
         source: null,
         conversionScoreMin: null,
         conversionScoreMax: null,
         sort: null,
-        pageSize: null
+        pageSize: null,
+        page: null
       },
       queryParamsHandling: 'merge',
       replaceUrl: true
     });
 
+    this.listPage = 1;
     this.loadEnquiries(1);
+  }
+
+  onSavedViewSelected(viewId: string): void {
+    this.selectedSavedViewId = viewId ?? '';
+    if (!this.selectedSavedViewId) {
+      return;
+    }
+
+    const selected = this.savedViews.find((view) => view.id === this.selectedSavedViewId);
+    if (!selected) {
+      this.selectedSavedViewId = '';
+      return;
+    }
+
+    this.applySavedView(selected);
+  }
+
+  saveCurrentFilterView(): void {
+    const venueId = this.venueId;
+    if (!venueId || this.savingSavedView) {
+      return;
+    }
+
+    const defaultName = this.selectedSavedView
+      ? `${this.selectedSavedView.name} Copy`
+      : `View ${new Date().toLocaleDateString()}`;
+    const input = window.prompt('Save current filters as', defaultName);
+    const name = (input ?? '').trim();
+    if (!name) {
+      return;
+    }
+
+    this.savingSavedView = true;
+    this.savedViewsError = '';
+    const payload = this.buildCurrentSavedViewPayload(name);
+    this.api
+      .createEnquirySavedFilterView(payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (savedView) => {
+          this.savingSavedView = false;
+          this.upsertSavedViewLocally(savedView);
+          this.selectedSavedViewId = savedView.id;
+          this.bulkActionFeedback = `Saved view "${savedView.name}" created.`;
+        },
+        error: (error) => {
+          this.savingSavedView = false;
+          if (this.shouldUseSavedViewsLocalFallback(error)) {
+            const localSavedView = this.buildLocalSavedViewFromPayload(payload);
+            this.upsertSavedViewLocally(localSavedView);
+            this.selectedSavedViewId = localSavedView.id;
+            this.bulkActionFeedback = `Saved view "${localSavedView.name}" saved locally.`;
+            this.savedViewsError = '';
+            return;
+          }
+          this.savedViewsError = typeof error?.error === 'string'
+            ? error.error
+            : 'Unable to save filter view.';
+        }
+      });
+  }
+
+  renameSelectedSavedView(): void {
+    const venueId = this.venueId;
+    const selected = this.selectedSavedView;
+    if (!venueId || !selected || this.renamingSavedView) {
+      return;
+    }
+
+    const input = window.prompt('Rename saved view', selected.name);
+    const name = (input ?? '').trim();
+    if (!name || name === selected.name) {
+      return;
+    }
+
+    this.renamingSavedView = true;
+    this.savedViewsError = '';
+    const payload: UpsertEnquirySavedFilterViewRequest = {
+      venueId,
+      name,
+      statusTab: selected.statusTab,
+      search: selected.search,
+      quickFilter: selected.quickFilter,
+      eventManagerUserId: selected.eventManagerUserId,
+      eventType: selected.eventType,
+      eventStyle: selected.eventStyle,
+      dateFrom: selected.dateFrom,
+      dateTo: selected.dateTo,
+      spaceId: selected.spaceId,
+      valueMin: selected.valueMin,
+      valueMax: selected.valueMax,
+      source: selected.source,
+      conversionScoreMin: selected.conversionScoreMin,
+      conversionScoreMax: selected.conversionScoreMax,
+      sort: selected.sort,
+      pageSize: selected.pageSize
+    };
+
+    this.api
+      .updateEnquirySavedFilterView(selected.id, payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (savedView) => {
+          this.renamingSavedView = false;
+          this.upsertSavedViewLocally(savedView);
+          this.selectedSavedViewId = savedView.id;
+          this.bulkActionFeedback = `Saved view renamed to "${savedView.name}".`;
+        },
+        error: (error) => {
+          this.renamingSavedView = false;
+          if (this.shouldUseSavedViewsLocalFallback(error)) {
+            const localSavedView: EnquirySavedFilterViewDto = {
+              ...selected,
+              name,
+              updatedAtUtc: new Date().toISOString()
+            };
+            this.upsertSavedViewLocally(localSavedView);
+            this.selectedSavedViewId = localSavedView.id;
+            this.bulkActionFeedback = `Saved view renamed to "${localSavedView.name}" locally.`;
+            this.savedViewsError = '';
+            return;
+          }
+          this.savedViewsError = typeof error?.error === 'string'
+            ? error.error
+            : 'Unable to rename saved view.';
+        }
+      });
+  }
+
+  deleteSelectedSavedView(): void {
+    const venueId = this.venueId;
+    const selected = this.selectedSavedView;
+    if (!venueId || !selected || this.deletingSavedView) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete saved view "${selected.name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    this.deletingSavedView = true;
+    this.savedViewsError = '';
+    this.api
+      .deleteEnquirySavedFilterView(selected.id, venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.deletingSavedView = false;
+          this.savedViews = this.savedViews.filter((view) => view.id !== selected.id);
+          this.selectedSavedViewId = '';
+          this.persistSavedViewsToLocalStorage(this.savedViews, venueId);
+          this.bulkActionFeedback = `Saved view "${selected.name}" deleted.`;
+        },
+        error: (error) => {
+          this.deletingSavedView = false;
+          if (this.shouldUseSavedViewsLocalFallback(error)) {
+            this.savedViews = this.savedViews.filter((view) => view.id !== selected.id);
+            this.selectedSavedViewId = '';
+            this.persistSavedViewsToLocalStorage(this.savedViews, venueId);
+            this.bulkActionFeedback = `Saved view "${selected.name}" deleted locally.`;
+            this.savedViewsError = '';
+            return;
+          }
+          this.savedViewsError = typeof error?.error === 'string'
+            ? error.error
+            : 'Unable to delete saved view.';
+        }
+      });
+  }
+
+  private applySavedView(view: EnquirySavedFilterViewDto): void {
+    const statusTab = this.isValidStatusTab(view.statusTab) ? view.statusTab : 'new-unanswered';
+    const pageSize = this.parsePageSize(String(view.pageSize ?? 25));
+    const sort = this.composeSortValue(view.sort);
+
+    this.activeTab = statusTab;
+    this.statsEventManagerUserId = view.eventManagerUserId ?? '';
+    this.statsEventType = view.eventType ?? '';
+    this.clearBulkSelection();
+    this.bulkActionFeedback = '';
+
+    this.filtersForm.patchValue(
+      {
+        search: view.search ?? '',
+        quickFilter: view.quickFilter ?? '',
+        eventStyle: view.eventStyle ?? '',
+        dateFrom: view.dateFrom ?? '',
+        dateTo: view.dateTo ?? '',
+        spaceId: view.spaceId ?? '',
+        valueMin: view.valueMin ?? '',
+        valueMax: view.valueMax ?? '',
+        conversionScoreMin: view.conversionScoreMin ?? '',
+        conversionScoreMax: view.conversionScoreMax ?? '',
+        sort,
+        pageSize
+      },
+      { emitEvent: false }
+    );
+    this.sourceFilter = view.source ?? '';
+
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {
+        statusTab,
+        search: (view.search ?? '').trim() || null,
+        quickFilter: (view.quickFilter ?? '').trim() || null,
+        eventManagerUserId: (view.eventManagerUserId ?? '').trim() || null,
+        eventType: (view.eventType ?? '').trim() || null,
+        eventStyle: (view.eventStyle ?? '').trim() || null,
+        dateFrom: (view.dateFrom ?? '').trim() || null,
+        dateTo: (view.dateTo ?? '').trim() || null,
+        spaceId: (view.spaceId ?? '').trim() || null,
+        valueMin: this.normalizeNumericQuery(view.valueMin) || null,
+        valueMax: this.normalizeNumericQuery(view.valueMax) || null,
+        source: (view.source ?? '').trim() || null,
+        conversionScoreMin: this.normalizeNumericQuery(view.conversionScoreMin) || null,
+        conversionScoreMax: this.normalizeNumericQuery(view.conversionScoreMax) || null,
+        sort: sort || null,
+        pageSize: pageSize === 25 ? null : pageSize,
+        page: null
+      },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+
+    this.listPage = 1;
+    this.loadEnquiries(1);
+  }
+
+  private loadSavedViews(venueId: string): void {
+    this.savedViews = this.loadSavedViewsFromLocalStorage(venueId);
+    if (this.selectedSavedViewId && !this.savedViews.some((view) => view.id === this.selectedSavedViewId)) {
+      this.selectedSavedViewId = '';
+    }
+    this.savedViewsLoading = true;
+    this.savedViewsError = '';
+    this.api
+      .getEnquirySavedFilterViews(venueId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (response) => {
+          this.savedViewsLoading = false;
+          this.savedViews = [...(response.views ?? [])].sort((a, b) =>
+            new Date(b.updatedAtUtc).getTime() - new Date(a.updatedAtUtc).getTime());
+          this.persistSavedViewsToLocalStorage(this.savedViews, venueId);
+          if (this.selectedSavedViewId && !this.savedViews.some((view) => view.id === this.selectedSavedViewId)) {
+            this.selectedSavedViewId = '';
+          }
+        },
+        error: (error) => {
+          this.savedViewsLoading = false;
+          if (!this.shouldUseSavedViewsLocalFallback(error)) {
+            // Keep enquiry list usable even when saved-view API payloads drift.
+          }
+          this.savedViewsError = '';
+        }
+      });
+  }
+
+  private upsertSavedViewLocally(view: EnquirySavedFilterViewDto): void {
+    const index = this.savedViews.findIndex((candidate) => candidate.id === view.id);
+    if (index >= 0) {
+      this.savedViews[index] = view;
+    } else {
+      this.savedViews = [view, ...this.savedViews];
+    }
+
+    this.savedViews = [...this.savedViews].sort((a, b) =>
+      new Date(b.updatedAtUtc).getTime() - new Date(a.updatedAtUtc).getTime());
+
+    const venueId = this.venueId;
+    if (venueId) {
+      this.persistSavedViewsToLocalStorage(this.savedViews, venueId);
+    }
+  }
+
+  private shouldUseSavedViewsLocalFallback(error: unknown): boolean {
+    const status = Number((error as { status?: number } | null)?.status ?? 0);
+    return !Number.isFinite(status)
+      || status <= 0
+      || status >= 500
+      || status === 401
+      || status === 403
+      || status === 404
+      || status === 405
+      || status === 429;
+  }
+
+  private buildLocalSavedViewFromPayload(payload: UpsertEnquirySavedFilterViewRequest): EnquirySavedFilterViewDto {
+    const nowUtc = new Date().toISOString();
+    const fallbackId =
+      typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+    return {
+      id: fallbackId,
+      venueId: payload.venueId,
+      name: payload.name,
+      statusTab: this.isValidStatusTab(payload.statusTab ?? '') ? (payload.statusTab ?? 'new-unanswered') : 'new-unanswered',
+      search: payload.search ?? '',
+      quickFilter: payload.quickFilter ?? '',
+      eventManagerUserId: payload.eventManagerUserId ?? '',
+      eventType: payload.eventType ?? '',
+      eventStyle: payload.eventStyle ?? '',
+      dateFrom: payload.dateFrom ?? '',
+      dateTo: payload.dateTo ?? '',
+      spaceId: payload.spaceId ?? '',
+      valueMin: payload.valueMin ?? '',
+      valueMax: payload.valueMax ?? '',
+      source: payload.source ?? '',
+      conversionScoreMin: payload.conversionScoreMin ?? '',
+      conversionScoreMax: payload.conversionScoreMax ?? '',
+      sort: payload.sort ?? '',
+      pageSize: this.parsePageSize(String(payload.pageSize ?? 25)),
+      createdAtUtc: nowUtc,
+      updatedAtUtc: nowUtc
+    };
+  }
+
+  private loadSavedViewsFromLocalStorage(venueId: string): EnquirySavedFilterViewDto[] {
+    try {
+      const key = `${this.savedViewsStoragePrefix}:${venueId}`;
+      const raw = localStorage.getItem(key);
+      if (!raw) {
+        return [];
+      }
+
+      const parsed = JSON.parse(raw) as EnquirySavedFilterViewDto[];
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .filter((view) => typeof view?.id === 'string' && typeof view?.name === 'string')
+        .map((view) => ({
+          id: view.id,
+          venueId: view.venueId || venueId,
+          name: view.name,
+          statusTab: this.isValidStatusTab(view.statusTab) ? view.statusTab : 'new-unanswered',
+          search: view.search ?? '',
+          quickFilter: view.quickFilter ?? '',
+          eventManagerUserId: view.eventManagerUserId ?? '',
+          eventType: view.eventType ?? '',
+          eventStyle: view.eventStyle ?? '',
+          dateFrom: view.dateFrom ?? '',
+          dateTo: view.dateTo ?? '',
+          spaceId: view.spaceId ?? '',
+          valueMin: view.valueMin ?? '',
+          valueMax: view.valueMax ?? '',
+          source: view.source ?? '',
+          conversionScoreMin: view.conversionScoreMin ?? '',
+          conversionScoreMax: view.conversionScoreMax ?? '',
+          sort: view.sort ?? '',
+          pageSize: this.parsePageSize(String(view.pageSize ?? 25)),
+          createdAtUtc: view.createdAtUtc ?? new Date().toISOString(),
+          updatedAtUtc: view.updatedAtUtc ?? view.createdAtUtc ?? new Date().toISOString()
+        }))
+        .sort((a, b) => new Date(b.updatedAtUtc).getTime() - new Date(a.updatedAtUtc).getTime())
+        .slice(0, 50);
+    } catch {
+      return [];
+    }
+  }
+
+  private persistSavedViewsToLocalStorage(views: EnquirySavedFilterViewDto[], venueId: string): void {
+    try {
+      const key = `${this.savedViewsStoragePrefix}:${venueId}`;
+      localStorage.setItem(key, JSON.stringify(views.slice(0, 50)));
+    } catch {
+      // Ignore storage failures; API remains source of truth when available.
+    }
+  }
+
+  private buildCurrentSavedViewPayload(name: string): UpsertEnquirySavedFilterViewRequest {
+    const venueId = this.venueId;
+    if (!venueId) {
+      throw new Error('Venue is required to save filter view.');
+    }
+
+    const filters = this.filtersForm.getRawValue();
+    const sort = this.composeSortValue(filters.sort);
+    const pageSize = this.parsePageSize(String(filters.pageSize ?? 25));
+
+    return {
+      venueId,
+      name,
+      statusTab: this.activeTab,
+      search: (filters.search ?? '').trim() || null,
+      quickFilter: (filters.quickFilter ?? '').trim() || null,
+      eventManagerUserId: this.statsEventManagerUserId.trim() || null,
+      eventType: this.statsEventType.trim() || null,
+      eventStyle: (filters.eventStyle ?? '').trim() || null,
+      dateFrom: (filters.dateFrom ?? '').trim() || null,
+      dateTo: (filters.dateTo ?? '').trim() || null,
+      spaceId: (filters.spaceId ?? '').trim() || null,
+      valueMin: this.normalizeNumericQuery(filters.valueMin) || null,
+      valueMax: this.normalizeNumericQuery(filters.valueMax) || null,
+      source: (this.sourceFilter ?? '').trim() || null,
+      conversionScoreMin: this.normalizeNumericQuery(filters.conversionScoreMin) || null,
+      conversionScoreMax: this.normalizeNumericQuery(filters.conversionScoreMax) || null,
+      sort: sort || null,
+      pageSize
+    };
+  }
+
+  openEnquiryDetail(enquiryId: string): void {
+    if (!enquiryId) {
+      return;
+    }
+
+    this.router.navigate(['/enquiries', enquiryId], {
+      queryParams: {
+        tab: null
+      },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  backToEnquiryList(): void {
+    this.router.navigate(['/enquiries'], {
+      queryParams: {
+        enquiry: null,
+        tab: null
+      },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  openSelectedEnquiryInConnect(): void {
+    if (!this.selectedEnquiryId) {
+      return;
+    }
+
+    this.router.navigate(['/connect'], {
+      queryParams: {
+        enquiry: this.selectedEnquiryId
+      }
+    });
   }
 
   selectEnquiry(enquiryId: string): void {
@@ -1457,15 +2426,17 @@ export class EnquiriesComponent implements OnInit {
     this.aiFollowUpExecutionInProgressKey = null;
     this.aiFollowUpExecutionError = '';
     this.aiFollowUpExecutionMessage = '';
-    this.router.navigate([], {
-      relativeTo: this.route,
-      queryParams: { enquiry: enquiryId },
-      queryParamsHandling: 'merge'
-    });
+    if (!this.isDedicatedDetailRoute) {
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { enquiry: enquiryId },
+        queryParamsHandling: 'merge'
+      });
+    }
     this.loadEnquiryDetail(enquiryId);
   }
 
-  changeDetailTab(tab: 'overview' | 'events' | 'appointments' | 'tasks' | 'proposals' | 'payments' | 'sustainability' | 'documents' | 'activity'): void {
+  changeDetailTab(tab: 'overview' | 'events' | 'appointments' | 'proposals' | 'communications' | 'payments' | 'documents' | 'activity' | 'tasks' | 'sustainability'): void {
     if (tab === 'payments' && !this.canShowPaymentsTab) {
       return;
     }
@@ -1545,14 +2516,33 @@ export class EnquiriesComponent implements OnInit {
       return;
     }
 
+    let holdDaysOverride: number | undefined;
+    if (targetStatus === 'Provisional') {
+      const promptResult = this.promptHoldDaysOverride();
+      if (promptResult.cancelled) {
+        return;
+      }
+
+      holdDaysOverride = promptResult.value;
+    }
+
     this.api
-      .transitionEnquiryStatus(this.selectedEnquiryId, { targetStatus })
+      .transitionEnquiryStatus(this.selectedEnquiryId, {
+        targetStatus,
+        holdDaysOverride
+      })
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (response) => {
           this.showGeneratedTasksToast(response);
           this.loadEnquiryDetail(this.selectedEnquiryId!);
           this.loadEnquiries(this.listResponse?.page.page ?? 1);
+        },
+        error: (error) => {
+          this.bulkActionFeedback =
+            typeof error?.error?.message === 'string'
+              ? error.error.message
+              : 'Unable to change status right now.';
         }
       });
   }
@@ -1568,6 +2558,102 @@ export class EnquiriesComponent implements OnInit {
     }
 
     return normalized;
+  }
+
+  sourceBadgeToken(sourceType: string | null | undefined): string {
+    const normalized = (sourceType ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-');
+
+    if (!normalized) {
+      return 'unknown';
+    }
+
+    if (normalized.includes('website')) {
+      return 'website-form';
+    }
+    if (normalized.includes('social')) {
+      return 'social-media';
+    }
+    if (normalized.includes('walk')) {
+      return 'walk-in';
+    }
+    if (normalized.includes('third')) {
+      return 'third-party';
+    }
+
+    return normalized;
+  }
+
+  daysSinceContactBand(daysSinceContact: number | null | undefined): 'green' | 'amber' | 'red' {
+    const value = Math.max(0, Number(daysSinceContact ?? 0));
+    if (value <= 3) {
+      return 'green';
+    }
+    if (value <= 7) {
+      return 'amber';
+    }
+    return 'red';
+  }
+
+  holdCountdownLabel(holdExpiresAtUtc?: string | null): string {
+    const parsed = holdExpiresAtUtc ? new Date(holdExpiresAtUtc) : null;
+    if (!parsed || Number.isNaN(parsed.getTime())) {
+      return 'No hold expiry';
+    }
+
+    const remainingMs = parsed.getTime() - Date.now();
+    if (remainingMs <= 0) {
+      return 'Expired';
+    }
+
+    const remainingDays = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+    return `${remainingDays} day${remainingDays === 1 ? '' : 's'} remaining`;
+  }
+
+  holdExpiryLabel(holdExpiresAtUtc?: string | null): string {
+    if (!holdExpiresAtUtc) {
+      return 'N/A';
+    }
+
+    const parsed = new Date(holdExpiresAtUtc);
+    if (Number.isNaN(parsed.getTime())) {
+      return 'N/A';
+    }
+
+    return parsed.toLocaleString();
+  }
+
+  listHoldCountdownLabel(enquiry: EnquiryListItemDto): string {
+    if (enquiry.status !== 'Provisional') {
+      return 'N/A';
+    }
+
+    return this.holdCountdownLabel(enquiry.holdExpiresAtUtc);
+  }
+
+  private promptHoldDaysOverride(): { cancelled: boolean; value?: number } {
+    const raw = window.prompt(
+      'Optional provisional hold override in days. Leave blank to use venue default (Sales Manager+ only).',
+      ''
+    );
+    if (raw === null) {
+      return { cancelled: true };
+    }
+
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      return { cancelled: false };
+    }
+
+    const parsed = Number.parseInt(trimmed, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      this.bulkActionFeedback = 'Hold day override must be a whole number greater than zero.';
+      return { cancelled: true };
+    }
+
+    return { cancelled: false, value: parsed };
   }
 
   startOverviewEdit(field: EditableOverviewField): void {
@@ -1801,8 +2887,8 @@ export class EnquiriesComponent implements OnInit {
 
           if (canAccessTargetVenue) {
             this.auth.setSelectedVenue(response.targetVenueId);
-            this.router.navigate(['/enquiries'], {
-              queryParams: { statusTab: 'all', enquiry: targetEnquiryId }
+            this.router.navigate(['/enquiries', targetEnquiryId], {
+              queryParams: { statusTab: 'all' }
             });
             return;
           }
@@ -1835,6 +2921,7 @@ export class EnquiriesComponent implements OnInit {
     this.appointmentDraft = this.createDefaultAppointmentDraft(this.selectedEnquiry);
     this.appointmentDraft.date = baseDate;
     this.appointmentDraft.relatedEnquiryIds = [this.selectedEnquiry.id];
+    this.appointmentEnquirySearchTerm = '';
     this.showAppointmentForm = true;
   }
 
@@ -1848,6 +2935,7 @@ export class EnquiriesComponent implements OnInit {
     this.appointmentSaving = false;
     this.appointmentError = '';
     this.appointmentConflictWarning = '';
+    this.appointmentEnquirySearchTerm = '';
     this.showAppointmentForm = true;
 
     this.api.getAppointment(appointment.id, this.selectedEnquiry.venueId)
@@ -1874,6 +2962,7 @@ export class EnquiriesComponent implements OnInit {
     this.appointmentError = '';
     this.appointmentConflictWarning = '';
     this.appointmentDraft = this.createDefaultAppointmentDraft(this.selectedEnquiry ?? undefined);
+    this.appointmentEnquirySearchTerm = '';
   }
 
   submitAppointmentForm(allowConflictOverride = false): void {
@@ -2015,6 +3104,12 @@ export class EnquiriesComponent implements OnInit {
     }, 0);
 
     return totalMinutes / 60;
+  }
+
+  get subEventTotalPriceAmount(): number {
+    return this.roundMoney(
+      this.timelineSubEvents.reduce((total, subEvent) => total + this.numberOrZero(subEvent.priceAmount), 0)
+    );
   }
 
   get subEventSpaceUtilisation(): Array<{ spaceId: string; spaceName: string; minutes: number; percent: number }> {
@@ -2906,6 +4001,12 @@ export class EnquiriesComponent implements OnInit {
       .getEnquirySelection({
         venueId,
         statusTab: this.activeTab,
+        eventStyle: filters.eventStyle || undefined,
+        dateFrom: filters.dateFrom || undefined,
+        dateTo: filters.dateTo || undefined,
+        spaceId: filters.spaceId || undefined,
+        valueMin: this.parseOptionalNumber(filters.valueMin),
+        valueMax: this.parseOptionalNumber(filters.valueMax),
         quickFilter: filters.quickFilter || undefined,
         search: filters.search || undefined,
         source: this.sourceFilter || undefined
@@ -2974,7 +4075,18 @@ export class EnquiriesComponent implements OnInit {
       return;
     }
 
-    this.executeBulkStatusTransition(targetStatus);
+    let holdDaysOverride: number | undefined;
+    if (targetStatus === 'Provisional') {
+      const promptResult = this.promptHoldDaysOverride();
+      if (promptResult.cancelled) {
+        this.pendingBulkStatusValue = '';
+        return;
+      }
+
+      holdDaysOverride = promptResult.value;
+    }
+
+    this.executeBulkStatusTransition(targetStatus, undefined, undefined, undefined, holdDaysOverride);
   }
 
   confirmBulkArchive(): void {
@@ -3382,6 +4494,25 @@ export class EnquiriesComponent implements OnInit {
     return this.pageSizeOptions.has(parsed) ? parsed : 25;
   }
 
+  private parseListPage(raw: string | null): number {
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed)) {
+      return 1;
+    }
+
+    return Math.max(1, Math.trunc(parsed));
+  }
+
+  private normalizePeriod(raw: string | null): string {
+    const normalized = (raw ?? '').trim().toLowerCase();
+    return normalized === 'this-week'
+      || normalized === 'this-quarter'
+      || normalized === 'this-year'
+      || normalized === 'custom'
+      ? normalized
+      : 'this-month';
+  }
+
   private parseOptionalNumber(raw: unknown): number | undefined {
     if (raw === null || raw === undefined) {
       return undefined;
@@ -3456,16 +4587,17 @@ export class EnquiriesComponent implements OnInit {
     return `${sortBy}:${direction}`;
   }
 
-  private isValidDetailTab(tab: string | null): tab is 'overview' | 'events' | 'appointments' | 'tasks' | 'proposals' | 'payments' | 'sustainability' | 'documents' | 'activity' {
+  private isValidDetailTab(tab: string | null): tab is 'overview' | 'events' | 'appointments' | 'proposals' | 'communications' | 'payments' | 'documents' | 'activity' | 'tasks' | 'sustainability' {
     return tab === 'overview'
       || tab === 'events'
       || tab === 'appointments'
-      || tab === 'tasks'
       || tab === 'proposals'
+      || tab === 'communications'
       || tab === 'payments'
-      || tab === 'sustainability'
       || tab === 'documents'
-      || tab === 'activity';
+      || tab === 'activity'
+      || tab === 'tasks'
+      || tab === 'sustainability';
   }
 
   private toDateOnly(value: string): string {
@@ -3545,6 +4677,7 @@ export class EnquiriesComponent implements OnInit {
       guestCount: enquiry?.guestsExpected ?? 1,
       spaceId: this.venueSpaces[0]?.id ?? '',
       setupStyle: enquiry?.setupStyle ?? '',
+      priceAmount: null,
       notes: ''
     };
   }
@@ -3574,7 +4707,7 @@ export class EnquiriesComponent implements OnInit {
 
     return {
       title: appointment.title ?? '',
-      type: appointment.type ?? 'Meeting',
+      type: this.normalizeAppointmentType(appointment.type),
       date,
       startTime: this.toTimeOnly(start),
       durationMinutes: Math.max(15, Number(appointment.durationMinutes || 60)),
@@ -3681,6 +4814,7 @@ export class EnquiriesComponent implements OnInit {
       guestCount: subEvent.guestCount,
       spaceId: subEvent.spaceIds[0] ?? '',
       setupStyle: subEvent.setupStyle ?? '',
+      priceAmount: subEvent.priceAmount ?? null,
       notes: subEvent.specialRequirements ?? ''
     };
   }
@@ -3713,6 +4847,13 @@ export class EnquiriesComponent implements OnInit {
     const guestCount = Math.round(this.numberOrZero(draft.guestCount));
     if (!Number.isInteger(guestCount) || guestCount <= 0) {
       return 'Guest count must be a positive integer.';
+    }
+
+    if (draft.priceAmount !== null && draft.priceAmount !== undefined) {
+      const priceAmount = this.roundMoney(this.numberOrZero(draft.priceAmount));
+      if (!Number.isFinite(priceAmount) || priceAmount < 0) {
+        return 'Price amount must be zero or greater.';
+      }
     }
 
     if (!draft.spaceId) {
@@ -3902,7 +5043,9 @@ export class EnquiriesComponent implements OnInit {
       guestCount: Math.max(1, Math.round(this.numberOrZero(draft.guestCount))),
       setupStyle: draft.setupStyle.trim() || null,
       specialRequirements: draft.notes.trim() || null,
-      priceAmount: null,
+      priceAmount: draft.priceAmount === null || draft.priceAmount === undefined
+        ? null
+        : this.roundMoney(Math.max(0, this.numberOrZero(draft.priceAmount))),
       currencyCode: (currencyCodeFallback || 'GBP').toUpperCase(),
       spaceIds: draft.spaceId ? [draft.spaceId] : [],
       allowConflictOverride
@@ -4224,6 +5367,19 @@ export class EnquiriesComponent implements OnInit {
     this.clearBulkSelection();
     this.loading = false;
     this.enquiryLoadError = '';
+    this.savedViews = [];
+    this.savedViewsLoading = false;
+    this.savedViewsError = '';
+    this.selectedSavedViewId = '';
+    this.savingSavedView = false;
+    this.renamingSavedView = false;
+    this.deletingSavedView = false;
+    this.listPage = 1;
+    this.statsPeriod = 'this-month';
+    this.statsEventManagerUserId = '';
+    this.statsEventType = '';
+    this.statsCustomStart = '';
+    this.statsCustomEnd = '';
     this.listResponse = null;
     this.enquiries = [];
     this.selectedEnquiryId = null;
@@ -4802,7 +5958,7 @@ export class EnquiriesComponent implements OnInit {
     this.paymentScheduleMessage = '';
     const checkoutWindow = window.open('', '_blank', 'noopener,noreferrer');
 
-    const returnUrl = `${window.location.origin}/enquiries?enquiry=${this.selectedEnquiryId ?? ''}&tab=payments&milestone=${milestoneId}`;
+    const returnUrl = `${window.location.origin}/enquiries/${this.selectedEnquiryId ?? ''}?tab=payments&milestone=${milestoneId}`;
     const cancelUrl = returnUrl;
 
     this.api
@@ -5002,6 +6158,44 @@ export class EnquiriesComponent implements OnInit {
     }
 
     return 'Scheduled';
+  }
+
+  appointmentTypeLabel(type: string | null | undefined): string {
+    return this.normalizeAppointmentType(type);
+  }
+
+  appointmentStatusLabel(status: string | null | undefined): string {
+    const normalized = this.normalizeAppointmentStatus(status);
+    if (normalized === 'NoShow') {
+      return 'No-Show';
+    }
+
+    return normalized;
+  }
+
+  private normalizeAppointmentType(type: string | null | undefined): string {
+    const compact = (type ?? '')
+      .trim()
+      .replace(/[\s_-]+/g, '')
+      .toLowerCase();
+
+    if (compact === 'meeting') {
+      return 'Meeting';
+    }
+
+    if (compact === 'menutasting') {
+      return 'Menu Tasting';
+    }
+
+    if (compact === 'sitevisit') {
+      return 'Site Visit';
+    }
+
+    if (compact === 'rehearsal') {
+      return 'Rehearsal';
+    }
+
+    return 'Other';
   }
 
   setMilestoneAmount(milestone: PaymentMilestoneDraft, raw: string): void {
@@ -5214,7 +6408,13 @@ export class EnquiriesComponent implements OnInit {
     return templates.find((template) => template.isDefault) ?? templates[0];
   }
 
-  private executeBulkStatusTransition(targetStatus: string, lostReason?: string, lostReasonDetail?: string, lostAtUtc?: string): void {
+  private executeBulkStatusTransition(
+    targetStatus: string,
+    lostReason?: string,
+    lostReasonDetail?: string,
+    lostAtUtc?: string,
+    holdDaysOverride?: number
+  ): void {
     this.bulkActionBusy = true;
     this.bulkActionFeedback = '';
     this.clearBulkUndoState();
@@ -5226,6 +6426,7 @@ export class EnquiriesComponent implements OnInit {
         targetStatus,
         lostReason,
         lostReasonDetail,
+        holdDaysOverride,
         lostAtUtc
       })
       .pipe(takeUntilDestroyed(this.destroyRef))

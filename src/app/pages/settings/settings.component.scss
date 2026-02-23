@@ -149,6 +149,19 @@
   resize: vertical;
 }
 
+.form-grid label.checkbox-field {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.form-grid label.checkbox-field input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+}
+
 .full-width {
   grid-column: 1 / -1;
 }

@@ -221,9 +221,9 @@
 }
 
 .type-badge.portal {
-  background: #eef2ff;
-  border-color: #c7d2fe;
-  color: #4338ca;
+  background: #eaf3fb;
+  border-color: #9fc1e3;
+  color: #1c65b4;
 }
 
 .type-badge.note {
@@ -233,9 +233,9 @@
 }
 
 .type-badge.system {
-  background: #ede9fe;
+  background: #dbeafe;
   border-color: #c4b5fd;
-  color: #6d28d9;
+  color: #1d4ed8;
 }
 
 .type-badge.default {
@@ -619,6 +619,137 @@
 .chat-compose {
   display: grid;
   gap: 0.35rem;
+}
+
+.chat-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.chat-action-btn {
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.22rem 0.5rem;
+}
+
+.chat-form {
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  background: #f8fafc;
+  padding: 0.5rem;
+  display: grid;
+  gap: 0.42rem;
+}
+
+.chat-form label {
+  display: grid;
+  gap: 0.22rem;
+}
+
+.chat-form label > span {
+  font-size: 0.66rem;
+  color: #64748b;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.chat-form input,
+.chat-form select {
+  width: 100%;
+  border: 1px solid #dbe2ee;
+  border-radius: 9px;
+  background: #fff;
+  color: #334155;
+  font-size: 0.74rem;
+  padding: 0.4rem 0.5rem;
+}
+
+.chat-form .checkbox-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.chat-form .checkbox-field > span {
+  font-size: 0.74rem;
+  color: #334155;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+.member-picker {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.member-picker small {
+  color: #64748b;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.member-options {
+  display: grid;
+  gap: 0.2rem;
+  max-height: 120px;
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  background: #fff;
+  padding: 0.35rem;
+}
+
+.member-options label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  font-size: 0.72rem;
+  color: #334155;
+}
+
+.chat-section-title {
+  margin: 0.35rem 0 0.3rem;
+  color: #64748b;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.mention-row {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.mention-row small {
+  color: #64748b;
+  font-size: 0.64rem;
+  font-weight: 700;
+}
+
+.mention-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.mention-chips button {
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.15rem 0.38rem;
 }
 
 .empty {

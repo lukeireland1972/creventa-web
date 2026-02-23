@@ -14,6 +14,38 @@
   <div class="popover-line"><b>Style:</b> {{ event.eventStyle || '-' }}</div>
   <div class="popover-line"><b>Space:</b> {{ event.spaceName || 'Unassigned' }}</div>
   <div class="popover-line"><b>Manager:</b> {{ event.eventManagerName || '-' }}</div>
+  @if (showHoldCountdown) {
+    <div class="popover-line"><b>Hold:</b> {{ holdCountdownLabel }}</div>
+  }
+
+  @if (event.eventType === 'Enquiry') {
+    <div class="popover-progress">
+      @if (paymentScheduleLoading) {
+        <p>Loading progress...</p>
+      } @else if (paymentSchedule) {
+        <div class="progress-row">
+          <div class="progress-head">
+            <span>Planning</span>
+            <small>{{ paymentSchedule.planningProgress.completed }}/{{ paymentSchedule.planningProgress.total }}</small>
+          </div>
+          <div class="progress-track">
+            <span class="progress-fill planning" [style.width.%]="planningPercent"></span>
+          </div>
+        </div>
+        <div class="progress-row">
+          <div class="progress-head">
+            <span>Payment</span>
+            <small>{{ paidAmount | number: '1.2-2' }} / {{ totalAmount | number: '1.2-2' }}</small>
+          </div>
+          <div class="progress-track">
+            <span class="progress-fill payment" [style.width.%]="paymentPercent"></span>
+          </div>
+        </div>
+      } @else if (paymentScheduleError) {
+        <p>{{ paymentScheduleError }}</p>
+      }
+    </div>
+  }
 
   @if (expanded) {
     <div class="popover-expanded">
