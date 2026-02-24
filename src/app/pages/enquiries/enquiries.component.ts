@@ -1,4 +1,4 @@
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, HostListener, OnInit, inject } from '@angular/core';
 import { animate, style, transition, trigger } from '@angular/animations';
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { FormBuilder, FormsModule, ReactiveFormsModule } from '@angular/forms';
@@ -289,6 +289,7 @@ export class EnquiriesComponent implements OnInit {
 
   selectedEnquiryId: string | null = null;
   selectedEnquiry: EnquiryDetailResponse | null = null;
+  detailNotFound = false;
   isDedicatedDetailRoute = false;
   sameDateAvailabilityExpanded = true;
   aiFollowUpRecommendations: AiFollowUpRecommendationDto[] = [];
@@ -469,7 +470,12 @@ export class EnquiriesComponent implements OnInit {
   mergePrimaryDetail: EnquiryDetailResponse | null = null;
   mergeSecondaryDetail: EnquiryDetailResponse | null = null;
   mergeFieldSources: Record<string, 'primary' | 'secondary'> = {};
+  showRowContextMenu = false;
+  rowContextMenuX = 0;
+  rowContextMenuY = 0;
+  rowContextEnquiry: EnquiryListItemDto | null = null;
   private pendingMergeIdsFromQuery: string[] = [];
+  private listRealtimeReloadTimer: ReturnType<typeof setTimeout> | null = null;
   private loadedAssignableUsersVenueId: string | null = null;
   private lastLoadedVenueId: string | null = null;
   private recoveringVenueContext = false;
@@ -1021,7 +1027,8 @@ export class EnquiriesComponent implements OnInit {
       const routeEnquiryId = pathParams.get('id');
       const legacyQueryEnquiryId = params.get('enquiry');
       const enquiryId = routeEnquiryId ?? legacyQueryEnquiryId;
-      const requestedStatusTab = params.get('statusTab');
+      const requestedStatusQuery = params.get('status');
+      const requestedStatusTab = params.get('statusTab') ?? this.mapStatusQueryToTab(requestedStatusQuery);
       const requestedDetailTab = params.get('tab');
       const requestedSearch = params.get('search') ?? '';
       const requestedQuickFilter = params.get('quickFilter') ?? '';
@@ -1262,7 +1269,11 @@ export class EnquiriesComponent implements OnInit {
 
     this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { statusTab: tabKey, page: null },
+      queryParams: {
+        statusTab: tabKey,
+        status: this.tabToStatusQuery(tabKey),
+        page: null
+      },
       queryParamsHandling: 'merge'
     });
   }
@@ -1323,6 +1334,25 @@ export class EnquiriesComponent implements OnInit {
     }
 
     return current.sortDirection ?? '';
+  }
+
+  statusTabCount(tabKey: string): number {
+    const counts = this.listResponse?.statusTabCounts ?? {};
+    const normalized = (tabKey ?? '').trim();
+    if (!normalized) {
+      return 0;
+    }
+
+    if (normalized === 'new-unanswered') {
+      const explicit = this.toFiniteNumber(counts['new-unanswered']);
+      if (explicit > 0) {
+        return explicit;
+      }
+
+      return this.toFiniteNumber(counts['new']) + this.toFiniteNumber(counts['tentative']);
+    }
+
+    return this.toFiniteNumber(counts[normalized]);
   }
 
   onStatsFiltersChanged(): void {
@@ -2366,6 +2396,8 @@ export class EnquiriesComponent implements OnInit {
       return;
     }
 
+    this.detailNotFound = false;
+    this.closeRowContextMenu();
     this.router.navigate(['/enquiries', enquiryId], {
       queryParams: {
         tab: null
@@ -2375,6 +2407,8 @@ export class EnquiriesComponent implements OnInit {
   }
 
   backToEnquiryList(): void {
+    this.detailNotFound = false;
+    this.closeRowContextMenu();
     this.router.navigate(['/enquiries'], {
       queryParams: {
         enquiry: null,
@@ -2382,6 +2416,102 @@ export class EnquiriesComponent implements OnInit {
       },
       queryParamsHandling: 'merge'
     });
+  }
+
+  openRowContextMenu(event: MouseEvent, enquiry: EnquiryListItemDto): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.rowContextEnquiry = enquiry;
+    this.rowContextMenuX = event.clientX;
+    this.rowContextMenuY = event.clientY;
+    this.showRowContextMenu = true;
+  }
+
+  closeRowContextMenu(): void {
+    this.showRowContextMenu = false;
+    this.rowContextEnquiry = null;
+  }
+
+  editFromRowContext(): void {
+    const enquiry = this.rowContextEnquiry;
+    if (!enquiry) {
+      return;
+    }
+
+    this.closeRowContextMenu();
+    this.router.navigate(['/enquiries', enquiry.id], {
+      queryParams: { tab: 'overview' },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  createProposalFromRowContext(): void {
+    const enquiry = this.rowContextEnquiry;
+    if (!enquiry) {
+      return;
+    }
+
+    this.closeRowContextMenu();
+    this.router.navigate(['/enquiries', enquiry.id], {
+      queryParams: { tab: 'proposals' },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  changeStatusFromRowContext(): void {
+    const enquiry = this.rowContextEnquiry;
+    if (!enquiry) {
+      return;
+    }
+
+    this.closeRowContextMenu();
+    this.router.navigate(['/enquiries', enquiry.id], {
+      queryParams: { tab: 'overview' },
+      queryParamsHandling: 'merge'
+    });
+  }
+
+  copyEnquiryRefFromRowContext(): void {
+    const enquiry = this.rowContextEnquiry;
+    if (!enquiry) {
+      return;
+    }
+
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(enquiry.reference).catch(() => void 0);
+    }
+    this.closeRowContextMenu();
+  }
+
+  openRowContextInNewTab(): void {
+    const enquiry = this.rowContextEnquiry;
+    if (!enquiry) {
+      return;
+    }
+
+    const url = this.router.serializeUrl(this.router.createUrlTree(['/enquiries', enquiry.id]));
+    window.open(url, '_blank', 'noopener');
+    this.closeRowContextMenu();
+  }
+
+  onRowAuxClick(event: MouseEvent, enquiry: EnquiryListItemDto): void {
+    if (event.button !== 1) {
+      return;
+    }
+
+    event.preventDefault();
+    const url = this.router.serializeUrl(this.router.createUrlTree(['/enquiries', enquiry.id]));
+    window.open(url, '_blank', 'noopener');
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    this.closeRowContextMenu();
+  }
+
+  @HostListener('document:keydown.escape')
+  onDocumentEscape(): void {
+    this.closeRowContextMenu();
   }
 
   openSelectedEnquiryInConnect(): void {
@@ -3768,6 +3898,11 @@ export class EnquiriesComponent implements OnInit {
 
   private isValidStatusTab(tabKey: string): boolean {
     return this.statusTabs.some((tab) => tab.key === tabKey);
+  }
+
+  private toFiniteNumber(value: unknown): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   isEnquirySelected(enquiryId: string): boolean {
@@ -5195,12 +5330,14 @@ export class EnquiriesComponent implements OnInit {
   }
 
   private loadEnquiryDetail(enquiryId: string): void {
+    this.detailNotFound = false;
     this.api
       .getEnquiry(enquiryId)
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (enquiry) => {
           this.selectedEnquiry = enquiry;
+          this.detailNotFound = false;
           this.sameDateAvailabilityExpanded = true;
           this.populateOverviewDraft(enquiry);
           this.overviewEditingField = null;
@@ -5258,8 +5395,9 @@ export class EnquiriesComponent implements OnInit {
           }
 
         },
-        error: () => {
+        error: (error) => {
           this.selectedEnquiry = null;
+          this.detailNotFound = Number(error?.status ?? 0) === 404;
           this.resetEnquiryActivityState();
           this.overviewDraft = this.createEmptyOverviewDraft();
           this.overviewEditingField = null;
@@ -5366,6 +5504,7 @@ export class EnquiriesComponent implements OnInit {
   private resetVenueScopedState(): void {
     this.clearBulkSelection();
     this.loading = false;
+    this.detailNotFound = false;
     this.enquiryLoadError = '';
     this.savedViews = [];
     this.savedViewsLoading = false;
@@ -6611,9 +6750,56 @@ export class EnquiriesComponent implements OnInit {
     this.activityRealtimeSubscribed = true;
     this.activityRealtime.events$
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => {
+      .subscribe((event) => {
         this.scheduleActivityReload();
+        this.scheduleRealtimeListReload(event?.actionType);
       });
+  }
+
+  private scheduleRealtimeListReload(actionType: string | null | undefined): void {
+    const action = (actionType ?? '').trim().toLowerCase();
+    if (!action) {
+      return;
+    }
+
+    if (
+      !action.startsWith('enquiry.')
+      && !action.startsWith('proposal.')
+      && !action.startsWith('payment.')
+      && !action.startsWith('task.')
+      && !action.startsWith('appointment.')
+      && !action.startsWith('diary.')
+      && action !== 'dashboard.update'
+    ) {
+      return;
+    }
+
+    if (this.listRealtimeReloadTimer) {
+      clearTimeout(this.listRealtimeReloadTimer);
+    }
+
+    this.listRealtimeReloadTimer = setTimeout(() => {
+      this.loadEnquiries(this.listResponse?.page.page ?? this.listPage ?? 1);
+      this.listRealtimeReloadTimer = null;
+    }, 600);
+  }
+
+  private tabToStatusQuery(tabKey: string): string | null {
+    const normalized = (tabKey ?? '').trim();
+    if (!normalized || normalized === 'all') {
+      return null;
+    }
+
+    return normalized;
+  }
+
+  private mapStatusQueryToTab(status: string | null): string | null {
+    const normalized = (status ?? '').trim().toLowerCase();
+    if (!normalized) {
+      return null;
+    }
+
+    return this.statusTabs.find((tab) => tab.key.toLowerCase() === normalized)?.key ?? null;
   }
 
   private scheduleActivityReload(): void {

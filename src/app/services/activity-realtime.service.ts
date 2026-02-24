@@ -74,6 +74,19 @@ export class ActivityRealtimeService {
         this.eventsSubject.next(payload ?? {});
       });
 
+      this.connection.on('dashboard.update', (payload: { actionType?: string; entityType?: string; entityId?: string; atUtc?: string } | null) => {
+        if (!payload) {
+          return;
+        }
+
+        this.eventsSubject.next({
+          actionType: payload.actionType ?? 'dashboard.update',
+          entityType: payload.entityType,
+          entityId: payload.entityId,
+          createdAtUtc: payload.atUtc
+        });
+      });
+
       this.connection.on('diary.updated', (payload: { venueId?: string; enquiryId?: string; status?: string; occurredAtUtc?: string } | null) => {
         if (!payload) {
           return;

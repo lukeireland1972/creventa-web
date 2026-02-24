@@ -88,6 +88,49 @@ interface ActivityChangeRow {
   value: string | null;
 }
 
+interface EnquiryEditDraft {
+  contactFirstName: string;
+  contactLastName: string;
+  contactEmail: string;
+  contactPhoneNumberE164: string;
+  companyName: string;
+  eventType: string;
+  eventName: string;
+  eventDate: string;
+  eventTime: string;
+  eventEndDate: string;
+  eventEndTime: string;
+  guestsExpected: number;
+  eventStyle: string;
+  setupStyle: string;
+  sourceType: string;
+  sourceDetail: string;
+  specialRequirements: string;
+  eventManagerUserId: string;
+  marketingConsent: boolean;
+}
+
+type EnquiryEditField =
+  | 'contactFirstName'
+  | 'contactLastName'
+  | 'contactEmail'
+  | 'contactPhoneNumberE164'
+  | 'companyName'
+  | 'eventType'
+  | 'eventName'
+  | 'eventDate'
+  | 'eventTime'
+  | 'eventEndDate'
+  | 'eventEndTime'
+  | 'guestsExpected'
+  | 'eventStyle'
+  | 'setupStyle'
+  | 'sourceType'
+  | 'sourceDetail'
+  | 'specialRequirements'
+  | 'eventManagerUserId'
+  | 'marketingConsent';
+
 @Component({
   selector: 'app-enquiry-detail',
   imports: [DatePipe, DecimalPipe],
@@ -155,6 +198,16 @@ export class EnquiryDetailComponent implements OnInit {
   sameDateAvailabilityExpanded = true;
   sameDateAvailabilityLoading = false;
   sameDateAvailabilityError = '';
+
+  overviewEditMode = false;
+  overviewEditSaving = false;
+  overviewEditError = '';
+  overviewEditFieldErrors: Partial<Record<EnquiryEditField, string>> = {};
+  overviewEditDraft: EnquiryEditDraft = this.createOverviewEditDraft();
+  overviewEditBaseline = '';
+  overviewToastMessage = '';
+  overviewPhonePrefixSelection = '+44';
+  readonly phonePrefixOptions = ['+44', '+1', '+353', '+33', '+49', '+34', '+39', '+61', '+971'];
 
   subEventFormVisible = false;
   subEventFormMode: 'create' | 'edit' = 'create';
@@ -311,6 +364,23 @@ export class EnquiryDetailComponent implements OnInit {
     return this.toCanonicalStatus(this.statusChangeTarget) === 'Provisional';
   }
 
+  get isOverviewEditDirty(): boolean {
+    if (!this.overviewEditMode) {
+      return false;
+    }
+
+    return this.serializeOverviewEditDraft(this.overviewEditDraft) !== this.overviewEditBaseline;
+  }
+
+  get canSaveOverviewEdit(): boolean {
+    if (!this.overviewEditMode || this.overviewEditSaving || !this.isOverviewEditDirty || !this.enquiry) {
+      return false;
+    }
+
+    const errors = this.validateOverviewEditDraft(this.overviewEditDraft, this.enquiry);
+    return Object.keys(errors).length === 0;
+  }
+
   ngOnInit(): void {
     combineLatest([this.route.paramMap, this.route.queryParamMap])
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -339,6 +409,10 @@ export class EnquiryDetailComponent implements OnInit {
   }
 
   backToList(): void {
+    if (!this.confirmDiscardOverviewEditsIfNeeded()) {
+      return;
+    }
+
     this.router.navigate(['/enquiries'], {
       queryParams: {
         enquiry: null,
@@ -353,6 +427,10 @@ export class EnquiryDetailComponent implements OnInit {
       return;
     }
 
+    if (tab !== 'overview' && !this.confirmDiscardOverviewEditsIfNeeded()) {
+      return;
+    }
+
     this.activeTab = tab;
     this.router.navigate([], {
       relativeTo: this.route,
@@ -364,16 +442,116 @@ export class EnquiryDetailComponent implements OnInit {
   }
 
   openOverviewEditor(): void {
-    if (!this.enquiryId) {
+    if (!this.enquiryId || !this.enquiry) {
+      return;
+    }
+    this.activeTab = 'overview';
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab: null },
+      queryParamsHandling: 'merge',
+      replaceUrl: true
+    });
+    this.overviewEditMode = true;
+    this.overviewEditSaving = false;
+    this.overviewEditError = '';
+    this.overviewEditFieldErrors = {};
+    this.overviewEditDraft = this.mapEnquiryToOverviewEditDraft(this.enquiry);
+    this.overviewEditBaseline = this.serializeOverviewEditDraft(this.overviewEditDraft);
+    this.overviewPhonePrefixSelection = this.detectPhonePrefix(this.overviewEditDraft.contactPhoneNumberE164);
+  }
+
+  cancelOverviewEdit(): void {
+    if (!this.confirmDiscardOverviewEditsIfNeeded()) {
       return;
     }
 
-    this.router.navigate(['/enquiries'], {
-      queryParams: {
-        enquiry: this.enquiryId,
-        tab: 'overview'
+    this.overviewEditMode = false;
+    this.overviewEditSaving = false;
+    this.overviewEditError = '';
+    this.overviewEditFieldErrors = {};
+    this.overviewEditDraft = this.createOverviewEditDraft();
+    this.overviewEditBaseline = '';
+  }
+
+  updateOverviewEditField<K extends EnquiryEditField>(field: K, value: EnquiryEditDraft[K]): void {
+    this.overviewEditDraft = {
+      ...this.overviewEditDraft,
+      [field]: value
+    };
+    this.overviewEditError = '';
+    this.refreshOverviewEditValidation();
+  }
+
+  overviewEditFieldError(field: EnquiryEditField): string {
+    return this.overviewEditFieldErrors[field] ?? '';
+  }
+
+  applyOverviewPhonePrefix(): void {
+    if (!this.overviewEditMode) {
+      return;
+    }
+
+    const selectedPrefix = (this.overviewPhonePrefixSelection || '').trim();
+    if (!selectedPrefix.startsWith('+')) {
+      return;
+    }
+
+    const rawValue = (this.overviewEditDraft.contactPhoneNumberE164 || '')
+      .replace(/[^0-9+]/g, '')
+      .replace(/^\+/, '');
+
+    let localDigits = rawValue;
+    for (const prefix of [...this.phonePrefixOptions].sort((left, right) => right.length - left.length)) {
+      const prefixDigits = prefix.replace(/^\+/, '');
+      if (localDigits.startsWith(prefixDigits)) {
+        localDigits = localDigits.slice(prefixDigits.length);
+        break;
       }
-    });
+    }
+
+    if (!localDigits) {
+      this.updateOverviewEditField('contactPhoneNumberE164', `${selectedPrefix}`);
+      return;
+    }
+
+    this.updateOverviewEditField('contactPhoneNumberE164', `${selectedPrefix}${localDigits}`);
+  }
+
+  saveOverviewEdit(): void {
+    if (!this.enquiryId || !this.enquiry || this.overviewEditSaving) {
+      return;
+    }
+
+    const fieldErrors = this.validateOverviewEditDraft(this.overviewEditDraft, this.enquiry);
+    this.overviewEditFieldErrors = fieldErrors;
+    if (Object.keys(fieldErrors).length > 0) {
+      this.overviewEditError = 'Please fix the highlighted fields.';
+      return;
+    }
+
+    this.overviewEditSaving = true;
+    this.overviewEditError = '';
+
+    const payload = this.buildOverviewUpdatePayload(this.overviewEditDraft, this.enquiry);
+    this.api.updateEnquiry(this.enquiryId, payload)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.overviewEditSaving = false;
+          this.overviewEditMode = false;
+          this.overviewEditBaseline = '';
+          this.overviewEditFieldErrors = {};
+          this.overviewEditDraft = this.createOverviewEditDraft();
+          this.showOverviewToast('Enquiry updated');
+          this.loadEnquiryDetail(this.enquiryId);
+        },
+        error: (error) => {
+          this.overviewEditSaving = false;
+          this.overviewEditError = this.extractOverviewEditSaveError(error);
+          this.applyOverviewFieldErrorsFromServer(error);
+        }
+      });
   }
 
   openProposalBuilder(): void {
@@ -420,6 +598,13 @@ export class EnquiryDetailComponent implements OnInit {
   }
 
   openEmailComposer(): void {
+    this.composeMode = 'email';
+    if (this.enquiry?.contactEmail) {
+      this.emailDraft = {
+        ...this.emailDraft,
+        to: this.enquiry.contactEmail
+      };
+    }
     this.setTab('communications');
   }
 
@@ -429,6 +614,32 @@ export class EnquiryDetailComponent implements OnInit {
 
   openTasksTab(): void {
     this.setTab('tasks');
+  }
+
+  openContactRecord(): void {
+    if (!this.enquiry) {
+      return;
+    }
+
+    const search = this.enquiry.contactEmail || this.primaryContactName;
+    this.router.navigate(['/contacts'], {
+      queryParams: {
+        search: search || null
+      }
+    });
+  }
+
+  openReturningClientHistory(): void {
+    if (!this.enquiry?.contactEmail) {
+      return;
+    }
+
+    this.router.navigate(['/enquiries'], {
+      queryParams: {
+        search: this.enquiry.contactEmail,
+        statusTab: 'all'
+      }
+    });
   }
 
   setCommunicationsFilter(filter: 'all' | 'emails' | 'notes' | 'system'): void {
@@ -1472,6 +1683,310 @@ export class EnquiryDetailComponent implements OnInit {
       });
   }
 
+  private confirmDiscardOverviewEditsIfNeeded(): boolean {
+    if (!this.overviewEditMode || !this.isOverviewEditDirty) {
+      return true;
+    }
+
+    return window.confirm('You have unsaved edits. Discard your changes?');
+  }
+
+  private refreshOverviewEditValidation(): void {
+    if (!this.overviewEditMode || !this.enquiry) {
+      this.overviewEditFieldErrors = {};
+      return;
+    }
+
+    this.overviewEditFieldErrors = this.validateOverviewEditDraft(this.overviewEditDraft, this.enquiry);
+  }
+
+  private createOverviewEditDraft(): EnquiryEditDraft {
+    return {
+      contactFirstName: '',
+      contactLastName: '',
+      contactEmail: '',
+      contactPhoneNumberE164: '',
+      companyName: '',
+      eventType: '',
+      eventName: '',
+      eventDate: '',
+      eventTime: '09:00',
+      eventEndDate: '',
+      eventEndTime: '',
+      guestsExpected: 1,
+      eventStyle: '',
+      setupStyle: '',
+      sourceType: '',
+      sourceDetail: '',
+      specialRequirements: '',
+      eventManagerUserId: '',
+      marketingConsent: false
+    };
+  }
+
+  private mapEnquiryToOverviewEditDraft(detail: EnquiryDetailResponse): EnquiryEditDraft {
+    const eventStart = new Date(detail.eventStartUtc);
+    const eventEnd = detail.eventEndUtc ? new Date(detail.eventEndUtc) : null;
+    return {
+      contactFirstName: detail.contactFirstName ?? '',
+      contactLastName: detail.contactLastName ?? '',
+      contactEmail: detail.contactEmail ?? '',
+      contactPhoneNumberE164: detail.contactPhoneNumberE164 ?? '',
+      companyName: detail.companyName ?? '',
+      eventType: detail.eventType ?? '',
+      eventName: detail.eventName ?? '',
+      eventDate: this.toDateOnly(detail.eventStartUtc),
+      eventTime: this.toTimeOnly(eventStart),
+      eventEndDate: eventEnd ? this.toDateOnly(detail.eventEndUtc ?? undefined) : '',
+      eventEndTime: eventEnd ? this.toTimeOnly(eventEnd) : '',
+      guestsExpected: Math.max(1, Math.round(this.numberOrZero(detail.guestsExpected) || 1)),
+      eventStyle: detail.eventStyle ?? '',
+      setupStyle: detail.setupStyle ?? '',
+      sourceType: detail.sourceType ?? '',
+      sourceDetail: detail.sourceDetail ?? '',
+      specialRequirements: detail.specialRequirements ?? '',
+      eventManagerUserId: detail.eventManagerUserId ?? '',
+      marketingConsent: !!detail.marketingConsent
+    };
+  }
+
+  private serializeOverviewEditDraft(draft: EnquiryEditDraft): string {
+    const normalized = {
+      contactFirstName: draft.contactFirstName.trim(),
+      contactLastName: draft.contactLastName.trim(),
+      contactEmail: draft.contactEmail.trim().toLowerCase(),
+      contactPhoneNumberE164: draft.contactPhoneNumberE164.trim(),
+      companyName: draft.companyName.trim(),
+      eventType: draft.eventType.trim(),
+      eventName: draft.eventName.trim(),
+      eventDate: draft.eventDate.trim(),
+      eventTime: draft.eventTime.trim(),
+      eventEndDate: draft.eventEndDate.trim(),
+      eventEndTime: draft.eventEndTime.trim(),
+      guestsExpected: Math.max(1, Math.round(this.numberOrZero(draft.guestsExpected))),
+      eventStyle: draft.eventStyle.trim(),
+      setupStyle: draft.setupStyle.trim(),
+      sourceType: draft.sourceType.trim(),
+      sourceDetail: draft.sourceDetail.trim(),
+      specialRequirements: draft.specialRequirements.trim(),
+      eventManagerUserId: draft.eventManagerUserId.trim(),
+      marketingConsent: !!draft.marketingConsent
+    };
+    return JSON.stringify(normalized);
+  }
+
+  private detectPhonePrefix(value: string): string {
+    const compact = (value || '').trim();
+    const knownPrefix = this.phonePrefixOptions.find((prefix) => compact.startsWith(prefix));
+    return knownPrefix ?? '+44';
+  }
+
+  private validateOverviewEditDraft(
+    draft: EnquiryEditDraft,
+    source: EnquiryDetailResponse
+  ): Partial<Record<EnquiryEditField, string>> {
+    const errors: Partial<Record<EnquiryEditField, string>> = {};
+
+    const firstName = draft.contactFirstName.trim();
+    const lastName = draft.contactLastName.trim();
+    const email = draft.contactEmail.trim();
+    const phone = draft.contactPhoneNumberE164.trim();
+    const company = draft.companyName.trim();
+    const eventType = draft.eventType.trim();
+    const eventName = draft.eventName.trim();
+    const eventDate = draft.eventDate.trim();
+    const eventTime = draft.eventTime.trim();
+    const eventEndDate = draft.eventEndDate.trim();
+    const eventEndTime = draft.eventEndTime.trim();
+    const guestsExpected = Math.round(this.numberOrZero(draft.guestsExpected));
+
+    if (!firstName) {
+      errors.contactFirstName = 'First name is required.';
+    } else if (firstName.length > 50) {
+      errors.contactFirstName = 'First name cannot exceed 50 characters.';
+    }
+
+    if (!lastName) {
+      errors.contactLastName = 'Last name is required.';
+    } else if (lastName.length > 50) {
+      errors.contactLastName = 'Last name cannot exceed 50 characters.';
+    }
+
+    if (!email) {
+      errors.contactEmail = 'Email is required.';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.contactEmail = 'Enter a valid email address.';
+    }
+
+    if (!phone) {
+      errors.contactPhoneNumberE164 = 'Phone number is required.';
+    } else if (!/^\+[1-9]\d{7,14}$/.test(phone)) {
+      errors.contactPhoneNumberE164 = 'Use E.164 format, e.g. +447700900123.';
+    }
+
+    if (company.length > 200) {
+      errors.companyName = 'Company cannot exceed 200 characters.';
+    }
+
+    if (!eventType) {
+      errors.eventType = 'Event type is required.';
+    }
+
+    if (eventName.length > 200) {
+      errors.eventName = 'Event name cannot exceed 200 characters.';
+    }
+
+    if (!eventDate) {
+      errors.eventDate = 'Event date is required.';
+    }
+
+    if (!eventTime) {
+      errors.eventTime = 'Event time is required.';
+    }
+
+    if (!Number.isInteger(guestsExpected) || guestsExpected <= 0) {
+      errors.guestsExpected = 'Expected guests must be a positive whole number.';
+    }
+
+    if (eventDate) {
+      const parsedEventDate = new Date(`${eventDate}T00:00:00Z`);
+      if (Number.isNaN(parsedEventDate.getTime())) {
+        errors.eventDate = 'Enter a valid event date.';
+      } else if (this.toCanonicalStatus(source.status) === 'New') {
+        const today = new Date();
+        const todayUtc = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+        if (parsedEventDate.getTime() < todayUtc) {
+          errors.eventDate = 'Event date cannot be in the past for new enquiries.';
+        }
+      }
+    }
+
+    if (eventDate && eventTime) {
+      const eventStartIso = this.combineDateAndTimeToIso(eventDate, eventTime);
+      const eventStartMs = new Date(eventStartIso).getTime();
+      if (!Number.isFinite(eventStartMs)) {
+        errors.eventTime = 'Enter a valid event time.';
+      }
+
+      if (eventEndDate || eventEndTime) {
+        if (!eventEndDate || !eventEndTime) {
+          errors.eventEndDate = 'End date and end time are required together.';
+          errors.eventEndTime = 'End date and end time are required together.';
+        } else {
+          const eventEndIso = this.combineDateAndTimeToIso(eventEndDate, eventEndTime);
+          const eventEndMs = new Date(eventEndIso).getTime();
+          if (!Number.isFinite(eventEndMs)) {
+            errors.eventEndTime = 'Enter a valid end time.';
+          } else if (Number.isFinite(eventStartMs) && eventEndMs <= eventStartMs) {
+            errors.eventEndTime = 'End date/time must be after the event start.';
+          }
+        }
+      }
+    }
+
+    return errors;
+  }
+
+  private buildOverviewUpdatePayload(draft: EnquiryEditDraft, source: EnquiryDetailResponse) {
+    const startIso = this.combineDateAndTimeToIso(
+      draft.eventDate.trim(),
+      draft.eventTime.trim() || this.toTimeOnly(new Date(source.eventStartUtc))
+    );
+
+    const hasEnd = draft.eventEndDate.trim() && draft.eventEndTime.trim();
+    const endIso = hasEnd
+      ? this.combineDateAndTimeToIso(draft.eventEndDate.trim(), draft.eventEndTime.trim())
+      : null;
+
+    return {
+      eventType: draft.eventType.trim(),
+      eventName: draft.eventName.trim() || null,
+      eventStartUtc: startIso,
+      eventEndUtc: endIso,
+      hasFlexibleDates: source.hasFlexibleDates,
+      flexibleDateNotes: source.flexibleDateNotes ?? null,
+      guestsExpected: Math.max(1, Math.round(this.numberOrZero(draft.guestsExpected))),
+      guestsConfirmed: source.guestsConfirmed ?? null,
+      eventStyle: draft.eventStyle.trim() || null,
+      setupStyle: draft.setupStyle.trim() || null,
+      budgetMinAmount: source.budgetMinAmount ?? null,
+      budgetMaxAmount: source.budgetMaxAmount ?? null,
+      currencyCode: source.currencyCode,
+      sourceType: draft.sourceType.trim() || source.sourceType,
+      sourceDetail: draft.sourceDetail.trim() || null,
+      leadQuality: source.leadQuality,
+      specialRequirements: draft.specialRequirements.trim() || null,
+      internalNotes: source.internalNotes ?? null,
+      eventManagerUserId: draft.eventManagerUserId.trim() || null,
+      contactFirstName: draft.contactFirstName.trim(),
+      contactLastName: draft.contactLastName.trim(),
+      contactEmail: draft.contactEmail.trim(),
+      contactPhoneNumberE164: draft.contactPhoneNumberE164.trim(),
+      companyName: draft.companyName.trim() || null,
+      marketingConsent: !!draft.marketingConsent
+    };
+  }
+
+  private applyOverviewFieldErrorsFromServer(error: any): void {
+    const errors = error?.error?.errors;
+    if (!errors || typeof errors !== 'object') {
+      return;
+    }
+
+    const fieldMap: Partial<Record<string, EnquiryEditField>> = {
+      contactfirstname: 'contactFirstName',
+      contactlastname: 'contactLastName',
+      contactemail: 'contactEmail',
+      contactphonenumbere164: 'contactPhoneNumberE164',
+      companyname: 'companyName',
+      eventtype: 'eventType',
+      eventname: 'eventName',
+      eventstartutc: 'eventDate',
+      eventdate: 'eventDate',
+      guestsexpected: 'guestsExpected'
+    };
+
+    const nextErrors: Partial<Record<EnquiryEditField, string>> = { ...this.overviewEditFieldErrors };
+    for (const [key, value] of Object.entries(errors as Record<string, unknown>)) {
+      const mappedField = fieldMap[key.replace(/[\s._-]+/g, '').toLowerCase()];
+      if (!mappedField) {
+        continue;
+      }
+
+      if (Array.isArray(value) && value.length > 0) {
+        nextErrors[mappedField] = String(value[0]);
+        continue;
+      }
+
+      if (typeof value === 'string' && value.trim()) {
+        nextErrors[mappedField] = value.trim();
+      }
+    }
+
+    this.overviewEditFieldErrors = nextErrors;
+  }
+
+  private extractOverviewEditSaveError(error: any): string {
+    if (typeof error?.error?.message === 'string' && error.error.message.trim()) {
+      return error.error.message.trim();
+    }
+
+    if (typeof error?.error?.error === 'string' && error.error.error.trim()) {
+      return error.error.error.trim();
+    }
+
+    return 'Failed to save. Please try again.';
+  }
+
+  private showOverviewToast(message: string): void {
+    this.overviewToastMessage = message;
+    setTimeout(() => {
+      if (this.overviewToastMessage === message) {
+        this.overviewToastMessage = '';
+      }
+    }, 5000);
+  }
+
   private normalizeTab(value: string | null): EnquiryDetailTab {
     switch ((value ?? '').trim().toLowerCase()) {
       case 'events':
@@ -1587,6 +2102,13 @@ export class EnquiryDetailComponent implements OnInit {
           this.appointmentSearchTerm = '';
           this.taskActionError = '';
           this.taskActionSuccess = '';
+          this.overviewEditError = '';
+          this.overviewEditFieldErrors = {};
+          if (!this.overviewEditMode) {
+            this.overviewEditDraft = this.mapEnquiryToOverviewEditDraft(detail);
+            this.overviewEditBaseline = this.serializeOverviewEditDraft(this.overviewEditDraft);
+            this.overviewPhonePrefixSelection = this.detectPhonePrefix(this.overviewEditDraft.contactPhoneNumberE164);
+          }
           this.taskDraft = {
             title: '',
             dueDate: this.toDateOnly(detail.eventStartUtc),

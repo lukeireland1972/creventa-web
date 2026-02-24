@@ -37,6 +37,12 @@
   color: #0f172a;
 }
 
+.detail-route-header.detail-not-found p {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
 .error-banner {
   margin: 0.8rem 0 0;
   border: 1px solid #fecaca;
@@ -128,6 +134,29 @@
   border-color: #fca5a5;
   background: #fef2f2;
   color: #991b1b;
+}
+
+.loading-shell {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.6rem;
+}
+
+.loading-card {
+  height: 86px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+  background-size: 220% 100%;
+  animation: enquiry-loading-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes enquiry-loading-pulse {
+  0% {
+    background-position: 0% 0;
+  }
+  100% {
+    background-position: 100% 0;
+  }
 }
 
 .stats {
@@ -701,6 +730,36 @@ tbody tr:hover {
 
 tbody tr.selected {
   background: #eff6ff;
+}
+
+.row-context-menu {
+  position: fixed;
+  z-index: 60;
+  min-width: 190px;
+  border: 1px solid #dbe2f1;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 18px 34px rgba(15, 23, 42, 0.2);
+  padding: 0.35rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.row-context-menu button {
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: #fff;
+  color: #1f2937;
+  font-size: 0.74rem;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.4rem 0.48rem;
+}
+
+.row-context-menu button:hover {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .ref-cell {

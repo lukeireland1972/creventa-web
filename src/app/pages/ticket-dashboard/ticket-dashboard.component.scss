@@ -3,6 +3,30 @@
   gap: 0.95rem;
 }
 
+.tickets-page button {
+  background: #fff !important;
+  border: 1px solid #dbe3f0 !important;
+  color: #334155 !important;
+}
+
+.tickets-page button:hover:not(:disabled) {
+  background: #f8fafc !important;
+  border-color: #cbd5e1 !important;
+  color: #0f172a !important;
+}
+
+.mode-tabs button.active {
+  border-color: #bfdbfe !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+}
+
+.preset-row button.active {
+  border-color: #bfdbfe !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
+}
+
 .page-header h1 {
   margin: 0;
   color: #0f172a;
@@ -76,9 +100,9 @@
 }
 
 .deposit-preset-row button.active {
-  border-color: #15803d;
-  background: #16a34a;
-  color: #fff;
+  border-color: #15803d !important;
+  background: #16a34a !important;
+  color: #fff !important;
 }
 
 .filter-row {
@@ -316,13 +340,14 @@
 .event-row {
   width: 100%;
   text-align: left;
-  border: 0;
-  background: #fff;
+  border: 0 !important;
+  background: #fff !important;
+  color: inherit !important;
   padding: 0;
 }
 
 .event-row:hover {
-  background: #f8fafc;
+  background: #f8fafc !important;
 }
 
 .total-cell {
@@ -396,8 +421,8 @@
   border: 1px solid #bfdbfe;
   border-radius: 999px;
   padding: 0.2rem 0.52rem;
-  background: #2563eb;
-  color: #fff;
+  background: #fff;
+  color: #1d4ed8;
   font-size: 0.71rem;
   font-weight: 700;
 }

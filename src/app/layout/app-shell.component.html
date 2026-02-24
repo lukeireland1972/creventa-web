@@ -151,6 +151,18 @@
               <span class="ops-brand-mode">Operations</span>
             </a>
           } @else {
+            <a class="top-logo" [routerLink]="'/'" aria-label="Open dashboard">
+              <span class="top-logo-mark">CF</span>
+              <span class="top-logo-name">CreventaFlow</span>
+            </a>
+            <label class="top-venue-field">
+              <span>Venue</span>
+              <select [ngModel]="selectedVenueId" (ngModelChange)="selectVenue($event)">
+                @for (venue of venues; track venue.id) {
+                  <option [value]="venue.id">{{ venue.name }}</option>
+                }
+              </select>
+            </label>
             <div class="breadcrumbs">
               <span class="crumb-primary">Events</span>
               <span class="crumb-sep">&rsaquo;</span>
@@ -163,6 +175,9 @@
 
         <div class="topbar-right">
           @if (!operationsOnly) {
+            @if (isMobileViewport) {
+              <button class="icon-btn" type="button" aria-label="Open search" (click)="toggleMobileSearch($event)">&#128269;</button>
+            }
             <div class="search-wrap" (click)="$event.stopPropagation()">
               <form class="search" (submit)="submitSearch($event)">
                 <span class="search-icon">&#128269;</span>
@@ -258,7 +273,7 @@
             </div>
 
             <div class="notifications-wrap" (click)="$event.stopPropagation()">
-              <button class="icon-btn" (click)="toggleNotifications($event)" aria-label="Notifications">&#128276;</button>
+              <button class="icon-btn notification-btn" [class.pulse]="notificationPulseActive" (click)="toggleNotifications($event)" aria-label="Notifications">&#128276;</button>
               @if (unreadNotifications > 0) {
                 <span class="notification-badge">{{ unreadNotifications }}</span>
               }
@@ -427,6 +442,28 @@
         <button type="submit" [disabled]="assistantLoading || !assistantPrompt.trim()">Send</button>
       </form>
     </aside>
+  }
+
+  @if (isMobileSearchOpen && !operationsOnly) {
+    <section class="mobile-search-sheet" (click)="$event.stopPropagation()">
+      <form class="search mobile-search" (submit)="submitSearch($event)">
+        <span class="search-icon">&#128269;</span>
+        <input
+          type="text"
+          [ngModel]="searchQuery"
+          (ngModelChange)="onSearchInput($event)"
+          (focus)="onSearchFocus($event)"
+          name="mobileGlobalSearch"
+          placeholder="Search enquiries, contacts, proposals..."
+        />
+      </form>
+      @if (searchQuery.trim().length >= 3 || recentSearches.length > 0) {
+        <div class="mobile-search-actions">
+          <button type="button" class="ghost-btn" (click)="submitSearch($event)">Open Search</button>
+          <button type="button" class="ghost-btn" (click)="isMobileSearchOpen = false">Close</button>
+        </div>
+      }
+    </section>
   }
 
   @if (isDrawerOpen) {
@@ -829,5 +866,15 @@
         <button type="button" class="primary-btn" (click)="openMergeFromDuplicateWarning()">Merge</button>
       </footer>
     </aside>
+  }
+
+  @if (canShowMobileBottomNav) {
+    <nav class="mobile-bottom-nav" aria-label="Mobile primary navigation">
+      <a class="mobile-nav-item" [class.active]="isMobileRouteActive('/')" [routerLink]="'/'">Dashboard</a>
+      <a class="mobile-nav-item" [class.active]="isMobileRouteActive('/enquiries')" [routerLink]="'/enquiries'">Enquiries</a>
+      <a class="mobile-nav-item" [class.active]="isMobileRouteActive('/event-diary')" [routerLink]="'/event-diary'">Diary</a>
+      <a class="mobile-nav-item" [class.active]="isMobileRouteActive('/tasks')" [routerLink]="'/tasks'">Tasks</a>
+      <button type="button" class="mobile-nav-item" [class.active]="isMobileNavOpen" (click)="openMobileMore($event)">More</button>
+    </nav>
   }
 </div>

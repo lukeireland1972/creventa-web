@@ -378,17 +378,37 @@ export class ProposalsComponent implements OnInit, OnDestroy {
   }
 
   downloadSelectedProposalPdf(): void {
-    if (!this.selectedProposal) {
+    if (!this.selectedProposalId) {
       return;
     }
 
-    const latestPdf = this.getLatestUnsignedPdfDocument(this.selectedProposal);
-    if (!latestPdf) {
-      this.lastActionMessage = 'No generated PDF found. Generate PDF first.';
-      return;
-    }
-
-    this.downloadProposalDocument(latestPdf);
+    this.api
+      .generateProposalPdf(this.selectedProposalId)
+      .pipe(
+        switchMap((result) =>
+          this.api.downloadDocument(result.documentId).pipe(
+            map((blob) => ({ blob, result }))
+          ))
+      )
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: ({ blob, result }) => {
+          const url = URL.createObjectURL(blob);
+          const anchor = window.document.createElement('a');
+          anchor.href = url;
+          anchor.download = result.fileName;
+          window.document.body.appendChild(anchor);
+          anchor.click();
+          window.document.body.removeChild(anchor);
+          URL.revokeObjectURL(url);
+          this.lastActionMessage = `Downloaded ${result.fileName}.`;
+          this.loadProposalDetail(this.selectedProposalId!);
+          this.loadProposals(this.listResponse?.page.page ?? 1);
+        },
+        error: (error) => {
+          this.lastActionMessage = error?.error ?? 'Unable to generate and download proposal PDF.';
+        }
+      });
   }
 
   downloadSelectedSignedPdf(): void {

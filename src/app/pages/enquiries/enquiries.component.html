@@ -167,7 +167,7 @@
         (click)="setTab(tab.key)"
         >
         <span>{{ tab.label }}</span>
-        <em>{{ list.statusTabCounts[tab.key] }}</em>
+        <em>{{ statusTabCount(tab.key) }}</em>
       </button>
     }
   </section>
@@ -367,6 +367,12 @@
       <button type="button" class="inline-action" (click)="backToEnquiryList()">Back to Enquiries</button>
       <h1>{{ detail.reference }} · {{ detail.contactFirstName }} {{ detail.contactLastName }}</h1>
     </section>
+  } @else if (detailNotFound && !loading) {
+    <section class="detail-route-header detail-not-found">
+      <button type="button" class="inline-action" (click)="backToEnquiryList()">Back to Enquiries</button>
+      <h1>Enquiry not found</h1>
+      <p>The requested enquiry could not be found or you do not have access.</p>
+    </section>
   }
 }
 
@@ -469,6 +475,8 @@
             <tr
               [class.selected]="enquiry.id === selectedEnquiryId"
               (click)="openEnquiryDetail(enquiry.id)"
+              (contextmenu)="openRowContextMenu($event, enquiry)"
+              (auxclick)="onRowAuxClick($event, enquiry)"
               >
               <td class="checkbox-col" (click)="$event.stopPropagation()">
                 <input
@@ -504,6 +512,9 @@
                 <div class="cell-main">{{ listHoldCountdownLabel(enquiry) }}</div>
                 @if (enquiry.status === 'Provisional') {
                   <div class="cell-sub">{{ holdExpiryLabel(enquiry.holdExpiresAtUtc) }}</div>
+                }
+                @if (enquiry.status === 'Lost' && enquiry.lostReason) {
+                  <div class="cell-sub">{{ enquiry.lostReason }}</div>
                 }
               </td>
               <td>
@@ -560,6 +571,21 @@
       }
       @if (enquiries.length === 0) {
         <p class="empty">No enquiries matched the current filters.</p>
+      }
+
+      @if (showRowContextMenu && rowContextEnquiry; as contextEnquiry) {
+        <section
+          class="row-context-menu"
+          [style.left.px]="rowContextMenuX"
+          [style.top.px]="rowContextMenuY"
+          (click)="$event.stopPropagation()">
+          <button type="button" (click)="openEnquiryDetail(contextEnquiry.id)">View Details</button>
+          <button type="button" (click)="editFromRowContext()">Edit</button>
+          <button type="button" (click)="createProposalFromRowContext()">Create Proposal</button>
+          <button type="button" (click)="changeStatusFromRowContext()">Change Status</button>
+          <button type="button" (click)="copyEnquiryRefFromRowContext()">Copy Enquiry Ref</button>
+          <button type="button" (click)="openRowContextInNewTab()">Open in New Tab</button>
+        </section>
       }
     </article>
     }
@@ -2389,6 +2415,12 @@
       <button type="button" class="ghost" (click)="cancelLostReasonModal()">Cancel</button>
       <button type="button" (click)="confirmLostStatusTransition()">Confirm</button>
     </div>
+  </section>
+} @else {
+  <section class="loading-shell">
+    <div class="loading-card"></div>
+    <div class="loading-card"></div>
+    <div class="loading-card"></div>
   </section>
 }
 

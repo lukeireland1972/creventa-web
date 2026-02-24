@@ -1,20 +1,8 @@
 import { Routes } from '@angular/router';
 import { authChildGuard, authGuard } from './auth.guard';
 import { AppShellComponent } from './layout/app-shell.component';
-import { ConnectComponent } from './pages/connect/connect.component';
-import { DashboardComponent } from './pages/dashboard/dashboard.component';
-import { EnquiriesComponent } from './pages/enquiries/enquiries.component';
-import { EnquiryDetailComponent } from './pages/enquiries/enquiry-detail.component';
-import { EventDiaryComponent } from './pages/event-diary/event-diary.component';
-import { LoginComponent } from './pages/login/login.component';
-import { OperationsDashboardComponent } from './pages/operations-dashboard/operations-dashboard.component';
 import { MockCardPaymentComponent } from './pages/payments/mock-card-payment.component';
 import { PortalViewComponent } from './pages/portal/portal-view.component';
-import { ProposalsComponent } from './pages/proposals/proposals.component';
-import { ReportsComponent } from './pages/reports/reports.component';
-import { SearchResultsComponent } from './pages/search/search-results.component';
-import { SettingsComponent } from './pages/settings/settings.component';
-import { AdminComponent } from './pages/admin/admin.component';
 import { SignaturePortalComponent } from './pages/signature/signature-portal.component';
 import { EventsHubRegistrationComponent } from './pages/events-hub/events-hub-registration.component';
 
@@ -25,34 +13,34 @@ export const routes: Routes = [
   { path: 'payments/mock/:milestoneId', component: MockCardPaymentComponent },
   { path: 'signature/e/:token', component: SignaturePortalComponent },
   { path: 'events-hub/register/:eventId', component: EventsHubRegistrationComponent },
-  { path: 'login', component: LoginComponent },
+  { path: 'login', loadComponent: () => import('./pages/login/login.component').then((m) => m.LoginComponent) },
   {
     path: '',
     component: AppShellComponent,
     canActivate: [authGuard],
     canActivateChild: [authChildGuard],
     children: [
-      { path: 'connect', component: ConnectComponent },
+      { path: 'connect', loadComponent: () => import('./pages/connect/connect.component').then((m) => m.ConnectComponent) },
       { path: 'contacts', loadComponent: () => import('./pages/contacts/contacts.component').then((m) => m.ContactsComponent) },
       { path: 'portfolio', redirectTo: 'group-portfolio', pathMatch: 'full' },
       { path: 'group-portfolio', loadComponent: () => import('./pages/portfolio/portfolio.component').then((m) => m.PortfolioComponent) },
-      { path: 'event-diary', component: EventDiaryComponent },
+      { path: 'event-diary', loadComponent: () => import('./pages/event-diary/event-diary.component').then((m) => m.EventDiaryComponent) },
       { path: 'appointments', loadComponent: () => import('./pages/appointments/appointments.component').then((m) => m.AppointmentsComponent) },
-      { path: 'enquiries/:id', component: EnquiryDetailComponent },
-      { path: 'enquiries', component: EnquiriesComponent },
+      { path: 'enquiries/:id', loadComponent: () => import('./pages/enquiries/enquiry-detail.component').then((m) => m.EnquiryDetailComponent) },
+      { path: 'enquiries', loadComponent: () => import('./pages/enquiries/enquiries.component').then((m) => m.EnquiriesComponent) },
       { path: 'tasks', loadComponent: () => import('./pages/tasks/tasks.component').then((m) => m.TasksComponent) },
-      { path: 'operations', component: OperationsDashboardComponent },
-      { path: 'proposals', component: ProposalsComponent },
-      { path: 'admin', component: AdminComponent },
-      { path: 'settings', component: SettingsComponent },
+      { path: 'operations', loadComponent: () => import('./pages/operations-dashboard/operations-dashboard.component').then((m) => m.OperationsDashboardComponent) },
+      { path: 'proposals', loadComponent: () => import('./pages/proposals/proposals.component').then((m) => m.ProposalsComponent) },
+      { path: 'admin', loadComponent: () => import('./pages/admin/admin.component').then((m) => m.AdminComponent) },
+      { path: 'settings', loadComponent: () => import('./pages/settings/settings.component').then((m) => m.SettingsComponent) },
       { path: 'events-hub', loadComponent: () => import('./pages/events-hub/events-hub.component').then((m) => m.EventsHubComponent) },
-      { path: 'reports', component: ReportsComponent },
+      { path: 'reports', loadComponent: () => import('./pages/reports/reports.component').then((m) => m.ReportsComponent) },
       { path: 'notifications', loadComponent: () => import('./pages/notifications/notifications.component').then((m) => m.NotificationsComponent) },
-      { path: 'search', component: SearchResultsComponent },
+      { path: 'search', loadComponent: () => import('./pages/search/search-results.component').then((m) => m.SearchResultsComponent) },
       { path: 'website-enquiry', loadComponent: () => import('./pages/website-enquiry/website-enquiry.component').then((m) => m.WebsiteEnquiryComponent) },
       { path: 'ticket-dashboard', loadComponent: () => import('./pages/ticket-dashboard/ticket-dashboard.component').then((m) => m.TicketDashboardComponent) },
       { path: 'feedback-insights', loadComponent: () => import('./pages/feedback-insights/feedback-insights.component').then((m) => m.FeedbackInsightsComponent) },
-      { path: '', component: DashboardComponent, pathMatch: 'full' }
+      { path: '', loadComponent: () => import('./pages/dashboard/dashboard.component').then((m) => m.DashboardComponent), pathMatch: 'full' }
     ]
   },
   { path: '**', redirectTo: '/login' }

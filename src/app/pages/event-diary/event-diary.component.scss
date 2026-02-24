@@ -90,6 +90,30 @@
   font-weight: 700;
 }
 
+.date-picker-control {
+  display: inline-grid;
+  gap: 0.12rem;
+  margin-left: 0.45rem;
+}
+
+.date-picker-control span {
+  color: #64748b;
+  font-size: 0.62rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.date-picker-control input {
+  border: 1px solid #dbe4ef;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  padding: 0.24rem 0.42rem;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
 .toolbar-right {
   display: inline-flex;
   align-items: center;
@@ -328,7 +352,8 @@
 }
 
 .legend-chip.status-open-proposal {
-  background: #2563eb;
+  border: 1px solid #fb923c;
+  background: #fed7aa;
 }
 
 .legend-chip.status-appointment {
@@ -556,7 +581,9 @@
 }
 
 .event-chip.status-open-proposal {
-  background: #2563eb;
+  color: #9a3412;
+  border-color: #fb923c;
+  background: #fed7aa;
 }
 
 .event-chip.status-completed {
@@ -905,7 +932,9 @@
 }
 
 .room-event-bar.status-open-proposal {
-  background: #2563eb;
+  color: #9a3412;
+  border-color: #fb923c;
+  background: #fed7aa;
 }
 
 .room-event-bar.status-completed {
@@ -1507,7 +1536,9 @@
 
 .week-event-block.status-open-proposal,
 .day-event-bar.status-open-proposal {
-  background: #2563eb;
+  color: #9a3412;
+  border-color: #fb923c;
+  background: #fed7aa;
 }
 
 .week-event-block.status-completed,
@@ -2114,6 +2145,12 @@
   background: #eff6ff;
   border-color: #60a5fa;
   color: #1d4ed8;
+}
+
+.status-pill.status-open-proposal {
+  background: #ffedd5;
+  border-color: #fb923c;
+  color: #9a3412;
 }
 
 .status-pill.status-appointment {

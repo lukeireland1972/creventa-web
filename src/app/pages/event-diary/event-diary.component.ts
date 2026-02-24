@@ -256,9 +256,11 @@ export class EventDiaryComponent implements OnInit {
   statusFilterOptions: DiaryEventFilterOption[] = [];
   eventTypeFilterOptions: DiaryEventFilterOption[] = [];
   eventStyleFilterOptions: DiaryEventFilterOption[] = [];
+  eventManagerFilterOptions: DiaryEventFilterOption[] = [];
   selectedStatusFilterKey = '';
   selectedEventTypeFilterKey = '';
   selectedEventStyleFilterKey = '';
+  selectedEventManagerFilterKey = '';
   hideEmptySpaces = false;
   loadingSpaceFilters = false;
   spaceFilterError = '';
@@ -424,12 +426,17 @@ export class EventDiaryComponent implements OnInit {
     return this.toIsoDateUtc(this.monthCursor);
   }
 
+  get toolbarDateValue(): string {
+    return this.toIsoDateUtc(this.monthCursor);
+  }
+
   get weekRangeLabel(): string {
     const start = this.getWeekStart(this.monthCursor);
     const end = new Date(start);
     end.setUTCDate(end.getUTCDate() + 6);
 
     const formatter = new Intl.DateTimeFormat('en-GB', {
+      weekday: 'short',
       day: '2-digit',
       month: 'short',
       year: 'numeric',
@@ -555,6 +562,12 @@ export class EventDiaryComponent implements OnInit {
 
   ngOnInit(): void {
     this.restoreStateFromQueryParams();
+    const hasViewParam = this.route.snapshot.queryParamMap.has('view');
+    if (!hasViewParam && this.isMobileViewport()) {
+      this.selectedView = 'list';
+      this.monthCursor = this.getUtcDayStart(new Date());
+      this.syncQueryParams();
+    }
     if (this.operationsOnly) {
       this.selectedView = 'operations';
       this.monthCursor = this.getUtcDayStart(new Date());
@@ -743,6 +756,24 @@ export class EventDiaryComponent implements OnInit {
       this.monthCursor = this.getUtcDayStart(today);
     } else {
       this.monthCursor = this.getUtcMonthStart(today);
+    }
+
+    this.syncQueryParams();
+    this.loadDiary();
+  }
+
+  onToolbarDateChange(value: string): void {
+    const parsed = this.parseIsoDateParam(value);
+    if (!parsed) {
+      return;
+    }
+
+    if (this.selectedView === 'week') {
+      this.monthCursor = this.getWeekStart(parsed);
+    } else if (this.selectedView === 'list' || this.selectedView === 'day' || this.selectedView === 'operations') {
+      this.monthCursor = this.getUtcDayStart(parsed);
+    } else {
+      this.monthCursor = this.getUtcMonthStart(parsed);
     }
 
     this.syncQueryParams();
@@ -1316,6 +1347,29 @@ export class EventDiaryComponent implements OnInit {
     return this.groupEventsForCell(cell.events).length;
   }
 
+  monthCellTooltip(cell: MonthCell): string {
+    if (!cell?.events?.length) {
+      return 'No events scheduled';
+    }
+
+    const summaries = this.groupEventsForCell(cell.events)
+      .slice(0, 6)
+      .map((group) => {
+        const first = group.events[0];
+        const label = group.nested ? group.parentLabel : this.eventDisplayLabel(first);
+        const start = new Date(first.startUtc);
+        const time = Number.isNaN(start.getTime()) ? '' : `${String(start.getUTCHours()).padStart(2, '0')}:${String(start.getUTCMinutes()).padStart(2, '0')}`;
+        const status = this.statusLabel(first);
+        return `${time} ${label} (${status})`.trim();
+      });
+
+    if (this.groupEventsForCell(cell.events).length > summaries.length) {
+      summaries.push(`+${this.groupEventsForCell(cell.events).length - summaries.length} more`);
+    }
+
+    return summaries.join('\n');
+  }
+
   eventKey(event: DiaryEventDto): string {
     return `${event.id}-${event.spaceId}-${event.startUtc}`;
   }
@@ -1417,7 +1471,10 @@ export class EventDiaryComponent implements OnInit {
       return;
     }
 
-    this.openCreateEnquiryModal(cell.key, this.unassignedSpaceId, 3 * 60);
+    this.selectedView = 'day';
+    this.monthCursor = this.parseIsoDateUtc(cell.key);
+    this.syncQueryParams();
+    this.loadDiary();
   }
 
   onDropTimelineCell(cell: TimelineCell): void {
@@ -2297,6 +2354,7 @@ export class EventDiaryComponent implements OnInit {
     const statusCounts = new Map<string, DiaryEventFilterOption>();
     const typeCounts = new Map<string, DiaryEventFilterOption>();
     const styleCounts = new Map<string, DiaryEventFilterOption>();
+    const managerCounts = new Map<string, DiaryEventFilterOption>();
 
     for (const event of events) {
       const statusToken = this.resolveStatusFilterToken(event);
@@ -2342,15 +2400,30 @@ export class EventDiaryComponent implements OnInit {
           });
         }
       }
+
+      const managerLabel = (event.eventManagerName || '').trim() || 'Unassigned';
+      const managerKey = this.normalizeFilterToken(managerLabel);
+      const existingManager = managerCounts.get(managerKey);
+      if (existingManager) {
+        existingManager.count += 1;
+      } else {
+        managerCounts.set(managerKey, {
+          key: managerKey,
+          label: managerLabel,
+          count: 1
+        });
+      }
     }
 
     const nextStatusOptions = Array.from(statusCounts.values()).sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }));
     const nextTypeOptions = Array.from(typeCounts.values()).sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }));
     const nextStyleOptions = Array.from(styleCounts.values()).sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }));
+    const nextManagerOptions = Array.from(managerCounts.values()).sort((left, right) => left.label.localeCompare(right.label, undefined, { sensitivity: 'base' }));
 
     this.statusFilterOptions = nextStatusOptions;
     this.eventTypeFilterOptions = nextTypeOptions;
     this.eventStyleFilterOptions = nextStyleOptions;
+    this.eventManagerFilterOptions = nextManagerOptions;
 
     let filtersUpdated = false;
     if (this.selectedStatusFilterKey && !this.statusFilterOptions.some((option) => option.key === this.selectedStatusFilterKey)) {
@@ -2368,6 +2441,11 @@ export class EventDiaryComponent implements OnInit {
       filtersUpdated = true;
     }
 
+    if (this.selectedEventManagerFilterKey && !this.eventManagerFilterOptions.some((option) => option.key === this.selectedEventManagerFilterKey)) {
+      this.selectedEventManagerFilterKey = '';
+      filtersUpdated = true;
+    }
+
     if (filtersUpdated) {
       this.syncQueryParams();
     }
@@ -2377,8 +2455,9 @@ export class EventDiaryComponent implements OnInit {
     const statusFilter = this.selectedStatusFilterKey;
     const typeFilter = this.selectedEventTypeFilterKey;
     const styleFilter = this.selectedEventStyleFilterKey;
+    const managerFilter = this.selectedEventManagerFilterKey;
 
-    if (!statusFilter && !typeFilter && !styleFilter) {
+    if (!statusFilter && !typeFilter && !styleFilter && !managerFilter) {
       return events;
     }
 
@@ -2397,6 +2476,13 @@ export class EventDiaryComponent implements OnInit {
       if (styleFilter) {
         const style = (event.eventStyle || '').trim();
         if (!style || this.normalizeFilterToken(style) !== styleFilter) {
+          return false;
+        }
+      }
+
+      if (managerFilter) {
+        const manager = (event.eventManagerName || '').trim() || 'Unassigned';
+        if (this.normalizeFilterToken(manager) !== managerFilter) {
           return false;
         }
       }
@@ -2728,6 +2814,7 @@ export class EventDiaryComponent implements OnInit {
     this.selectedStatusFilterKey = this.normalizeFilterToken(query.get('statusFilter') || '');
     this.selectedEventTypeFilterKey = (query.get('eventTypeFilter') || '').trim();
     this.selectedEventStyleFilterKey = this.normalizeFilterToken(query.get('eventStyleFilter') || '');
+    this.selectedEventManagerFilterKey = this.normalizeFilterToken(query.get('eventManagerFilter') || '');
 
     const timelineLayoutParam = (query.get('timelineLayout') || '').trim().toLowerCase();
     if (timelineLayoutParam === 'room') {
@@ -2769,6 +2856,14 @@ export class EventDiaryComponent implements OnInit {
       });
   }
 
+  private isMobileViewport(): boolean {
+    if (typeof window === 'undefined') {
+      return false;
+    }
+
+    return window.innerWidth <= 767;
+  }
+
   private parseIsoDateParam(value: string): Date | null {
     const trimmed = value.trim();
     const pattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -2791,6 +2886,7 @@ export class EventDiaryComponent implements OnInit {
         statusFilter: this.selectedStatusFilterKey || null,
         eventTypeFilter: this.selectedEventTypeFilterKey || null,
         eventStyleFilter: this.selectedEventStyleFilterKey || null,
+        eventManagerFilter: this.selectedEventManagerFilterKey || null,
         hideEmptySpaces: this.hideEmptySpaces ? '1' : null,
         timelineLayout: this.timelineLayout === 'room' ? 'room' : null,
         weekLayout: this.weekLayout === 'space' ? 'space' : null,

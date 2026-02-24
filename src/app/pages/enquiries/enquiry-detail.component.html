@@ -80,6 +80,219 @@
         <article class="overview-grid">
           <section class="summary-card">
             <h2>Summary</h2>
+            @if (overviewEditMode) {
+              <article class="panel overview-edit-panel">
+                <h3>Edit Enquiry</h3>
+                <p class="hint">Required fields are marked by validation errors below.</p>
+                <div class="form-grid">
+                  <label>
+                    <span>First Name</span>
+                    <input
+                      type="text"
+                      maxlength="50"
+                      [value]="overviewEditDraft.contactFirstName"
+                      (input)="updateOverviewEditField('contactFirstName', $any($event.target).value)" />
+                    @if (overviewEditFieldError('contactFirstName')) {
+                      <p class="inline-error">{{ overviewEditFieldError('contactFirstName') }}</p>
+                    }
+                  </label>
+                  <label>
+                    <span>Last Name</span>
+                    <input
+                      type="text"
+                      maxlength="50"
+                      [value]="overviewEditDraft.contactLastName"
+                      (input)="updateOverviewEditField('contactLastName', $any($event.target).value)" />
+                    @if (overviewEditFieldError('contactLastName')) {
+                      <p class="inline-error">{{ overviewEditFieldError('contactLastName') }}</p>
+                    }
+                  </label>
+                  <label>
+                    <span>Email</span>
+                    <input
+                      type="email"
+                      [value]="overviewEditDraft.contactEmail"
+                      (input)="updateOverviewEditField('contactEmail', $any($event.target).value)" />
+                    @if (overviewEditFieldError('contactEmail')) {
+                      <p class="inline-error">{{ overviewEditFieldError('contactEmail') }}</p>
+                    }
+                  </label>
+                  <label>
+                    <span>Phone (E.164)</span>
+                    <input
+                      type="text"
+                      placeholder="+447700900123"
+                      [value]="overviewEditDraft.contactPhoneNumberE164"
+                      (input)="updateOverviewEditField('contactPhoneNumberE164', $any($event.target).value)" />
+                    @if (overviewEditFieldError('contactPhoneNumberE164')) {
+                      <p class="inline-error">{{ overviewEditFieldError('contactPhoneNumberE164') }}</p>
+                    }
+                  </label>
+                  <label class="full-width phone-prefix-helper">
+                    <span>Country Code Prefix Helper</span>
+                    <div class="inline-actions">
+                      <select
+                        [value]="overviewPhonePrefixSelection"
+                        (change)="overviewPhonePrefixSelection = $any($event.target).value">
+                        @for (prefix of phonePrefixOptions; track prefix) {
+                          <option [value]="prefix">{{ prefix }}</option>
+                        }
+                      </select>
+                      <button type="button" class="ghost" (click)="applyOverviewPhonePrefix()">Apply Prefix</button>
+                    </div>
+                  </label>
+                  <label>
+                    <span>Company</span>
+                    <input
+                      type="text"
+                      maxlength="200"
+                      [value]="overviewEditDraft.companyName"
+                      (input)="updateOverviewEditField('companyName', $any($event.target).value)" />
+                    @if (overviewEditFieldError('companyName')) {
+                      <p class="inline-error">{{ overviewEditFieldError('companyName') }}</p>
+                    }
+                  </label>
+                  <label>
+                    <span>Event Type</span>
+                    <input
+                      type="text"
+                      [value]="overviewEditDraft.eventType"
+                      (input)="updateOverviewEditField('eventType', $any($event.target).value)" />
+                    @if (overviewEditFieldError('eventType')) {
+                      <p class="inline-error">{{ overviewEditFieldError('eventType') }}</p>
+                    }
+                  </label>
+                  <label>
+                    <span>Event Name</span>
+                    <input
+                      type="text"
+                      maxlength="200"
+                      [value]="overviewEditDraft.eventName"
+                      (input)="updateOverviewEditField('eventName', $any($event.target).value)" />
+                    @if (overviewEditFieldError('eventName')) {
+                      <p class="inline-error">{{ overviewEditFieldError('eventName') }}</p>
+                    }
+                  </label>
+                  <label>
+                    <span>Event Date</span>
+                    <input
+                      type="date"
+                      [value]="overviewEditDraft.eventDate"
+                      (input)="updateOverviewEditField('eventDate', $any($event.target).value)" />
+                    @if (overviewEditFieldError('eventDate')) {
+                      <p class="inline-error">{{ overviewEditFieldError('eventDate') }}</p>
+                    }
+                  </label>
+                  <label>
+                    <span>Event Time</span>
+                    <input
+                      type="time"
+                      [value]="overviewEditDraft.eventTime"
+                      (input)="updateOverviewEditField('eventTime', $any($event.target).value)" />
+                    @if (overviewEditFieldError('eventTime')) {
+                      <p class="inline-error">{{ overviewEditFieldError('eventTime') }}</p>
+                    }
+                  </label>
+                  <label>
+                    <span>End Date (optional)</span>
+                    <input
+                      type="date"
+                      [value]="overviewEditDraft.eventEndDate"
+                      (input)="updateOverviewEditField('eventEndDate', $any($event.target).value)" />
+                    @if (overviewEditFieldError('eventEndDate')) {
+                      <p class="inline-error">{{ overviewEditFieldError('eventEndDate') }}</p>
+                    }
+                  </label>
+                  <label>
+                    <span>End Time (optional)</span>
+                    <input
+                      type="time"
+                      [value]="overviewEditDraft.eventEndTime"
+                      (input)="updateOverviewEditField('eventEndTime', $any($event.target).value)" />
+                    @if (overviewEditFieldError('eventEndTime')) {
+                      <p class="inline-error">{{ overviewEditFieldError('eventEndTime') }}</p>
+                    }
+                  </label>
+                  <label>
+                    <span>Expected Guests</span>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      [value]="overviewEditDraft.guestsExpected"
+                      (input)="updateOverviewEditField('guestsExpected', +$any($event.target).value)" />
+                    @if (overviewEditFieldError('guestsExpected')) {
+                      <p class="inline-error">{{ overviewEditFieldError('guestsExpected') }}</p>
+                    }
+                  </label>
+                  <label>
+                    <span>Event Style</span>
+                    <input
+                      type="text"
+                      [value]="overviewEditDraft.eventStyle"
+                      (input)="updateOverviewEditField('eventStyle', $any($event.target).value)" />
+                  </label>
+                  <label>
+                    <span>Setup Style</span>
+                    <input
+                      type="text"
+                      [value]="overviewEditDraft.setupStyle"
+                      (input)="updateOverviewEditField('setupStyle', $any($event.target).value)" />
+                  </label>
+                  <label>
+                    <span>Lead Source</span>
+                    <input
+                      type="text"
+                      [value]="overviewEditDraft.sourceType"
+                      (input)="updateOverviewEditField('sourceType', $any($event.target).value)" />
+                  </label>
+                  <label>
+                    <span>Source Detail</span>
+                    <input
+                      type="text"
+                      [value]="overviewEditDraft.sourceDetail"
+                      (input)="updateOverviewEditField('sourceDetail', $any($event.target).value)" />
+                  </label>
+                  <label>
+                    <span>Assigned Event Manager</span>
+                    <select
+                      [value]="overviewEditDraft.eventManagerUserId"
+                      (change)="updateOverviewEditField('eventManagerUserId', $any($event.target).value)">
+                      <option value="">Unassigned</option>
+                      @for (user of users; track user.id) {
+                        <option [value]="user.id">{{ userDisplayName(user) }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label class="full-width">
+                    <span>Marketing Consent</span>
+                    <div class="checkbox-row">
+                      <input
+                        type="checkbox"
+                        [checked]="overviewEditDraft.marketingConsent"
+                        (change)="updateOverviewEditField('marketingConsent', $any($event.target).checked)" />
+                      <span>{{ overviewEditDraft.marketingConsent ? 'Opted in' : 'Not opted in' }}</span>
+                    </div>
+                  </label>
+                  <label class="full-width">
+                    <span>Special Requirements</span>
+                    <textarea
+                      rows="3"
+                      [value]="overviewEditDraft.specialRequirements"
+                      (input)="updateOverviewEditField('specialRequirements', $any($event.target).value)"></textarea>
+                  </label>
+                </div>
+                @if (overviewEditError) {
+                  <p class="inline-error">{{ overviewEditError }}</p>
+                }
+                <div class="inline-actions">
+                  <button type="button" class="ghost" (click)="cancelOverviewEdit()" [disabled]="overviewEditSaving">Cancel</button>
+                  <button type="button" (click)="saveOverviewEdit()" [disabled]="!canSaveOverviewEdit">
+                    {{ overviewEditSaving ? 'Saving...' : 'Save Changes' }}
+                  </button>
+                </div>
+              </article>
+            }
             <div class="summary-columns">
               <div>
                 <h3>Contact Details</h3>
@@ -90,17 +303,80 @@
                   </div>
                   <div>
                     <dt>Email</dt>
-                    <dd>{{ detail.contactEmail || 'Not provided' }}</dd>
+                    <dd>
+                      @if (detail.contactEmail) {
+                        <a [href]="'mailto:' + detail.contactEmail">{{ detail.contactEmail }}</a>
+                      } @else {
+                        Not provided
+                      }
+                    </dd>
                   </div>
                   <div>
                     <dt>Phone</dt>
-                    <dd>{{ detail.contactPhoneNumberE164 || 'Not provided' }}</dd>
+                    <dd>
+                      @if (detail.contactPhoneNumberE164) {
+                        <a [href]="'tel:' + detail.contactPhoneNumberE164">{{ detail.contactPhoneNumberE164 }}</a>
+                      } @else {
+                        Not provided
+                      }
+                    </dd>
                   </div>
                   <div>
                     <dt>Company</dt>
                     <dd>{{ detail.companyName || 'Not provided' }}</dd>
                   </div>
+                  @if (detail.secondaryContactName || detail.secondaryEmail || detail.secondaryPhoneNumberE164) {
+                    <div class="full-width">
+                      <dt>Secondary Contact</dt>
+                      <dd>
+                        <span>{{ detail.secondaryContactName || 'Name not provided' }}</span>
+                        @if (detail.secondaryEmail) {
+                          <span> · <a [href]="'mailto:' + detail.secondaryEmail">{{ detail.secondaryEmail }}</a></span>
+                        }
+                        @if (detail.secondaryPhoneNumberE164) {
+                          <span> · <a [href]="'tel:' + detail.secondaryPhoneNumberE164">{{ detail.secondaryPhoneNumberE164 }}</a></span>
+                        }
+                      </dd>
+                    </div>
+                  }
+                  <div>
+                    <dt>How Did You Hear About Us</dt>
+                    <dd>{{ detail.sourceType }}{{ detail.sourceDetail ? (' - ' + detail.sourceDetail) : '' }}</dd>
+                  </div>
+                  <div>
+                    <dt>Marketing Consent</dt>
+                    <dd>
+                      <span [class]="'status-badge ' + (detail.marketingConsent ? 'status-confirmed' : 'status-archived')">
+                        {{ detail.marketingConsent ? 'Consent Given' : 'No Consent' }}
+                      </span>
+                    </dd>
+                  </div>
+                  <div class="full-width">
+                    <dt>Internal Notes</dt>
+                    <dd>
+                      {{ detail.internalNotes || 'No internal notes.' }}
+                      <small class="warning-note">Never visible to client</small>
+                    </dd>
+                  </div>
+                  @if (detail.returningGuestInsight?.isReturningGuest) {
+                    <div class="full-width">
+                      <dt>Returning Client</dt>
+                      <dd class="returning-client-row">
+                        <span class="status-badge status-confirmed">Returning Client</span>
+                        <span>
+                          {{ detail.returningGuestInsight.previousEnquiryCount }}
+                          previous enquiries · Lifetime value {{ detail.returningGuestInsight.lifetimeValue | number: '1.2-2' }} {{ detail.currencyCode }}
+                        </span>
+                        <button type="button" class="ghost" (click)="openReturningClientHistory()">View History</button>
+                      </dd>
+                    </div>
+                  }
                 </dl>
+                <div class="contact-actions">
+                  <button type="button" class="ghost" (click)="openOverviewEditor()">Edit Contact</button>
+                  <button type="button" class="ghost" (click)="openContactRecord()">View Contact Record</button>
+                  <button type="button" class="ghost" (click)="openEmailComposer()">Send Email</button>
+                </div>
 
                 <h3>Event Details</h3>
                 <dl>
@@ -125,15 +401,15 @@
                     <dt>Guests</dt>
                     <dd>{{ guestCountLabel }}</dd>
                   </div>
-                  <div>
-                    <dt>Source</dt>
-                    <dd>{{ detail.sourceType }}{{ detail.sourceDetail ? (' - ' + detail.sourceDetail) : '' }}</dd>
-                  </div>
                 </dl>
               </div>
               <div class="quick-actions">
                 <h3>Quick Actions</h3>
-                <button type="button" (click)="openOverviewEditor()">Edit Enquiry</button>
+                @if (overviewEditMode) {
+                  <button type="button" class="ghost" (click)="cancelOverviewEdit()">Cancel Edit</button>
+                } @else {
+                  <button type="button" (click)="openOverviewEditor()">Edit Enquiry</button>
+                }
                 <button type="button" (click)="scrollToStatusPanel()">Change Status</button>
                 <button type="button" (click)="openProposalBuilder()">Create Proposal</button>
                 <button type="button" (click)="openEmailComposer()">Send Email</button>
@@ -1097,5 +1373,9 @@
         }
       }
     </section>
+  }
+
+  @if (overviewToastMessage) {
+    <section class="overview-toast" role="status" aria-live="polite">{{ overviewToastMessage }}</section>
   }
 </section>

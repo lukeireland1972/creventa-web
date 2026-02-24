@@ -90,6 +90,10 @@ export class AppShellComponent implements OnInit {
   isSearchOpen = false;
   isAssistantOpen = false;
   isMobileNavOpen = false;
+  isMobileSearchOpen = false;
+  isMobileViewport = false;
+  isTabletViewport = false;
+  isDesktopViewport = true;
   isSeedingRandomData = false;
   randomDataMessage = '';
   randomDataError = '';
@@ -108,6 +112,7 @@ export class AppShellComponent implements OnInit {
   selectedDuplicateEnquiryId = '';
   notifications: NotificationItemDto[] = [];
   unreadNotifications = 0;
+  notificationPulseActive = false;
   overdueTaskCount = 0;
   searchQuery = '';
   searchGroups: GlobalSearchGroupDto[] = [];
@@ -124,6 +129,7 @@ export class AppShellComponent implements OnInit {
   private duplicateCheckRequestId = 0;
   private realtimeNotificationsSubscribed = false;
   private randomDataFeedbackTimer: ReturnType<typeof setTimeout> | null = null;
+  private notificationPulseTimer: ReturnType<typeof setTimeout> | null = null;
 
   navItems: NavItem[] = [];
   isCreateVenueOpen = false;
@@ -227,6 +233,10 @@ export class AppShellComponent implements OnInit {
       });
 
     return matched?.label ?? 'Dashboard';
+  }
+
+  get canShowMobileBottomNav(): boolean {
+    return !this.operationsOnly && this.isMobileViewport;
   }
 
   get primaryNavItems(): NavItem[] {
@@ -340,6 +350,7 @@ export class AppShellComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.updateViewportState(typeof window !== 'undefined' ? window.innerWidth : 1280);
     this.setNavItems();
     this.selectedVenueId = this.auth.selectedVenueId;
 
@@ -455,6 +466,7 @@ export class AppShellComponent implements OnInit {
     this.isSettingsOpen = false;
     this.isNotificationsOpen = false;
     this.isSearchOpen = false;
+    this.isMobileSearchOpen = false;
     this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
     this.isRecentOpen = !this.isRecentOpen;
@@ -468,6 +480,7 @@ export class AppShellComponent implements OnInit {
     this.isRecentOpen = false;
     this.isNotificationsOpen = false;
     this.isSearchOpen = false;
+    this.isMobileSearchOpen = false;
     this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
     this.isSettingsOpen = !this.isSettingsOpen;
@@ -478,6 +491,7 @@ export class AppShellComponent implements OnInit {
     this.isRecentOpen = false;
     this.isSettingsOpen = false;
     this.isSearchOpen = false;
+    this.isMobileSearchOpen = false;
     this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
     this.isNotificationsOpen = !this.isNotificationsOpen;
@@ -496,6 +510,7 @@ export class AppShellComponent implements OnInit {
     this.isSettingsOpen = false;
     this.isNotificationsOpen = false;
     this.isSearchOpen = false;
+    this.isMobileSearchOpen = false;
     this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
     this.isAssistantOpen = !this.isAssistantOpen;
@@ -616,12 +631,39 @@ export class AppShellComponent implements OnInit {
     this.isSettingsOpen = false;
     this.isNotificationsOpen = false;
     this.isSearchOpen = false;
+    this.isMobileSearchOpen = false;
     this.isAssistantOpen = false;
     this.isMobileNavOpen = !this.isMobileNavOpen;
   }
 
   closeMobileNav(): void {
     this.isMobileNavOpen = false;
+  }
+
+  toggleMobileSearch(event: Event): void {
+    event.stopPropagation();
+    this.isRecentOpen = false;
+    this.isSettingsOpen = false;
+    this.isNotificationsOpen = false;
+    this.isSearchOpen = false;
+    this.isAssistantOpen = false;
+    this.isMobileNavOpen = false;
+    this.isMobileSearchOpen = !this.isMobileSearchOpen;
+  }
+
+  openMobileMore(event: Event): void {
+    event.stopPropagation();
+    this.isMobileSearchOpen = false;
+    this.isMobileNavOpen = true;
+  }
+
+  isMobileRouteActive(routePrefix: string): boolean {
+    const url = this.router.url.split('?')[0] || '/';
+    if (routePrefix === '/') {
+      return url === '/';
+    }
+
+    return url.startsWith(routePrefix);
   }
 
   openSettingsSection(section: string): void {
@@ -1134,6 +1176,7 @@ export class AppShellComponent implements OnInit {
     this.isSettingsOpen = false;
     this.isNotificationsOpen = false;
     this.isAssistantOpen = false;
+    this.isMobileSearchOpen = false;
     this.isSearchOpen = true;
     this.executeSearch();
   }
@@ -1268,6 +1311,7 @@ export class AppShellComponent implements OnInit {
     this.isSettingsOpen = false;
     this.isNotificationsOpen = false;
     this.isSearchOpen = false;
+    this.isMobileSearchOpen = false;
     this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
     if (!this.isCreatingVenue) {
@@ -1281,11 +1325,18 @@ export class AppShellComponent implements OnInit {
     this.isSettingsOpen = false;
     this.isNotificationsOpen = false;
     this.isSearchOpen = false;
+    this.isMobileSearchOpen = false;
     this.isAssistantOpen = false;
     this.isMobileNavOpen = false;
     if (!this.isCreatingVenue) {
       this.isCreateVenueOpen = false;
     }
+  }
+
+  @HostListener('window:resize', ['$event'])
+  onWindowResize(event: UIEvent): void {
+    const target = event.target as Window | null;
+    this.updateViewportState(target?.innerWidth ?? 1280);
   }
 
   private buildIsoDate(date: string, time: string): string | null {
@@ -1451,8 +1502,21 @@ export class AppShellComponent implements OnInit {
 
     if (!mapped.isRead && !existed) {
       this.unreadNotifications += 1;
+      this.triggerNotificationPulse();
     }
     this.setNavItems();
+  }
+
+  private triggerNotificationPulse(): void {
+    this.notificationPulseActive = true;
+    if (this.notificationPulseTimer) {
+      clearTimeout(this.notificationPulseTimer);
+    }
+
+    this.notificationPulseTimer = setTimeout(() => {
+      this.notificationPulseActive = false;
+      this.notificationPulseTimer = null;
+    }, 900);
   }
 
   private loadTaskBadge(): void {
@@ -1818,6 +1882,17 @@ export class AppShellComponent implements OnInit {
       { label: 'Admin', section: 'admin', route: '/admin', exact: false },
       { label: 'Settings', section: 'admin', route: '/settings', exact: false }
     ];
+  }
+
+  private updateViewportState(width: number): void {
+    const safeWidth = Number.isFinite(width) ? width : 1280;
+    this.isMobileViewport = safeWidth <= 767;
+    this.isTabletViewport = safeWidth >= 768 && safeWidth <= 1279;
+    this.isDesktopViewport = safeWidth >= 1280;
+
+    if (!this.isMobileViewport) {
+      this.isMobileSearchOpen = false;
+    }
   }
 
   private applySelectedVenue(venueId: string): boolean {

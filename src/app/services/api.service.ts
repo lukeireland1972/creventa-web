@@ -809,6 +809,8 @@ export interface EnquiryListItemDto {
   eventManagerName?: string | null;
   lastActivityAtUtc: string;
   holdExpiresAtUtc?: string | null;
+  lostReason?: string | null;
+  lostReasonDetail?: string | null;
   daysSinceContact: number;
   sourceType: string;
   venueId: string;
@@ -3343,10 +3345,16 @@ export interface SnapshotRunResponse {
 export class ApiService {
   constructor(private http: HttpClient) {}
 
-  private getWithApiPathFallback<T>(primaryPath: string, fallbackPath: string, options?: { params?: HttpParams }): Observable<T> {
+  private getWithApiPathFallback<T>(
+    primaryPath: string,
+    fallbackPath: string,
+    options?: { params?: HttpParams },
+    fallbackStatuses: number[] = [404, 405]
+  ): Observable<T> {
     return this.http.get<T>(primaryPath, options).pipe(
       catchError((error) => {
-        if (error?.status === 404 || error?.status === 405) {
+        const status = Number(error?.status ?? 0);
+        if (fallbackStatuses.includes(status)) {
           return this.http.get<T>(fallbackPath, options);
         }
 
@@ -4545,7 +4553,8 @@ export class ApiService {
     return this.getWithApiPathFallback<AppointmentListResponse>(
       '/api/v1/appointments',
       '/api/appointments',
-      { params: queryParams }
+      { params: queryParams },
+      [404, 405, 500]
     );
   }
 
@@ -4558,7 +4567,8 @@ export class ApiService {
     return this.getWithApiPathFallback<AppointmentDetailDto>(
       `/api/v1/appointments/${appointmentId}`,
       `/api/appointments/${appointmentId}`,
-      queryParams.keys().length ? { params: queryParams } : undefined
+      queryParams.keys().length ? { params: queryParams } : undefined,
+      [404, 405, 500]
     );
   }
 
@@ -4598,7 +4608,8 @@ export class ApiService {
     return this.getWithApiPathFallback<UpcomingAppointmentsResponse>(
       '/api/v1/appointments/upcoming',
       '/api/appointments/upcoming',
-      { params }
+      { params },
+      [404, 405, 500]
     );
   }
 
@@ -4727,7 +4738,12 @@ export class ApiService {
       }
     }
 
-    return this.http.get<DiaryResponse>('/api/diary', { params: queryParams });
+    return this.getWithApiPathFallback<DiaryResponse>(
+      '/api/v1/diary',
+      '/api/diary',
+      { params: queryParams },
+      [404, 405, 500]
+    );
   }
 
   exportDiary(params: {
@@ -4750,20 +4766,42 @@ export class ApiService {
       }
     }
 
-    return this.http.get('/api/diary/export', { params: queryParams, responseType: 'blob' });
+    return this.http.get('/api/v1/diary/export', { params: queryParams, responseType: 'blob' }).pipe(
+      catchError((error) => {
+        const status = Number(error?.status ?? 0);
+        if (status === 404 || status === 405 || status === 500) {
+          return this.http.get('/api/diary/export', { params: queryParams, responseType: 'blob' });
+        }
+
+        return throwError(() => error);
+      })
+    );
   }
 
   moveDiaryEvent(payload: MoveDiaryEventRequest): Observable<void> {
-    return this.http.put<void>('/api/diary/move', payload);
+    return this.putWithApiPathFallback<void>(
+      '/api/v1/diary/move',
+      '/api/diary/move',
+      payload
+    );
   }
 
   checkDiaryMoveConflicts(payload: MoveDiaryEventRequest): Observable<DiaryMoveConflictCheckResponse> {
-    return this.http.post<DiaryMoveConflictCheckResponse>('/api/diary/move/conflicts', payload);
+    return this.postWithApiPathFallback<DiaryMoveConflictCheckResponse>(
+      '/api/v1/diary/move/conflicts',
+      '/api/diary/move/conflicts',
+      payload
+    );
   }
 
   getOperationsOverview(venueId: string): Observable<OperationsOverviewResponse> {
     const params = new HttpParams().set('venueId', venueId);
-    return this.http.get<OperationsOverviewResponse>('/api/operations/overview', { params });
+    return this.getWithApiPathFallback<OperationsOverviewResponse>(
+      '/api/v1/operations/overview',
+      '/api/operations/overview',
+      { params },
+      [404, 405, 500]
+    );
   }
 
   getProposals(params: {

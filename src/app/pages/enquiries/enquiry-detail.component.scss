@@ -217,6 +217,34 @@
   gap: 1rem;
 }
 
+.overview-edit-panel {
+  margin-bottom: 0.75rem;
+}
+
+.overview-edit-panel .inline-actions {
+  margin-top: 0.75rem;
+}
+
+.phone-prefix-helper .inline-actions {
+  margin-top: 0;
+}
+
+.checkbox-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1e293b;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.8rem;
+}
+
+.checkbox-row input {
+  margin: 0;
+}
+
 .summary-columns h3 {
   margin: 0 0 0.4rem;
   font-size: 0.85rem;
@@ -227,6 +255,10 @@
   margin: 0 0 0.8rem;
   display: grid;
   gap: 0.34rem;
+}
+
+.summary-columns dl .full-width {
+  grid-column: 1 / -1;
 }
 
 .summary-columns dt {
@@ -243,6 +275,44 @@
   font-size: 0.82rem;
   color: #1e293b;
   font-weight: 600;
+}
+
+.summary-columns dd a {
+  color: #1c65b4;
+  text-decoration: underline;
+}
+
+.contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+  margin-bottom: 0.85rem;
+}
+
+.contact-actions button {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  border-radius: 10px;
+  padding: 0.38rem 0.56rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.warning-note {
+  display: inline-block;
+  margin-left: 0.35rem;
+  color: #b45309;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.returning-client-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
 }
 
 .quick-actions {
@@ -627,6 +697,21 @@
   color: #b91c1c;
   font-size: 0.74rem;
   font-weight: 700;
+}
+
+.overview-toast {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 40;
+  border: 1px solid #86efac;
+  border-radius: 10px;
+  background: #ecfdf5;
+  color: #166534;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  box-shadow: 0 10px 20px rgba(15, 23, 42, 0.15);
 }
 
 .timeline {

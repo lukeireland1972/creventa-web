@@ -18,6 +18,13 @@
             <button type="button" (click)="shiftMonth(1)" aria-label="Next range">&#10095;</button>
           </div>
           <button type="button" class="today-btn" (click)="goToToday()">Today</button>
+          <label class="date-picker-control">
+            <span>Go to date</span>
+            <input
+              type="date"
+              [value]="toolbarDateValue"
+              (change)="onToolbarDateChange($any($event.target).value)" />
+          </label>
         }
       </div>
 
@@ -126,6 +133,16 @@
             </select>
           </label>
 
+          <label class="diary-filter-control">
+            <span>Event manager</span>
+            <select [(ngModel)]="selectedEventManagerFilterKey" (ngModelChange)="onDiaryFilterChange()">
+              <option value="">All managers</option>
+              @for (option of eventManagerFilterOptions; track option.key) {
+                <option [value]="option.key">{{ option.label }} ({{ option.count }})</option>
+              }
+            </select>
+          </label>
+
           <label class="inline-toggle">
             <input type="checkbox" [(ngModel)]="hideEmptySpaces" (change)="onHideEmptySpacesToggle()" />
             <span>Hide empty spaces</span>
@@ -175,6 +192,7 @@
               class="day-cell"
               [class.outside-month]="!cell.inCurrentMonth"
               [ngClass]="heatmapClassForDate(cell.key)"
+              [attr.title]="monthCellTooltip(cell)"
               (click)="onMonthCellClick(cell, $event)"
               (dragover)="$event.preventDefault()"
               (drop)="onDropDay(cell.key)">
